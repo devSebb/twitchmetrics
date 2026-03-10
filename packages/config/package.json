@@ -1,0 +1,9 @@
+{
+  "name": "@twitchmetrics/config",
+  "private": true,
+  "exports": {
+    "./typescript/base.json": "./typescript/base.json",
+    "./tailwind/base": "./tailwind/base.ts",
+    "./eslint/base": "./eslint/base.js"
+  }
+}

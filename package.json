@@ -1,0 +1,21 @@
+{
+  "name": "twitchmetrics",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "pnpm --dir packages/database prisma migrate dev",
+    "db:seed": "pnpm --dir packages/database prisma db seed",
+    "db:studio": "pnpm --filter @twitchmetrics/database studio",
+    "docker:up": "docker compose up -d postgres redis",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.2"
+  }
+}

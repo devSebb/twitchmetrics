@@ -1,0 +1,41 @@
+# Recommended workflow:
+#   docker compose up -d postgres redis   # Start DB + Redis in Docker
+#   pnpm dev                              # Run Next.js locally
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: twitchmetrics-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: twitchmetrics
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d twitchmetrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: twitchmetrics-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
