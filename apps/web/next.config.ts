@@ -1,10 +1,7 @@
-import type { NextConfig } from "next"
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@twitchmetrics/database", "@twitchmetrics/ui"],
-  experimental: {
-    serverActions: true,
-  },
   images: {
     remotePatterns: [
       // Twitch CDN
@@ -22,6 +19,6 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.r2.dev" },
     ],
   },
-}
+};
 
-export default nextConfig
+export default nextConfig;

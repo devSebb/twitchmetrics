@@ -19,6 +19,9 @@ dist
 # prisma
 prisma/*.db
 
+# test
+coverage/
+
 # misc
 .DS_Store
 *.pem

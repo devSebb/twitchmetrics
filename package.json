@@ -8,13 +8,25 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "db:generate": "turbo db:generate",
-    "db:migrate": "pnpm --dir packages/database prisma migrate dev",
-    "db:seed": "pnpm --dir packages/database prisma db seed",
+    "db:migrate": "pnpm --filter @twitchmetrics/database exec prisma migrate dev",
+    "db:seed": "pnpm --filter @twitchmetrics/database exec prisma db seed",
     "db:studio": "pnpm --filter @twitchmetrics/database studio",
     "docker:up": "docker compose up -d postgres redis",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
+    "prettier": "^3.8.1",
     "turbo": "^2.3.0",
     "typescript": "^5.7.2"
   }

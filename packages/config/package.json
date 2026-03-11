@@ -5,5 +5,8 @@
     "./typescript/base.json": "./typescript/base.json",
     "./tailwind/base": "./tailwind/base.ts",
     "./eslint/base": "./eslint/base.js"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
   }
 }

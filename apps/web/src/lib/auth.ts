@@ -1,12 +1,13 @@
-import NextAuth from "next-auth"
-import { PrismaAdapter } from "@auth/prisma-adapter"
-import TwitchProvider from "next-auth/providers/twitch"
-import GoogleProvider from "next-auth/providers/google"
-import TwitterProvider from "next-auth/providers/twitter"
-import { prisma } from "@twitchmetrics/database"
+import NextAuth from "next-auth";
+import type { Adapter } from "next-auth/adapters";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import TwitchProvider from "next-auth/providers/twitch";
+import GoogleProvider from "next-auth/providers/google";
+import TwitterProvider from "next-auth/providers/twitter";
+import { prisma } from "@twitchmetrics/database";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma) as Adapter,
   providers: [
     // Twitch — Helix API
     TwitchProvider({
@@ -14,10 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.TWITCH_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: [
-            "user:read:email",
-            "channel:read:subscriptions",
-          ].join(" "),
+          scope: ["user:read:email", "channel:read:subscriptions"].join(" "),
         },
       },
     }),
@@ -57,9 +55,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     session: ({ session, user }) => {
-      session.user.id = user.id
-      session.user.role = (user as { role: string }).role
-      return session
+      session.user.id = user.id;
+      session.user.role = (user as { role: string }).role;
+      return session;
     },
     signIn: async ({ user, account, profile }) => {
       // TODO: On sign-in, check if this OAuth account's platformUserId matches
@@ -70,10 +68,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       //
       // TODO: Store encrypted OAuth tokens (access_token, refresh_token) in PlatformAccount
       //       for ongoing API access.
-      return true
+      return true;
     },
   },
   pages: {
     signIn: "/login",
   },
-})
+});
