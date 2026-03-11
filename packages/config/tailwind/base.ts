@@ -1,25 +1,32 @@
-import type { Config } from "tailwindcss"
+import type { Config } from "tailwindcss";
 
+/**
+ * Shared Tailwind config wired to THEME tokens from theme.ts.
+ * Color values sourced from Discord dark gray palette + brand red #E32C19.
+ */
 const config: Config = {
   darkMode: "class",
-  content: [
-    "../../packages/ui/**/*.{ts,tsx}",
-    "./src/**/*.{ts,tsx}",
-  ],
+  content: ["../../packages/ui/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        background: "#0a0a0a",
-        surface: "#111111",
-        "surface-elevated": "#1a1a1a",
-        border: "#2a2a2a",
-        "border-hover": "#3a3a3a",
-        primary: "#e53e2f",
-        "primary-hover": "#cc3528",
-        "primary-muted": "#e53e2f20",
-        "text-primary": "#ffffff",
-        "text-secondary": "#a0a0a0",
-        "text-muted": "#606060",
+        background: "#2B2D31",
+        surface: {
+          DEFAULT: "#313338",
+          hover: "#383A40",
+          elevated: "#1E1F22",
+        },
+        border: {
+          DEFAULT: "#3F4147",
+          hover: "#4E5058",
+        },
+        primary: {
+          DEFAULT: "#E32C19",
+          hover: "#C72615",
+        },
+        "text-primary": "#DBDEE1",
+        "text-header": "#F2F3F5",
+        "text-muted": "#949BA4",
         success: "#22c55e",
         warning: "#f59e0b",
         error: "#ef4444",
@@ -30,9 +37,26 @@ const config: Config = {
         x: "#000000",
         kick: "#53fc18",
       },
+      fontFamily: {
+        display: ["var(--font-gotham-black)", "system-ui", "sans-serif"],
+        body: ["var(--font-gotham)", "system-ui", "sans-serif"],
+        mono: [
+          "ui-monospace",
+          "SFMono-Regular",
+          "'SF Mono'",
+          "Menlo",
+          "monospace",
+        ],
+      },
+      borderRadius: {
+        sm: "4px",
+        md: "8px",
+        lg: "12px",
+        xl: "16px",
+      },
     },
   },
   plugins: [],
-}
+};
 
-export default config
+export default config;
