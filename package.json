@@ -13,6 +13,9 @@
     "db:studio": "pnpm --filter @twitchmetrics/database studio",
     "docker:up": "docker compose up -d postgres redis",
     "docker:down": "docker compose down",
+    "worker:migrate": "tsx workers/migrate-historical.ts",
+    "worker:backfill-search": "tsx workers/backfill-search-data.ts",
+    "worker:import-games": "tsx workers/import-games.ts",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -24,10 +27,17 @@
     ]
   },
   "devDependencies": {
+    "@prisma/client": "^6.2.0",
+    "@types/pg": "^8.18.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.3",
     "prettier": "^3.8.1",
+    "prisma": "^6.2.0",
+    "tsx": "^4.19.0",
     "turbo": "^2.3.0",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
   }
 }
