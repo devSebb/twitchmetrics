@@ -1,29 +1,50 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { Providers } from "./providers";
 import "./globals.css";
 
-// Fallback font until Gotham .woff2 files are placed in src/app/fonts/.
-// Once fonts are available, replace with:
-//   import localFont from "next/font/local"
-//   const gotham = localFont({
-//     src: [
-//       { path: "./fonts/GothamLight.woff2", weight: "300", style: "normal" },
-//       { path: "./fonts/GothamBook.woff2", weight: "400", style: "normal" },
-//       { path: "./fonts/GothamMedium.woff2", weight: "500", style: "normal" },
-//       { path: "./fonts/GothamBold.woff2", weight: "700", style: "normal" },
-//     ],
-//     variable: "--font-gotham",
-//     display: "swap",
-//   })
-//   const gothamBlack = localFont({
-//     src: [{ path: "./fonts/GothamBlack.woff2", weight: "900", style: "normal" }],
-//     variable: "--font-gotham-black",
-//     display: "swap",
-//   })
-const inter = Inter({
-  subsets: ["latin"],
+const gotham = localFont({
+  src: [
+    {
+      path: "./fonts/gotham-rounded-light.otf",
+      weight: "300",
+      style: "normal",
+    },
+    {
+      path: "./fonts/gotham-rounded-light-italic.otf",
+      weight: "300",
+      style: "italic",
+    },
+    { path: "./fonts/gotham-rounded-book.otf", weight: "400", style: "normal" },
+    {
+      path: "./fonts/gotham-rounded-book-italic.otf",
+      weight: "400",
+      style: "italic",
+    },
+    {
+      path: "./fonts/gotham-rounded-medium.otf",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "./fonts/gotham-rounded-medium-italic.otf",
+      weight: "500",
+      style: "italic",
+    },
+    { path: "./fonts/gotham-rounded-bold.otf", weight: "700", style: "normal" },
+    {
+      path: "./fonts/gotham-rounded-bold-italic.otf",
+      weight: "700",
+      style: "italic",
+    },
+  ],
   variable: "--font-gotham",
+  display: "swap",
+});
+
+const gothamBlack = localFont({
+  src: [{ path: "./fonts/Gotham-Ultra.otf", weight: "900", style: "normal" }],
+  variable: "--font-gotham-black",
   display: "swap",
 });
 
@@ -47,7 +68,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${inter.variable} font-body bg-background text-text-primary antialiased`}
+        className={`${gotham.variable} ${gothamBlack.variable} font-body bg-background text-text-primary antialiased`}
       >
         <Providers>{children}</Providers>
       </body>
