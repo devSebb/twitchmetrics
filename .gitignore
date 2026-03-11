@@ -33,3 +33,6 @@ coverage/
 .cursorrules
 .claude/
 CLAUDE.md
+
+# execution plans
+PLAN-*.md

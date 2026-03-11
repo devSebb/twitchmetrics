@@ -160,7 +160,7 @@ const GAME_DATA = [
     name: "World of Warcraft",
     slug: "world-of-warcraft",
     twitchGameId: "18122",
-    igdbId: 121,
+    igdbId: 1025,
     developer: "Blizzard",
     publisher: "Blizzard",
     genres: ["MMORPG"],
@@ -494,6 +494,7 @@ async function main() {
   console.log("Clearing existing data...");
 
   // Delete in dependency order
+  await prisma.creatorGrowthRollup.deleteMany();
   await prisma.metricSnapshot.deleteMany();
   await prisma.gameViewerSnapshot.deleteMany();
   await prisma.platformAccount.deleteMany();
@@ -586,6 +587,7 @@ async function main() {
           totalFollowers: data.totalFollowers,
           totalViews:
             data.totalFollowers * BigInt(Math.floor(50 + Math.random() * 200)),
+          searchText: `${data.displayName} ${data.slug}`.toLowerCase(),
           ...(data.userId
             ? { userId: data.userId, claimedAt: new Date() }
             : {}),
@@ -638,6 +640,14 @@ async function main() {
 
     await prisma.platformAccount.createMany({ data: accounts });
     platformAccountCount += accounts.length;
+
+    const allUsernames = accounts.map((a) => a.platformUsername).join(" ");
+    await prisma.creatorProfile.update({
+      where: { id: creator.id },
+      data: {
+        searchText: `${data.displayName} ${allUsernames}`.toLowerCase(),
+      },
+    });
   }
 
   console.log(`  Created ${platformAccountCount} platform accounts`);
@@ -720,6 +730,10 @@ async function main() {
           platforms: g.platforms,
           developer: g.developer,
           publisher: g.publisher,
+          searchText: [g.name, g.developer, g.publisher, ...g.genres]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase(),
           currentViewers: Math.floor(5_000 + Math.random() * 200_000),
           currentChannels: Math.floor(500 + Math.random() * 10_000),
           peakViewers24h: Math.floor(50_000 + Math.random() * 500_000),
@@ -768,6 +782,88 @@ async function main() {
   console.log(`  Created ${games.length * 6} game viewer snapshots`);
 
   // ============================================================
+  // CREATOR GROWTH ROLLUPS
+  // ============================================================
+
+  console.log("Seeding growth rollups...");
+
+  let rollupCount = 0;
+
+  for (let i = 0; i < creators.length; i++) {
+    const creator = creators[i];
+
+    const accounts = await prisma.platformAccount.findMany({
+      where: { creatorProfileId: creator.id },
+    });
+
+    for (const account of accounts) {
+      const snapshots = await prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: creator.id,
+          platform: account.platform,
+          followerCount: { not: null },
+        },
+        orderBy: { snapshotAt: "asc" },
+        select: { followerCount: true, snapshotAt: true },
+      });
+
+      if (snapshots.length < 2) continue;
+
+      const latest = snapshots[snapshots.length - 1]!;
+      const latestFollowers = Number(latest.followerCount ?? 0);
+
+      const dayIndex = (targetDaysAgo: number) => {
+        const targetIdx = snapshots.length - 1 - targetDaysAgo;
+        return Math.max(0, targetIdx);
+      };
+
+      const followersAt = (idx: number) =>
+        Number(snapshots[idx]?.followerCount ?? latestFollowers);
+
+      const f1d = followersAt(dayIndex(1));
+      const f7d = followersAt(dayIndex(7));
+      const f30d = followersAt(dayIndex(30));
+
+      const delta1d = BigInt(latestFollowers - f1d);
+      const delta7d = BigInt(latestFollowers - f7d);
+      const delta30d = BigInt(latestFollowers - f30d);
+
+      const pct1d = f1d > 0 ? ((latestFollowers - f1d) / f1d) * 100 : 0;
+      const pct7d = f7d > 0 ? ((latestFollowers - f7d) / f7d) * 100 : 0;
+      const pct30d = f30d > 0 ? ((latestFollowers - f30d) / f30d) * 100 : 0;
+
+      let trendDirection = "FLAT";
+      if (pct7d > 2) trendDirection = "UP";
+      else if (pct7d < -2) trendDirection = "DOWN";
+
+      let acceleration = "STABLE";
+      if (Math.abs(pct1d) > Math.abs(pct7d / 7)) acceleration = "ACCELERATING";
+      else if (Math.abs(pct1d) < Math.abs(pct7d / 7) * 0.5)
+        acceleration = "DECELERATING";
+
+      await prisma.creatorGrowthRollup.create({
+        data: {
+          creatorProfileId: creator.id,
+          platform: account.platform,
+          followerCount: BigInt(latestFollowers),
+          delta1d,
+          delta7d,
+          delta30d,
+          pct1d: Math.round(pct1d * 100) / 100,
+          pct7d: Math.round(pct7d * 100) / 100,
+          pct30d: Math.round(pct30d * 100) / 100,
+          trendDirection,
+          acceleration,
+        },
+      });
+
+      rollupCount++;
+    }
+  }
+
+  console.log(`  Created ${rollupCount} growth rollups`);
+
+  // ============================================================
   // SUMMARY
   // ============================================================
 
@@ -778,6 +874,7 @@ async function main() {
   );
   console.log(`  - ${platformAccountCount} platform accounts`);
   console.log(`  - ${snapshotCount} metric snapshots`);
+  console.log(`  - ${rollupCount} growth rollups`);
   console.log(`  - ${games.length} games`);
   console.log(`  - ${games.length * 6} game viewer snapshots`);
 }

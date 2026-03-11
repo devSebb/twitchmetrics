@@ -134,6 +134,7 @@ model CreatorProfile {
 
   totalFollowers BigInt @default(0)
   totalViews     BigInt @default(0)
+  searchText     String? @default("")
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -145,6 +146,7 @@ model CreatorProfile {
   claimRequests     ClaimRequest[]
   talentAccess      TalentManagerAccess[]
   brandPartnerships BrandPartnership[]
+  growthRollups     CreatorGrowthRollup[]
 
   @@index([state])
   @@index([snapshotTier])
@@ -181,6 +183,8 @@ model PlatformAccount {
   totalViews      BigInt?
   subscriberCount BigInt?
   postCount       Int?
+
+  lastSyncedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -308,6 +312,8 @@ model Game {
   developer     String?
   publisher     String?
 
+  searchText      String? @default("")
+
   currentViewers  Int    @default(0)
   currentChannels Int    @default(0)
   peakViewers24h  Int    @default(0)
@@ -341,4 +347,34 @@ model GameViewerSnapshot {
 
   @@index([gameId, snapshotAt])
   @@index([snapshotAt])
+}
+
+// ============================================================
+// CREATOR GROWTH ROLLUPS
+// ============================================================
+
+model CreatorGrowthRollup {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creatorProfileId String         @db.Uuid
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  platform         Platform
+
+  followerCount    BigInt   @default(0)
+  delta1d          BigInt   @default(0)
+  delta7d          BigInt   @default(0)
+  delta30d         BigInt   @default(0)
+  pct1d            Float    @default(0)
+  pct7d            Float    @default(0)
+  pct30d           Float    @default(0)
+
+  trendDirection   String   @default("FLAT")
+  acceleration     String   @default("STABLE")
+
+  computedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([creatorProfileId, platform])
+  @@index([trendDirection])
+  @@index([delta7d(sort: Desc)])
 }

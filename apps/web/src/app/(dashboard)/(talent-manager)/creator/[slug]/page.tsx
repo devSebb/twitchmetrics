@@ -2,13 +2,13 @@
 export default async function TalentManagerCreatorPage({
   params,
 }: {
-  params: Promise<{ creatorSlug: string }>
+  params: Promise<{ slug: string }>;
 }) {
-  const { creatorSlug } = await params
+  const { slug } = await params;
   // TODO: implement individual creator view for talent manager
   return (
     <div>
-      <h1 className="text-3xl font-bold">Creator: {creatorSlug}</h1>
+      <h1 className="text-3xl font-bold">Creator: {slug}</h1>
     </div>
-  )
+  );
 }
