@@ -144,6 +144,7 @@ model CreatorProfile {
 
   platformAccounts  PlatformAccount[]
   metricSnapshots   MetricSnapshot[]
+  analytics         CreatorAnalytics[]
   claimRequests     ClaimRequest[]
   talentAccess      TalentManagerAccess[]
   brandPartnerships BrandPartnership[]
@@ -153,6 +154,47 @@ model CreatorProfile {
   @@index([snapshotTier])
   @@index([primaryPlatform])
   @@index([totalFollowers(sort: Desc)])
+}
+
+model CreatorAnalytics {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creatorProfileId String         @db.Uuid
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  platform    Platform
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+
+  estimatedMinutesWatched BigInt?
+  averageViewDuration     Float?
+  subscribersGained       Int?
+  subscribersLost         Int?
+  estimatedRevenue        Float?
+  views                   BigInt?
+  likes                   Int?
+  comments                Int?
+  shares                  Int?
+
+  impressions   BigInt?
+  reach         BigInt?
+  profileViews  Int?
+  websiteClicks Int?
+
+  subscriberCount  Int?
+  subscriberPoints Int?
+
+  ageGenderData  Json?
+  countryData    Json?
+  deviceData     Json?
+  trafficSources Json?
+
+  fetchedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([creatorProfileId, platform, periodStart])
+  @@index([creatorProfileId, platform])
+  @@index([periodStart])
 }
 
 // ============================================================

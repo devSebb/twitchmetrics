@@ -6,6 +6,7 @@ import {
   type Platform,
 } from "@twitchmetrics/database";
 import { scoreUsernameMatch } from "@/server/services/link-extraction";
+import { inngest } from "@/inngest/client";
 import { transitionProfileState } from "./profile-state";
 
 type InitiateClaimInput = {
@@ -89,6 +90,13 @@ export async function approveClaimRequest(
         ownerUserId: claim.userId,
       },
     );
+    await inngest.send({
+      name: "claim/approved",
+      data: {
+        creatorProfileId: claim.creatorProfileId,
+        userId: claim.userId,
+      },
+    });
     return;
   }
 
@@ -101,6 +109,13 @@ export async function approveClaimRequest(
         ownerUserId: claim.userId,
       },
     );
+    await inngest.send({
+      name: "claim/approved",
+      data: {
+        creatorProfileId: claim.creatorProfileId,
+        userId: claim.userId,
+      },
+    });
     return;
   }
 }
