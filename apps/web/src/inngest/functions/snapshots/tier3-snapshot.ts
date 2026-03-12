@@ -1,11 +1,11 @@
-import { inngest } from "../../client"
+import { inngest } from "../../client";
+import { runTierSnapshot } from "./shared";
 
-// Cron: weekly, Sunday 3am UTC — All other creators
-// TODO: Same as tier1 but for SnapshotTier.tier3 profiles
+// Cron: weekly, Sunday 3am UTC — Tier 3 creators (under 10K followers)
 export const tier3Snapshot = inngest.createFunction(
-  { id: "tier3-snapshot" },
+  { id: "tier3-snapshot", concurrency: { limit: 1 } },
   { cron: "0 3 * * 0" },
   async ({ step }) => {
-    // TODO: implement
+    return runTierSnapshot("tier3", step);
   },
-)
+);

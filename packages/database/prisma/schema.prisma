@@ -393,6 +393,22 @@ model GameViewerSnapshot {
 }
 
 // ============================================================
+// REPORT LEADS
+// ============================================================
+
+model ReportLead {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  email     String
+  company   String
+
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+// ============================================================
 // CREATOR GROWTH ROLLUPS
 // ============================================================
 
