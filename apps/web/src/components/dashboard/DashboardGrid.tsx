@@ -8,7 +8,14 @@ import {
   getEnabledWidgets,
   type WidgetId,
 } from "@/lib/constants/widgets";
-import { EmptyState } from "@/components/widgets";
+import {
+  EmptyState,
+  StatsRow,
+  FollowerGrowthWidget,
+  ViewerCountWidget,
+  DemographicsWidget,
+  PopularGamesWidget,
+} from "@/components/widgets";
 import { WidgetToggle } from "./WidgetToggle";
 
 // ----------------------------------------------------------------
@@ -105,7 +112,7 @@ function WidgetCard({
 }
 
 // ----------------------------------------------------------------
-// Placeholder for widgets not yet implemented (Plan 16 / 18)
+// Placeholder for widgets not yet implemented (Plan 18)
 // ----------------------------------------------------------------
 
 function WidgetPlaceholder({ widgetId }: { widgetId: WidgetId }) {
@@ -114,10 +121,47 @@ function WidgetPlaceholder({ widgetId }: { widgetId: WidgetId }) {
     <EmptyState
       variant="no_data"
       title={def.label}
-      message={def.description}
+      message="Coming soon"
       compact
     />
   );
+}
+
+// ----------------------------------------------------------------
+// P0 widget IDs that have real implementations
+// ----------------------------------------------------------------
+
+const P0_WIDGETS = new Set<WidgetId>([
+  "stats_row",
+  "follower_growth",
+  "viewer_count",
+  "demographics",
+  "popular_games",
+]);
+
+// ----------------------------------------------------------------
+// Widget renderer — maps widgetId to real components
+// ----------------------------------------------------------------
+
+function renderWidget(
+  widgetId: WidgetId,
+  profile: SerializedProfile,
+  isClaimed: boolean,
+): React.ReactNode {
+  switch (widgetId) {
+    case "stats_row":
+      return <StatsRow profile={profile} />;
+    case "follower_growth":
+      return <FollowerGrowthWidget profile={profile} />;
+    case "viewer_count":
+      return <ViewerCountWidget profile={profile} />;
+    case "demographics":
+      return <DemographicsWidget profile={profile} isClaimed={isClaimed} />;
+    case "popular_games":
+      return <PopularGamesWidget profile={profile} />;
+    default:
+      return <WidgetPlaceholder widgetId={widgetId} />;
+  }
 }
 
 // ----------------------------------------------------------------
@@ -213,10 +257,10 @@ export function DashboardGrid({
             );
           }
 
-          // Render placeholder for widgets not yet implemented
+          // Render P0 widgets or placeholder for P1/P2
           return (
             <WidgetCard key={widgetId} widgetId={widgetId}>
-              <WidgetPlaceholder widgetId={widgetId} />
+              {renderWidget(widgetId, profile, isClaimed)}
             </WidgetCard>
           );
         })}

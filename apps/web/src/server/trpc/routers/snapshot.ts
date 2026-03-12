@@ -79,6 +79,75 @@ export const snapshotRouter = router({
       return { snapshot: latest, growth: rollup };
     }),
 
+  getPopularGames: publicProcedure
+    .input(
+      z.object({
+        creatorProfileId: z.string().uuid(),
+        limit: z.number().int().min(1).max(12).default(6),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Aggregate most-streamed games from MetricSnapshot extendedMetrics
+      const snapshots = await ctx.prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          extendedMetrics: { not: Prisma.DbNull },
+        },
+        select: { extendedMetrics: true },
+        orderBy: { snapshotAt: "desc" },
+        take: 500,
+      });
+
+      // Aggregate game occurrences and avg viewers
+      const gameMap = new Map<
+        string,
+        { count: number; totalViewers: number }
+      >();
+
+      for (const snap of snapshots) {
+        const ext = snap.extendedMetrics as Record<string, unknown> | null;
+        if (!ext) continue;
+        const gameName =
+          typeof ext.currentGame === "string" ? ext.currentGame : null;
+        if (!gameName) continue;
+
+        const viewers = typeof ext.avgViewers === "number" ? ext.avgViewers : 0;
+
+        const existing = gameMap.get(gameName);
+        if (existing) {
+          existing.count += 1;
+          existing.totalViewers += viewers;
+        } else {
+          gameMap.set(gameName, { count: 1, totalViewers: viewers });
+        }
+      }
+
+      // Sort by count and limit
+      const sorted = [...gameMap.entries()]
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, input.limit);
+
+      // Look up Game table slugs and cover images
+      const gameNames = sorted.map(([name]) => name);
+      const games = await ctx.prisma.game.findMany({
+        where: { name: { in: gameNames } },
+        select: { name: true, slug: true, coverImageUrl: true },
+      });
+
+      const gameInfoMap = new Map(games.map((g) => [g.name, g]));
+
+      return sorted.map(([name, { count, totalViewers }]) => {
+        const gameInfo = gameInfoMap.get(name);
+        return {
+          gameName: name,
+          streamCount: count,
+          avgViewers: Math.round(totalViewers / count),
+          slug: gameInfo?.slug ?? null,
+          coverImageUrl: gameInfo?.coverImageUrl ?? null,
+        };
+      });
+    }),
+
   triggerManualSnapshot: adminProcedure
     .input(
       z.object({
