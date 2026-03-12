@@ -2,12 +2,26 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { db } from "@/server/db";
 import { formatNumber } from "@/lib/utils/format";
+import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { CreatorFilters, CreatorGrid } from "@/components/creators";
 
 export const metadata: Metadata = {
-  title: "Top Creators | TwitchMetrics",
+  title: "Top Creators",
   description:
-    "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more.",
+    "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more. Live follower counts and growth trends.",
+  openGraph: {
+    title: `Top Creators | ${SITE_NAME}`,
+    description:
+      "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more.",
+    type: "website",
+    url: `${SITE_URL}/creators`,
+  },
+  twitter: {
+    card: "summary",
+    site: TWITTER_HANDLE,
+    title: `Top Creators | ${SITE_NAME}`,
+  },
+  alternates: { canonical: `${SITE_URL}/creators` },
 };
 
 async function getCreators() {

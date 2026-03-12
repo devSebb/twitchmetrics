@@ -5,13 +5,27 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import { Badge } from "@/components/ui/Badge";
+import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { GameSortControls } from "@/components/games/GameSortControls";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "Top Games | TwitchMetrics",
+  title: "Top Games",
   description:
-    "Browse the most-watched games on Twitch, YouTube, and Kick with live viewership data.",
+    "Browse the most-watched games on Twitch, YouTube, and Kick with live viewership data and channel counts.",
+  openGraph: {
+    title: `Top Games | ${SITE_NAME}`,
+    description:
+      "Browse the most-watched games with live viewership data across all streaming platforms.",
+    type: "website",
+    url: `${SITE_URL}/games`,
+  },
+  twitter: {
+    card: "summary",
+    site: TWITTER_HANDLE,
+    title: `Top Games | ${SITE_NAME}`,
+  },
+  alternates: { canonical: `${SITE_URL}/games` },
 };
 
 type SortOption = "viewers" | "channels" | "hoursWatched";

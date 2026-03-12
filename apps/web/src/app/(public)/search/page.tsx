@@ -83,8 +83,15 @@ export async function generateMetadata({
   searchParams,
 }: SearchPageProps): Promise<Metadata> {
   const { q } = await searchParams;
+  const title = q ? `Search: ${q}` : "Search";
+  const description = q
+    ? `Search results for "${q}" — find creators and games on TwitchMetrics.`
+    : "Search for creators and games across Twitch, YouTube, and more.";
+
   return {
-    title: q ? `Search: ${q} | TwitchMetrics` : "Search | TwitchMetrics",
+    title,
+    description,
+    robots: { index: false, follow: true },
   };
 }
 

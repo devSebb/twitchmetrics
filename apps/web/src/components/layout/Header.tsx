@@ -4,6 +4,7 @@ import { SearchBar } from "@/components/search";
 const NAV_LINKS = [
   { label: "Channels", href: "/creators" },
   { label: "Games", href: "/games" },
+  { label: "Reports", href: "/reports" },
 ] as const;
 
 export function Header() {

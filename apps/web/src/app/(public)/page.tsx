@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
+import {
+  SITE_URL,
+  SITE_NAME,
+  DEFAULT_OG_IMAGE,
+  DEFAULT_DESCRIPTION,
+} from "@/lib/constants/seo";
 import {
   HeroSection,
   CreatorShowcase,
@@ -96,11 +103,51 @@ async function getLandingData() {
   return { topCreators, trendingCreators, topGames };
 }
 
+export const metadata: Metadata = {
+  title: `${SITE_NAME} | Creator Analytics Platform`,
+  description: DEFAULT_DESCRIPTION,
+  openGraph: {
+    title: `${SITE_NAME} | Creator Analytics Platform`,
+    description: DEFAULT_DESCRIPTION,
+    type: "website",
+    images: [
+      { url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: SITE_NAME },
+    ],
+  },
+  alternates: { canonical: SITE_URL },
+};
+
+function JsonLd() {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: SITE_NAME,
+    url: SITE_URL,
+    description: DEFAULT_DESCRIPTION,
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
+}
+
 export default async function LandingPage() {
   const { topCreators, trendingCreators, topGames } = await getLandingData();
 
   return (
     <>
+      <JsonLd />
       <HeroSection />
       <CreatorShowcase creators={topCreators} />
       <ValueProps />
