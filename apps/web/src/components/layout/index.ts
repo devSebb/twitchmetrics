@@ -1,2 +1,1 @@
-// Layout shells (Sidebar, TopBar, PageContainer)
-export {};
+export { Footer } from "./Footer";
