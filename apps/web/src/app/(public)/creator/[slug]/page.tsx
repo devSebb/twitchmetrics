@@ -104,6 +104,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
 
   // Serialize data for child components
   const headerData = {
+    id: creator.id,
     displayName: creator.displayName,
     slug: creator.slug,
     avatarUrl: creator.avatarUrl,

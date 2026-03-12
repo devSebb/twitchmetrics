@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -24,6 +25,7 @@ type GrowthRollupData = {
 
 type CreatorHeaderProps = {
   creator: {
+    id: string;
     displayName: string;
     slug: string;
     avatarUrl: string | null;
@@ -48,7 +50,13 @@ function TrendArrow({ direction }: { direction: string }) {
   return <span className="text-[#949BA4]">&#8211;</span>;
 }
 
-function ClaimStatus({ state }: { state: ProfileState }) {
+function ClaimStatus({
+  state,
+  creatorId,
+}: {
+  state: ProfileState;
+  creatorId: string;
+}) {
   switch (state) {
     case "claimed":
       return (
@@ -76,9 +84,11 @@ function ClaimStatus({ state }: { state: ProfileState }) {
       );
     default:
       return (
-        <Button variant="primary" size="sm">
-          Claim This Profile
-        </Button>
+        <Link href={`/claim?profile=${creatorId}`}>
+          <Button variant="primary" size="sm">
+            Claim This Profile
+          </Button>
+        </Link>
       );
   }
 }
@@ -138,7 +148,7 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
           </div>
 
           <div className="flex items-center gap-2 pb-1">
-            <ClaimStatus state={creator.state} />
+            <ClaimStatus state={creator.state} creatorId={creator.id} />
           </div>
         </div>
 

@@ -1,8 +1,10 @@
+import { ClaimReviewQueue } from "@/components/admin";
+
 export default function AdminClaimsPage() {
-  // TODO: implement claim review queue
   return (
-    <div>
-      <h1 className="text-3xl font-bold">Claim Review Queue</h1>
+    <div className="space-y-4">
+      <h1 className="text-3xl font-bold text-[#F2F3F5]">Claim Review Queue</h1>
+      <ClaimReviewQueue />
     </div>
-  )
+  );
 }
