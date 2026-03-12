@@ -10,7 +10,9 @@ type RegisterFormProps = {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function RegisterForm({ callbackUrl = "/home" }: RegisterFormProps) {
+export function RegisterForm({
+  callbackUrl = "/dashboard/home",
+}: RegisterFormProps) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

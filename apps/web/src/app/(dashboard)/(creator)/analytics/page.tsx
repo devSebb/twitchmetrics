@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import type { Metadata } from "next";
 import { prisma, type Platform } from "@twitchmetrics/database";
 import { AnalyticsDashboard } from "@/components/analytics";
 import { Button } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { inngest } from "@/inngest/client";
+
+export const metadata: Metadata = {
+  title: "Analytics",
+  robots: { index: false, follow: false },
+};
 
 type SerializedAnalytics = {
   platform: Platform;
@@ -129,7 +135,7 @@ export default async function CreatorAnalyticsPage() {
           <p className="text-sm text-[#949BA4]">
             Claim your creator profile to unlock private analytics.
           </p>
-          <Link href="/claim" className="mt-4 inline-block">
+          <Link href="/dashboard/claim" className="mt-4 inline-block">
             <Button>Claim a profile</Button>
           </Link>
         </div>
@@ -166,6 +172,7 @@ export default async function CreatorAnalyticsPage() {
       data: { creatorProfileId, userId },
     });
     revalidatePath("/analytics");
+    revalidatePath("/dashboard/analytics");
   }
 
   return (

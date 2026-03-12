@@ -1,6 +1,12 @@
 import { SearchBar } from "@/components/search";
 import { ClaimFlow } from "@/components/claim";
 import { prisma } from "@twitchmetrics/database";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Claim Profile",
+  robots: { index: false, follow: false },
+};
 
 type ClaimPageProps = {
   searchParams: Promise<{ profile?: string }>;

@@ -175,6 +175,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     signIn: async ({ user, account, profile }) => {
       if (!account || !user.id) {
+        if (!user.name || user.name.trim().length === 0) {
+          return "/onboarding";
+        }
         return true;
       }
 
@@ -196,7 +199,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
       }
 
+      if (!user.name || user.name.trim().length === 0) {
+        return "/onboarding";
+      }
       return true;
+    },
+    redirect: async ({ url, baseUrl }) => {
+      const parsed = url.startsWith("/") ? new URL(url, baseUrl) : new URL(url);
+      if (parsed.origin !== new URL(baseUrl).origin) {
+        return baseUrl;
+      }
+
+      if (parsed.pathname === "/home") {
+        return `${baseUrl}/dashboard/home`;
+      }
+      if (parsed.pathname === "/dashboard") {
+        return `${baseUrl}/dashboard/home`;
+      }
+      return parsed.toString();
     },
   },
   pages: {

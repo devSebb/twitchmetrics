@@ -1,4 +1,10 @@
 import { ConnectionsGrid } from "@/components/connections";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Connections",
+  robots: { index: false, follow: false },
+};
 
 export default function ConnectionsPage() {
   return (
@@ -13,7 +19,7 @@ export default function ConnectionsPage() {
         </p>
       </div>
 
-      <ConnectionsGrid callbackPath="/connections" />
+      <ConnectionsGrid callbackPath="/dashboard/connections" />
     </div>
   );
 }

@@ -91,7 +91,7 @@ export function ClaimFlow({ profile }: ClaimFlowProps) {
         </p>
         <button
           type="button"
-          onClick={() => router.push("/home")}
+          onClick={() => router.push("/dashboard/home")}
           className="mt-4 rounded-lg bg-[#E32C19] px-4 py-2 text-sm font-semibold text-white"
         >
           Go to Dashboard

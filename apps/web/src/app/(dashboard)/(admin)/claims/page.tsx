@@ -1,4 +1,10 @@
 import { ClaimReviewQueue } from "@/components/admin";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Claim Review Queue",
+  robots: { index: false, follow: false },
+};
 
 export default function AdminClaimsPage() {
   return (

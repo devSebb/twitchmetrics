@@ -17,7 +17,7 @@ function getErrorMessage(error: string): string {
   }
 }
 
-export function LoginForm({ callbackUrl = "/home" }: LoginFormProps) {
+export function LoginForm({ callbackUrl = "/dashboard/home" }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
