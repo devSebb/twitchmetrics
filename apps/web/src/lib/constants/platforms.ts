@@ -67,7 +67,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
     color: "#e4405f",
     iconName: "instagram",
     apiBaseUrl: "https://graph.instagram.com",
-    oauthSupported: false,
+    oauthSupported: true,
     oauthScopes: [
       "instagram_basic",
       "instagram_manage_insights",
@@ -83,7 +83,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
     color: "#000000",
     iconName: "music",
     apiBaseUrl: "https://open.tiktokapis.com/v2",
-    oauthSupported: false,
+    oauthSupported: true,
     oauthScopes: ["user.info.basic", "user.info.stats", "video.list"],
     tier0Metrics: [],
     requiresUserConsent: [],

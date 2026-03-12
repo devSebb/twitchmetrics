@@ -9,47 +9,14 @@ import ResendProvider from "next-auth/providers/resend";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@twitchmetrics/database";
-import type { Platform } from "@twitchmetrics/database";
+import { InstagramProvider } from "@/server/auth/instagram-provider";
+import { TikTokProvider } from "@/server/auth/tiktok-provider";
+import { connectPlatform } from "@/server/services/platform-connection";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
-
-function extractPlatformUserId(
-  provider: string,
-  profile: unknown,
-): string | null {
-  if (provider === "twitch") {
-    if (
-      profile &&
-      typeof profile === "object" &&
-      "sub" in profile &&
-      typeof profile.sub === "string"
-    ) {
-      return profile.sub;
-    }
-    return null;
-  }
-
-  if (provider === "twitter") {
-    if (
-      profile &&
-      typeof profile === "object" &&
-      "data" in profile &&
-      profile.data &&
-      typeof profile.data === "object" &&
-      "id" in profile.data &&
-      typeof profile.data.id === "string"
-    ) {
-      return profile.data.id;
-    }
-    return null;
-  }
-
-  // Google/YouTube platform user ID enrichment is handled in a later phase.
-  return null;
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
@@ -87,11 +54,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
 
-    // TODO: Instagram — Custom provider needed
-    // Graph API scopes: instagram_basic, instagram_manage_insights, pages_show_list, pages_read_engagement
+    ...((process.env.INSTAGRAM_CLIENT_ID || process.env.INSTAGRAM_APP_ID) &&
+    (process.env.INSTAGRAM_CLIENT_SECRET || process.env.INSTAGRAM_APP_SECRET)
+      ? [
+          InstagramProvider({
+            clientId:
+              process.env.INSTAGRAM_CLIENT_ID ??
+              process.env.INSTAGRAM_APP_ID ??
+              "",
+            clientSecret:
+              process.env.INSTAGRAM_CLIENT_SECRET ??
+              process.env.INSTAGRAM_APP_SECRET ??
+              "",
+          }),
+        ]
+      : []),
 
-    // TODO: TikTok — Custom provider needed
-    // Login API: user.info.basic, user.info.stats
+    ...((process.env.TIKTOK_CLIENT_KEY || process.env.TIKTOK_CLIENT_ID) &&
+    process.env.TIKTOK_CLIENT_SECRET
+      ? [
+          TikTokProvider({
+            clientKey:
+              process.env.TIKTOK_CLIENT_KEY ??
+              process.env.TIKTOK_CLIENT_ID ??
+              "",
+            clientSecret: process.env.TIKTOK_CLIENT_SECRET ?? "",
+          }),
+        ]
+      : []),
 
     // X / Twitter
     TwitterProvider({
@@ -188,62 +178,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       }
 
-      const platformMap: Record<string, Platform> = {
-        twitch: "twitch",
-        google: "youtube",
-        twitter: "x",
-      };
-      const platform = platformMap[account.provider];
-      if (!platform) {
-        return true;
-      }
-
-      const platformUserId = extractPlatformUserId(account.provider, profile);
-      if (!platformUserId) {
-        return true;
-      }
-
-      const platformAccount = await prisma.platformAccount.findUnique({
-        where: {
-          platform_platformUserId: {
-            platform,
-            platformUserId,
-          },
-        },
-      });
-
-      if (!platformAccount) {
-        return true;
-      }
-
       try {
-        const { encryptToken } = await import("@/lib/encryption");
-        const accessToken = account.access_token
-          ? await encryptToken(account.access_token)
-          : null;
-        const refreshToken = account.refresh_token
-          ? await encryptToken(account.refresh_token)
-          : null;
-
-        await prisma.platformAccount.update({
-          where: { id: platformAccount.id },
-          data: {
-            accessToken,
-            refreshToken,
-            tokenExpiresAt: account.expires_at
-              ? new Date(account.expires_at * 1000)
-              : null,
-            oauthScopes: account.scope
-              ? account.scope.split(" ").filter((scope) => scope.length > 0)
-              : [],
-            isOAuthConnected: true,
-            lastOAuthRefresh: new Date(),
-          },
+        await connectPlatform({
+          userId: user.id,
+          provider: account.provider,
+          providerAccountId: account.providerAccountId,
+          accessToken: account.access_token ?? null,
+          refreshToken: account.refresh_token ?? null,
+          expiresAt: account.expires_at ?? null,
+          scope: account.scope ?? null,
+          profile,
         });
       } catch (error) {
-        console.error("Failed to persist OAuth tokens for platform account", {
+        console.error("Failed to connect platform account during sign-in", {
           provider: account.provider,
-          platformAccountId: platformAccount.id,
           error,
         });
       }
