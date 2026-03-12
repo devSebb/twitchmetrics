@@ -3,6 +3,7 @@ import { Prisma, Platform } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { buildMeta, parsePagination } from "@/app/api/_lib/pagination";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
+import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -66,6 +67,12 @@ function getOrderClause(sort: string | null): Prisma.Sql {
 }
 
 export async function GET(request: Request) {
+  const rateLimited = await rateLimitOrResponse(request, "creators", {
+    limit: 120,
+    window: "60 s",
+  });
+  if (rateLimited) return rateLimited;
+
   const { searchParams } = new URL(request.url);
   const { page, limit, skip } = parsePagination(searchParams);
   const query = searchParams.get("q")?.trim() || null;
@@ -103,10 +110,30 @@ export async function GET(request: Request) {
 
   const creators = await db.creatorProfile.findMany({
     where: { id: { in: ids } },
-    include: {
-      platformAccounts: true,
+    select: {
+      id: true,
+      displayName: true,
+      slug: true,
+      avatarUrl: true,
+      primaryPlatform: true,
+      totalFollowers: true,
+      state: true,
+      snapshotTier: true,
+      platformAccounts: {
+        select: {
+          platform: true,
+          platformUsername: true,
+          followerCount: true,
+        },
+      },
       growthRollups: {
         orderBy: { computedAt: "desc" },
+        select: {
+          platform: true,
+          delta7d: true,
+          pct7d: true,
+          trendDirection: true,
+        },
       },
     },
   });

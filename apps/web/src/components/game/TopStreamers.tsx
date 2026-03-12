@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { formatNumber } from "@/lib/utils/format";
 import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import { getSafeImageSrc } from "@/lib/safeImage";
 
 type TopStreamersProps = {
   creators: {
@@ -34,6 +35,7 @@ export function TopStreamers({ creators }: TopStreamersProps) {
           {creators.map((creator, index) => {
             const platformColor =
               PLATFORM_CONFIG[creator.primaryPlatform].color;
+            const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
             return (
               <Link
                 key={creator.slug}
@@ -47,9 +49,9 @@ export function TopStreamers({ creators }: TopStreamersProps) {
 
                 {/* Avatar */}
                 <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
-                  {creator.avatarUrl ? (
+                  {safeAvatarUrl ? (
                     <Image
-                      src={creator.avatarUrl}
+                      src={safeAvatarUrl}
                       alt={creator.displayName}
                       fill
                       className="object-cover"

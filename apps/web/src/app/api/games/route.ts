@@ -3,6 +3,7 @@ import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { buildMeta, parsePagination } from "@/app/api/_lib/pagination";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
+import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 
 type GameIdRow = { id: string };
 type TotalRow = { total: bigint };
@@ -40,6 +41,12 @@ function getOrderClause(sort: string | null): Prisma.Sql {
 }
 
 export async function GET(request: Request) {
+  const rateLimited = await rateLimitOrResponse(request, "games", {
+    limit: 120,
+    window: "60 s",
+  });
+  if (rateLimited) return rateLimited;
+
   const { searchParams } = new URL(request.url);
   const { page, limit, skip } = parsePagination(searchParams);
   const query = searchParams.get("q")?.trim() || null;

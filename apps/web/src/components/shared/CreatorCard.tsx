@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { type Platform, PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber } from "@/lib/utils/format";
+import { getSafeImageSrc } from "@/lib/safeImage";
 
 type CreatorCardProps = {
   creator: {
@@ -58,6 +59,7 @@ function TrendIndicator({
 export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
   const followers = Number(creator.totalFollowers);
   const primaryColor = PLATFORM_CONFIG[creator.primaryPlatform].color;
+  const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
 
   if (compact) {
     return (
@@ -67,9 +69,9 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
       >
         {/* Avatar */}
         <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
-          {creator.avatarUrl ? (
+          {safeAvatarUrl ? (
             <Image
-              src={creator.avatarUrl}
+              src={safeAvatarUrl}
               alt={creator.displayName}
               fill
               className="object-cover"
@@ -125,9 +127,9 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
     >
       {/* Avatar */}
       <div className="relative h-16 w-16 overflow-hidden rounded-full bg-[#383A40]">
-        {creator.avatarUrl ? (
+        {safeAvatarUrl ? (
           <Image
-            src={creator.avatarUrl}
+            src={safeAvatarUrl}
             alt={creator.displayName}
             fill
             className="object-cover"

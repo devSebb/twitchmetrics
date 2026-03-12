@@ -57,17 +57,14 @@ export function Footer() {
           {/* Subscribe */}
           <div>
             <h3 className="text-sm font-semibold text-[#F2F3F5]">Subscribe</h3>
-            <form
-              className="mt-3 flex gap-2"
-              onSubmit={(e) => e.preventDefault()}
-            >
+            <form className="mt-3 flex gap-2">
               <input
                 type="email"
                 placeholder="Email address"
                 className="flex-1 rounded-md border border-[#3F4147] bg-[#313338] px-3 py-2 text-sm text-[#DBDEE1] placeholder-[#949BA4] outline-none focus:border-[#E32C19]"
               />
               <button
-                type="submit"
+                type="button"
                 className="rounded-md bg-[#E32C19] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
               >
                 →

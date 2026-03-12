@@ -7,6 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { formatNumber } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { getSafeImageSrc } from "@/lib/safeImage";
 
 type SearchResult = {
   data: {
@@ -234,9 +235,9 @@ export function SearchBar({
                   )}
                 >
                   <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
-                    {c.avatarUrl ? (
+                    {getSafeImageSrc(c.avatarUrl) ? (
                       <Image
-                        src={c.avatarUrl}
+                        src={getSafeImageSrc(c.avatarUrl)!}
                         alt={c.displayName}
                         fill
                         className="object-cover"
@@ -348,9 +349,9 @@ export function SearchBar({
                     className="flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
                   >
                     <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
-                      {c.avatarUrl ? (
+                      {getSafeImageSrc(c.avatarUrl) ? (
                         <Image
-                          src={c.avatarUrl}
+                          src={getSafeImageSrc(c.avatarUrl)!}
                           alt={c.displayName}
                           fill
                           className="object-cover"

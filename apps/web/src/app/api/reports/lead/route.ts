@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
+import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
+  const rateLimited = await rateLimitOrResponse(request, "report-lead", {
+    limit: 10,
+    window: "3600 s",
+  });
+  if (rateLimited) return rateLimited;
+
   try {
     const body = (await request.json()) as {
       name?: string;
@@ -28,12 +35,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // TODO: Store in DB (ReportLead model) or forward to Stream Hatchet API
-    // For now, log the lead and return success
+    // TODO: Store in DB (ReportLead model) or forward to Stream Hatchet API.
+    // Keep logs non-PII for compliance and operational safety.
     console.log("[Report Lead]", {
-      name,
-      email,
-      company,
+      emailDomain: email.split("@")[1] ?? "unknown",
       timestamp: new Date().toISOString(),
     });
 

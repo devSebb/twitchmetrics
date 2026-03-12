@@ -6,6 +6,7 @@ import { Sparkline } from "@/components/charts";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber, formatPercent } from "@/lib/utils/format";
+import { getSafeImageSrc } from "@/lib/safeImage";
 
 type PlatformAccountData = {
   platform: Platform;
@@ -97,14 +98,16 @@ function PlatformIcon({ platform }: { platform: Platform }) {
 
 export function CreatorHeader({ creator }: CreatorHeaderProps) {
   const totalFollowers = Number(creator.totalFollowers);
+  const safeBannerUrl = getSafeImageSrc(creator.bannerUrl);
+  const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
 
   return (
     <div>
       {/* Banner */}
       <div className="relative h-36 overflow-hidden rounded-t-lg bg-gradient-to-r from-[#E32C19]/60 via-[#383A40] to-[#1E1F22] sm:h-44">
-        {creator.bannerUrl && (
+        {safeBannerUrl && (
           <Image
-            src={creator.bannerUrl}
+            src={safeBannerUrl}
             alt=""
             fill
             className="object-cover"
@@ -118,9 +121,9 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
         {/* Avatar */}
         <div className="relative -mt-12 mb-3 flex items-end justify-between sm:-mt-14">
           <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-[#313338] bg-[#383A40] sm:h-28 sm:w-28">
-            {creator.avatarUrl ? (
+            {safeAvatarUrl ? (
               <Image
-                src={creator.avatarUrl}
+                src={safeAvatarUrl}
                 alt={creator.displayName}
                 width={112}
                 height={112}

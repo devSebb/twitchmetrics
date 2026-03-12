@@ -1,13 +1,15 @@
-import { router } from "../root"
-import { authRouter } from "./auth"
-import { creatorRouter } from "./creator"
-import { platformRouter } from "./platform"
-import { snapshotRouter } from "./snapshot"
-import { claimRouter } from "./claim"
-import { talentManagerRouter } from "./talentManager"
-import { adminRouter } from "./admin"
-import { gameRouter } from "./game"
+import { router } from "../root";
+import { authRouter } from "./auth";
+import { creatorRouter } from "./creator";
+import { platformRouter } from "./platform";
+import { snapshotRouter } from "./snapshot";
+import { claimRouter } from "./claim";
+import { talentManagerRouter } from "./talentManager";
+import { adminRouter } from "./admin";
+import { gameRouter } from "./game";
 
+// Checkpoint note: these namespace routers are scaffolded intentionally.
+// Procedures are added incrementally as service-layer integrations are completed.
 export const appRouter = router({
   auth: authRouter,
   creator: creatorRouter,
@@ -17,6 +19,6 @@ export const appRouter = router({
   talentManager: talentManagerRouter,
   admin: adminRouter,
   game: gameRouter,
-})
+});
 
-export type AppRouter = typeof appRouter
+export type AppRouter = typeof appRouter;

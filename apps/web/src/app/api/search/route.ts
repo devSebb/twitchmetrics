@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
+import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 
 type SearchType = "all" | "creators" | "games";
 
@@ -26,6 +27,12 @@ type GameSearchRow = {
 const VALID_TYPES: SearchType[] = ["all", "creators", "games"];
 
 export async function GET(request: Request) {
+  const rateLimited = await rateLimitOrResponse(request, "search", {
+    limit: 60,
+    window: "60 s",
+  });
+  if (rateLimited) return rateLimited;
+
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
   const type = (searchParams.get("type") ?? "all") as SearchType;
