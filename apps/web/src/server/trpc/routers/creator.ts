@@ -3,6 +3,7 @@ import { Platform } from "@twitchmetrics/database";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, creatorProcedure } from "../middleware";
 import { publicProcedure, router } from "../root";
+import { WIDGET_REGISTRY } from "@/lib/constants/widgets";
 
 export const creatorRouter = router({
   getProfile: publicProcedure
@@ -148,6 +149,42 @@ export const creatorRouter = router({
           periodStart: { gte: since },
         },
         orderBy: { periodStart: "desc" },
+      });
+    }),
+
+  updateWidgetConfig: creatorProcedure
+    .input(
+      z.object({
+        widgetConfig: z.array(z.string()).max(20),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true, state: true },
+      });
+
+      if (!profile) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No creator profile found.",
+        });
+      }
+
+      if (profile.state !== "claimed" && profile.state !== "premium") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Profile must be claimed to edit widget config.",
+        });
+      }
+
+      const validIds = new Set(Object.keys(WIDGET_REGISTRY));
+      const validated = input.widgetConfig.filter((id) => validIds.has(id));
+
+      return ctx.prisma.creatorProfile.update({
+        where: { id: profile.id },
+        data: { widgetConfig: validated },
+        select: { widgetConfig: true },
       });
     }),
 

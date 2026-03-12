@@ -21,7 +21,8 @@ const credentialsSchema = z.object({
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
   session: {
-    strategy: "database",
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   providers: [
     // Twitch — Helix API
@@ -168,9 +169,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // TODO: Kick — Custom provider needed (no standard OAuth provider exists)
   ],
   callbacks: {
-    session: ({ session, user }) => {
-      session.user.id = user.id;
-      session.user.role = (user as { role: string }).role;
+    jwt: ({ token, user }) => {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as { role: string }).role;
+      }
+      return token;
+    },
+    session: ({ session, token }) => {
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = (token.role as string) ?? "creator";
+      }
       return session;
     },
     signIn: async ({ user, account, profile }) => {

@@ -1,2 +1,1 @@
-// Composite data-display widgets (StatCard, MetricTile)
-export {};
+export { EmptyState } from "./EmptyState";

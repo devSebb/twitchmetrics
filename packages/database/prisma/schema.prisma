@@ -136,6 +136,7 @@ model CreatorProfile {
   totalFollowers BigInt @default(0)
   totalViews     BigInt @default(0)
   searchText     String? @default("")
+  widgetConfig   Json    @default("[]")
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

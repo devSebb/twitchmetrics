@@ -58,6 +58,7 @@ function getNavItems(
   }
 
   const creatorItems: NavItem[] = [
+    { label: "Dashboard", href: "/dashboard" },
     { label: "Home", href: "/dashboard/home" },
     { label: "Analytics", href: "/dashboard/analytics" },
     { label: "Connected Platforms", href: "/dashboard/connections" },
