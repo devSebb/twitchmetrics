@@ -229,6 +229,24 @@ type TwitchGame = {
   igdb_id: string;
 };
 
+type TwitchClip = {
+  id: string;
+  url: string;
+  embed_url: string;
+  broadcaster_id: string;
+  broadcaster_name: string;
+  creator_id: string;
+  creator_name: string;
+  video_id: string;
+  game_id: string;
+  language: string;
+  title: string;
+  view_count: number;
+  created_at: string;
+  thumbnail_url: string;
+  duration: number;
+};
+
 type TwitchSearchChannel = {
   id: string;
   broadcaster_login: string;
@@ -246,6 +264,50 @@ type PaginatedResponse<T> = {
   pagination?: { cursor?: string };
   total?: number;
 };
+
+// ============================================================
+// TWITCH ADAPTER IMPLEMENTATION
+// ============================================================
+
+// ============================================================
+// EXTENSION METHODS (not part of PlatformAdapter interface)
+// ============================================================
+
+export type ClipData = {
+  id: string;
+  title: string;
+  thumbnailUrl: string;
+  viewCount: number;
+  createdAt: string;
+  url: string;
+  duration: number;
+};
+
+/**
+ * Fetch top clips for a broadcaster.
+ * Uses GET /clips?broadcaster_id={id}&first={limit}
+ */
+export async function fetchClips(
+  broadcasterId: string,
+  limit: number = 6,
+): Promise<ClipData[]> {
+  return withRetry(async () => {
+    const data = await helixFetch<PaginatedResponse<TwitchClip>>("/clips", {
+      broadcaster_id: broadcasterId,
+      first: String(Math.min(limit, 25)),
+    });
+
+    return data.data.map((clip) => ({
+      id: clip.id,
+      title: clip.title,
+      thumbnailUrl: clip.thumbnail_url,
+      viewCount: clip.view_count,
+      createdAt: clip.created_at,
+      url: clip.url,
+      duration: clip.duration,
+    }));
+  });
+}
 
 // ============================================================
 // TWITCH ADAPTER IMPLEMENTATION

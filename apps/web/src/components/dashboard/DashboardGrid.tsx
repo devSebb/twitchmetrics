@@ -15,6 +15,11 @@ import {
   ViewerCountWidget,
   DemographicsWidget,
   PopularGamesWidget,
+  PlatformBreakdownWidget,
+  RecentStreamsWidget,
+  FeaturedClipsWidget,
+  BrandPartnersWidget,
+  BrandSafetyWidget,
 } from "@/components/widgets";
 import { WidgetToggle } from "./WidgetToggle";
 
@@ -112,7 +117,7 @@ function WidgetCard({
 }
 
 // ----------------------------------------------------------------
-// Placeholder for widgets not yet implemented (Plan 18)
+// Placeholder fallback
 // ----------------------------------------------------------------
 
 function WidgetPlaceholder({ widgetId }: { widgetId: WidgetId }) {
@@ -128,18 +133,6 @@ function WidgetPlaceholder({ widgetId }: { widgetId: WidgetId }) {
 }
 
 // ----------------------------------------------------------------
-// P0 widget IDs that have real implementations
-// ----------------------------------------------------------------
-
-const P0_WIDGETS = new Set<WidgetId>([
-  "stats_row",
-  "follower_growth",
-  "viewer_count",
-  "demographics",
-  "popular_games",
-]);
-
-// ----------------------------------------------------------------
 // Widget renderer — maps widgetId to real components
 // ----------------------------------------------------------------
 
@@ -147,6 +140,7 @@ function renderWidget(
   widgetId: WidgetId,
   profile: SerializedProfile,
   isClaimed: boolean,
+  isOwner: boolean,
 ): React.ReactNode {
   switch (widgetId) {
     case "stats_row":
@@ -159,6 +153,16 @@ function renderWidget(
       return <DemographicsWidget profile={profile} isClaimed={isClaimed} />;
     case "popular_games":
       return <PopularGamesWidget profile={profile} />;
+    case "platform_breakdown":
+      return <PlatformBreakdownWidget profile={profile} />;
+    case "recent_streams":
+      return <RecentStreamsWidget profile={profile} />;
+    case "featured_clips":
+      return <FeaturedClipsWidget profile={profile} />;
+    case "brand_partners":
+      return <BrandPartnersWidget profile={profile} isOwner={isOwner} />;
+    case "brand_safety":
+      return <BrandSafetyWidget profile={profile} isClaimed={isClaimed} />;
     default:
       return <WidgetPlaceholder widgetId={widgetId} />;
   }
@@ -260,7 +264,7 @@ export function DashboardGrid({
           // Render P0 widgets or placeholder for P1/P2
           return (
             <WidgetCard key={widgetId} widgetId={widgetId}>
-              {renderWidget(widgetId, profile, isClaimed)}
+              {renderWidget(widgetId, profile, isClaimed, isOwner)}
             </WidgetCard>
           );
         })}

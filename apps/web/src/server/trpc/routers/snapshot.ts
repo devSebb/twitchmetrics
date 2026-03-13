@@ -148,6 +148,200 @@ export const snapshotRouter = router({
       });
     }),
 
+  getRecentStreams: publicProcedure
+    .input(
+      z.object({
+        creatorProfileId: z.string().uuid(),
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(5).max(50).default(10),
+        sortBy: z
+          .enum(["date", "game", "duration", "avgViewers", "peakViewers"])
+          .default("date"),
+        sortOrder: z.enum(["asc", "desc"]).default("desc"),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Fetch snapshots that contain live stream data (extended metrics)
+      const snapshots = await ctx.prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          extendedMetrics: { not: Prisma.DbNull },
+        },
+        select: {
+          snapshotAt: true,
+          extendedMetrics: true,
+        },
+        orderBy: { snapshotAt: "asc" },
+        take: 2000,
+      });
+
+      // Group consecutive snapshots into stream sessions
+      // Detect session boundaries as gaps > 1 hour between snapshots
+      type StreamSession = {
+        startedAt: string;
+        endedAt: string;
+        game: string | null;
+        durationMinutes: number;
+        avgViewers: number;
+        peakViewers: number;
+      };
+
+      const sessions: StreamSession[] = [];
+      let currentSession: {
+        start: Date;
+        end: Date;
+        game: string | null;
+        viewers: number[];
+        peak: number;
+      } | null = null;
+
+      const SESSION_GAP_MS = 60 * 60 * 1000; // 1 hour
+
+      for (const snap of snapshots) {
+        const ext = snap.extendedMetrics as Record<string, unknown> | null;
+        if (!ext) continue;
+
+        // Only consider snapshots where the channel was live
+        const viewerCount =
+          typeof ext.LIVE_VIEWER_COUNT === "number"
+            ? ext.LIVE_VIEWER_COUNT
+            : typeof ext.AVG_VIEWERS === "number"
+              ? ext.AVG_VIEWERS
+              : null;
+
+        if (viewerCount === null) continue;
+
+        const game =
+          typeof ext.currentGame === "string" ? ext.currentGame : null;
+
+        if (
+          currentSession &&
+          snap.snapshotAt.getTime() - currentSession.end.getTime() <
+            SESSION_GAP_MS
+        ) {
+          // Continue session
+          currentSession.end = snap.snapshotAt;
+          currentSession.viewers.push(viewerCount);
+          if (viewerCount > currentSession.peak)
+            currentSession.peak = viewerCount;
+          if (game && !currentSession.game) currentSession.game = game;
+        } else {
+          // Close previous session
+          if (currentSession) {
+            const avg =
+              currentSession.viewers.reduce((a, b) => a + b, 0) /
+              currentSession.viewers.length;
+            sessions.push({
+              startedAt: currentSession.start.toISOString(),
+              endedAt: currentSession.end.toISOString(),
+              game: currentSession.game,
+              durationMinutes: Math.round(
+                (currentSession.end.getTime() -
+                  currentSession.start.getTime()) /
+                  60000,
+              ),
+              avgViewers: Math.round(avg),
+              peakViewers: currentSession.peak,
+            });
+          }
+          // Start new session
+          currentSession = {
+            start: snap.snapshotAt,
+            end: snap.snapshotAt,
+            game,
+            viewers: [viewerCount],
+            peak: viewerCount,
+          };
+        }
+      }
+
+      // Close last session
+      if (currentSession) {
+        const avg =
+          currentSession.viewers.reduce((a, b) => a + b, 0) /
+          currentSession.viewers.length;
+        sessions.push({
+          startedAt: currentSession.start.toISOString(),
+          endedAt: currentSession.end.toISOString(),
+          game: currentSession.game,
+          durationMinutes: Math.round(
+            (currentSession.end.getTime() - currentSession.start.getTime()) /
+              60000,
+          ),
+          avgViewers: Math.round(avg),
+          peakViewers: currentSession.peak,
+        });
+      }
+
+      // Sort
+      const sorted = [...sessions].sort((a, b) => {
+        switch (input.sortBy) {
+          case "date":
+            return input.sortOrder === "desc"
+              ? b.startedAt.localeCompare(a.startedAt)
+              : a.startedAt.localeCompare(b.startedAt);
+          case "game":
+            return input.sortOrder === "desc"
+              ? (b.game ?? "").localeCompare(a.game ?? "")
+              : (a.game ?? "").localeCompare(b.game ?? "");
+          case "duration":
+            return input.sortOrder === "desc"
+              ? b.durationMinutes - a.durationMinutes
+              : a.durationMinutes - b.durationMinutes;
+          case "avgViewers":
+            return input.sortOrder === "desc"
+              ? b.avgViewers - a.avgViewers
+              : a.avgViewers - b.avgViewers;
+          case "peakViewers":
+            return input.sortOrder === "desc"
+              ? b.peakViewers - a.peakViewers
+              : a.peakViewers - b.peakViewers;
+          default:
+            return 0;
+        }
+      });
+
+      // Paginate
+      const total = sorted.length;
+      const start = (input.page - 1) * input.pageSize;
+      const paginated = sorted.slice(start, start + input.pageSize);
+
+      return { sessions: paginated, total, page: input.page };
+    }),
+
+  getFeaturedClips: publicProcedure
+    .input(
+      z.object({
+        creatorProfileId: z.string().uuid(),
+        limit: z.number().int().min(1).max(12).default(6),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Find the Twitch PlatformAccount for this creator
+      const twitchAccount = await ctx.prisma.platformAccount.findFirst({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          platform: "twitch",
+        },
+        select: { platformUserId: true },
+      });
+
+      if (!twitchAccount) {
+        return { clips: [], hasTwitch: false };
+      }
+
+      try {
+        const { fetchClips } = await import("@/server/adapters/twitch");
+        const clips = await fetchClips(
+          twitchAccount.platformUserId,
+          input.limit,
+        );
+        return { clips, hasTwitch: true };
+      } catch {
+        return { clips: [], hasTwitch: true };
+      }
+    }),
+
   triggerManualSnapshot: adminProcedure
     .input(
       z.object({

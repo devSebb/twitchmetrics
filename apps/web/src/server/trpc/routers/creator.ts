@@ -188,6 +188,78 @@ export const creatorRouter = router({
       });
     }),
 
+  addBrandPartnership: creatorProcedure
+    .input(
+      z.object({
+        brandName: z.string().trim().min(1).max(100),
+        brandLogoUrl: z.string().url().optional().or(z.literal("")),
+        campaignName: z.string().max(200).optional(),
+        startDate: z.string().datetime().optional(),
+        endDate: z.string().datetime().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { userId: ctx.user.id },
+        select: {
+          id: true,
+          state: true,
+          _count: { select: { brandPartnerships: true } },
+        },
+      });
+
+      if (!profile) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      if (profile.state !== "claimed" && profile.state !== "premium") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      if (profile._count.brandPartnerships >= 12) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Maximum 12 brand partners.",
+        });
+      }
+
+      return ctx.prisma.brandPartnership.create({
+        data: {
+          creatorProfileId: profile.id,
+          brandName: input.brandName,
+          brandLogoUrl: input.brandLogoUrl || null,
+          campaignName: input.campaignName || null,
+          startDate: input.startDate ? new Date(input.startDate) : null,
+          endDate: input.endDate ? new Date(input.endDate) : null,
+        },
+      });
+    }),
+
+  removeBrandPartnership: creatorProcedure
+    .input(z.object({ partnershipId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true },
+      });
+
+      if (!profile) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Verify ownership
+      const partnership = await ctx.prisma.brandPartnership.findUnique({
+        where: { id: input.partnershipId },
+        select: { creatorProfileId: true },
+      });
+
+      if (!partnership || partnership.creatorProfileId !== profile.id) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return ctx.prisma.brandPartnership.delete({
+        where: { id: input.partnershipId },
+      });
+    }),
+
   generateMediaKit: creatorProcedure.query(async ({ ctx }) => {
     const profile = await ctx.prisma.creatorProfile.findUnique({
       where: { userId: ctx.user.id },
