@@ -42,12 +42,15 @@ export async function GET(
   const metric = searchParams.get("metric") ?? "followers";
   const period = searchParams.get("period") ?? "30d";
 
-  if (!platform || !VALID_PLATFORMS.has(platform as Platform)) {
+  if (
+    !platform ||
+    (platform !== "all" && !VALID_PLATFORMS.has(platform as Platform))
+  ) {
     return NextResponse.json(
       {
         data: [],
         meta: {},
-        error: "A valid platform query parameter is required",
+        error: "A valid platform query parameter is required (or 'all')",
       },
       { status: 400 },
     );
@@ -101,6 +104,65 @@ export async function GET(
 
   const startDate = getPeriodStart(period);
 
+  // ── Multi-platform normalized response ──
+  if (platform === "all") {
+    const allSnapshots = await db.metricSnapshot.findMany({
+      where: {
+        creatorProfileId: creator.id,
+        ...(startDate ? { snapshotAt: { gte: startDate } } : {}),
+      },
+      orderBy: { snapshotAt: "asc" },
+      select: {
+        snapshotAt: true,
+        platform: true,
+        followerCount: true,
+        totalViews: true,
+      },
+    });
+
+    const dayMap = new Map<string, Record<string, string | null>>();
+    const platformsSeen = new Set<string>();
+
+    for (const snap of allSnapshots) {
+      const dayKey = snap.snapshotAt.toISOString().slice(0, 10);
+      platformsSeen.add(snap.platform);
+
+      if (!dayMap.has(dayKey)) {
+        dayMap.set(dayKey, {
+          date: dayKey,
+          twitch: null,
+          youtube: null,
+          instagram: null,
+          tiktok: null,
+          x: null,
+          kick: null,
+        });
+      }
+
+      const row = dayMap.get(dayKey)!;
+      const value = metric === "views" ? snap.totalViews : snap.followerCount;
+      row[snap.platform] = (value ?? 0n).toString();
+    }
+
+    const data = [...dayMap.values()].sort((a, b) =>
+      a.date!.localeCompare(b.date!),
+    );
+
+    return NextResponse.json(
+      serializeBigInt({
+        data,
+        meta: {
+          period,
+          platform: "all",
+          metric,
+          dataPoints: data.length,
+          platforms: [...platformsSeen],
+        },
+      }),
+    );
+  }
+
+  // ── Single platform response ──
   const snapshots = await db.metricSnapshot.findMany({
     where: {
       creatorProfileId: creator.id,

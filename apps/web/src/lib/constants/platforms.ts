@@ -60,7 +60,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
       "LIVE_VIEWER_COUNT",
     ],
     requiresUserConsent: ["WATCH_TIME"],
-    adapterStatus: "planned",
+    adapterStatus: "beta",
   },
   instagram: {
     name: "Instagram",
