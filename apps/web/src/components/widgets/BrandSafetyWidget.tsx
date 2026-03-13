@@ -1,20 +1,12 @@
 "use client";
 
-import type { EChartsOption } from "echarts";
 import { trpc } from "@/lib/trpc";
-import { BaseChart } from "@/components/charts/BaseChart";
 import { EmptyState } from "./EmptyState";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type Props = {
   profile: SerializedProfile;
   isClaimed: boolean;
-};
-
-type BrandSafetyData = {
-  brand_safety_score: number;
-  brand_safety_rating: "safe" | "moderate" | "review";
-  brand_safety_source: string;
 };
 
 function getRatingColor(rating: string): string {
@@ -44,7 +36,6 @@ function getRatingLabel(rating: string): string {
 }
 
 export function BrandSafetyWidget({ profile, isClaimed }: Props) {
-  // Fetch the latest metric snapshot that might have brand safety data
   const { data, isLoading } = trpc.snapshot.getLatestMetrics.useQuery({
     creatorProfileId: profile.id,
   });
@@ -57,16 +48,17 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
     );
   }
 
-  // Extract brand safety from extendedMetrics
   const ext = data?.snapshot?.extendedMetrics as Record<string, unknown> | null;
-  const safetyData =
-    ext &&
-    typeof ext.brand_safety_score === "number" &&
-    typeof ext.brand_safety_rating === "string"
-      ? (ext as unknown as BrandSafetyData)
+  const rating =
+    ext && typeof ext.brand_safety_rating === "string"
+      ? ext.brand_safety_rating
+      : null;
+  const tags =
+    ext && Array.isArray(ext.brand_safety_tags)
+      ? (ext.brand_safety_tags as string[])
       : null;
 
-  if (!safetyData) {
+  if (!tags && !rating) {
     return (
       <EmptyState
         variant="no_data"
@@ -77,69 +69,33 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
     );
   }
 
-  const score = safetyData.brand_safety_score;
-  const rating = safetyData.brand_safety_rating;
-  const color = getRatingColor(rating);
-
-  const gaugeOption: EChartsOption = {
-    series: [
-      {
-        type: "gauge",
-        startAngle: 180,
-        endAngle: 0,
-        min: 0,
-        max: 100,
-        splitNumber: 10,
-        radius: "100%",
-        center: ["50%", "75%"],
-        axisLine: {
-          lineStyle: {
-            width: 14,
-            color: [
-              [0.4, "#ef4444"],
-              [0.7, "#f59e0b"],
-              [1, "#22c55e"],
-            ],
-          },
-        },
-        pointer: {
-          length: "60%",
-          width: 4,
-          itemStyle: { color },
-        },
-        axisTick: { show: false },
-        splitLine: { show: false },
-        axisLabel: { show: false },
-        detail: {
-          valueAnimation: true,
-          formatter: `{value}`,
-          color,
-          fontSize: 24,
-          fontWeight: "bold",
-          offsetCenter: [0, "-10%"],
-        },
-        data: [{ value: score }],
-      },
-    ],
-  };
+  const color = rating ? getRatingColor(rating) : "#949BA4";
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="space-y-3">
       {/* Rating badge */}
-      <span
-        className="mb-2 rounded-full px-3 py-1 text-xs font-bold uppercase text-white"
-        style={{ backgroundColor: color }}
-      >
-        {getRatingLabel(rating)}
-      </span>
+      {rating && (
+        <span
+          className="inline-block rounded-full px-3 py-1 text-xs font-bold uppercase text-white"
+          style={{ backgroundColor: color }}
+        >
+          {getRatingLabel(rating)}
+        </span>
+      )}
 
-      {/* Gauge chart */}
-      <BaseChart option={gaugeOption} height={160} />
-
-      {/* Source label */}
-      <p className="mt-1 text-[10px] text-[#949BA4]">
-        Source: {safetyData.brand_safety_source ?? "Manual review"}
-      </p>
+      {/* Tags */}
+      {tags && tags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-md bg-[#383A40] px-2.5 py-1 text-xs text-[#DBDEE1]"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

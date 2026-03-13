@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
-import { Sidebar } from "@/components/dashboard";
+import { DashboardNavbar } from "@/components/dashboard";
+import { Footer } from "@/components/layout/Footer";
 import { auth } from "@/lib/auth";
 
 export default async function DashboardLayout({
@@ -28,8 +29,8 @@ export default async function DashboardLayout({
   });
 
   return (
-    <div className="flex min-h-screen bg-[#2B2D31]">
-      <Sidebar
+    <div className="flex min-h-screen flex-col bg-[#2B2D31]">
+      <DashboardNavbar
         user={{
           id: session.user.id,
           name: session.user.name,
@@ -39,9 +40,8 @@ export default async function DashboardLayout({
         }}
         creatorProfile={creatorProfile}
       />
-      <main className="flex-1 overflow-y-auto p-6 md:ml-0 md:p-8">
-        <div className="mx-auto w-full max-w-7xl">{children}</div>
-      </main>
+      <main className="flex-1">{children}</main>
+      <Footer />
     </div>
   );
 }

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:3001": "next dev --port 3001",
     "dev:5000": "next dev --port 5000",
     "dev:5001": "next dev --port 5001",
     "build": "next build",

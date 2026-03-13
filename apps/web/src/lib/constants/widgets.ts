@@ -128,15 +128,15 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
  */
 export const WIDGET_ORDER: WidgetId[] = [
   "stats_row",
-  "follower_growth",
+  "brand_partners",
   "demographics",
   "popular_games",
-  "featured_clips",
-  "viewer_count",
   "recent_streams",
-  "platform_breakdown",
-  "brand_partners",
+  "featured_clips",
+  "follower_growth",
+  "viewer_count",
   "brand_safety",
+  "platform_breakdown",
 ];
 
 const DEFAULT_ENABLED_WIDGETS: WidgetId[] = Object.values(WIDGET_REGISTRY)

@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import {
-  WIDGET_ORDER,
   WIDGET_REGISTRY,
   getEnabledWidgets,
   type WidgetId,
@@ -21,6 +20,12 @@ import {
   BrandPartnersWidget,
   BrandSafetyWidget,
 } from "@/components/widgets";
+import { DashboardProfileHeader } from "./DashboardProfileHeader";
+import { CategoriesSection } from "./sections/CategoriesSection";
+import { FeaturedPostsSection } from "./sections/FeaturedPostsSection";
+import { InterestsSection } from "./sections/InterestsSection";
+import { StreamerQualitiesSection } from "./sections/StreamerQualitiesSection";
+import { RatesSection } from "./sections/RatesSection";
 import { WidgetToggle } from "./WidgetToggle";
 
 // ----------------------------------------------------------------
@@ -83,30 +88,22 @@ type DashboardGridProps = {
 };
 
 // ----------------------------------------------------------------
-// Column span → Tailwind class (pre-defined to survive purge)
-// ----------------------------------------------------------------
-
-const COL_SPAN: Record<number, string> = {
-  1: "col-span-1",
-  2: "col-span-1 md:col-span-2",
-  3: "col-span-1 md:col-span-2 lg:col-span-3",
-};
-
-// ----------------------------------------------------------------
 // Widget card wrapper
 // ----------------------------------------------------------------
 
 function WidgetCard({
   widgetId,
   children,
+  className,
 }: {
   widgetId: WidgetId;
   children: React.ReactNode;
+  className?: string | undefined;
 }) {
   const def = WIDGET_REGISTRY[widgetId];
   return (
     <div
-      className={`rounded-xl border border-[#3F4147] bg-[#313338] p-5 ${COL_SPAN[def.colSpan]}`}
+      className={`rounded-xl border border-[#3F4147] bg-[#313338] p-5 ${className ?? ""}`}
     >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-[#F2F3F5]">{def.label}</h3>
@@ -117,59 +114,60 @@ function WidgetCard({
 }
 
 // ----------------------------------------------------------------
-// Placeholder fallback
+// Access-gated widget renderer
 // ----------------------------------------------------------------
 
-function WidgetPlaceholder({ widgetId }: { widgetId: WidgetId }) {
+function renderGated(
+  widgetId: WidgetId,
+  enabledSet: Set<WidgetId>,
+  isClaimed: boolean,
+  children: React.ReactNode,
+  className?: string,
+): React.ReactNode {
+  if (!enabledSet.has(widgetId)) return null;
+
   const def = WIDGET_REGISTRY[widgetId];
+  const cardProps = className ? { widgetId, className } : { widgetId };
+
+  if (def.access === "claimed" && !isClaimed) {
+    return (
+      <WidgetCard key={widgetId} {...cardProps}>
+        <EmptyState
+          variant="locked"
+          title="Claim Required"
+          message="Claim your profile to unlock this widget."
+          actionLabel="Claim Profile"
+          actionHref="/dashboard/claim"
+          compact
+        />
+      </WidgetCard>
+    );
+  }
+
+  if (def.access === "connected" && !isClaimed) {
+    return (
+      <WidgetCard key={widgetId} {...cardProps}>
+        <EmptyState
+          variant="locked"
+          title="Connect Accounts"
+          message="Connect your platforms to see this data."
+          actionLabel="Connect"
+          actionHref="/dashboard/connections"
+          compact
+        />
+      </WidgetCard>
+    );
+  }
+
   return (
-    <EmptyState
-      variant="no_data"
-      title={def.label}
-      message="Coming soon"
-      compact
-    />
+    <WidgetCard key={widgetId} {...cardProps}>
+      {children}
+    </WidgetCard>
   );
 }
 
 // ----------------------------------------------------------------
-// Widget renderer — maps widgetId to real components
-// ----------------------------------------------------------------
-
-function renderWidget(
-  widgetId: WidgetId,
-  profile: SerializedProfile,
-  isClaimed: boolean,
-  isOwner: boolean,
-): React.ReactNode {
-  switch (widgetId) {
-    case "stats_row":
-      return <StatsRow profile={profile} />;
-    case "follower_growth":
-      return <FollowerGrowthWidget profile={profile} />;
-    case "viewer_count":
-      return <ViewerCountWidget profile={profile} />;
-    case "demographics":
-      return <DemographicsWidget profile={profile} isClaimed={isClaimed} />;
-    case "popular_games":
-      return <PopularGamesWidget profile={profile} />;
-    case "platform_breakdown":
-      return <PlatformBreakdownWidget profile={profile} />;
-    case "recent_streams":
-      return <RecentStreamsWidget profile={profile} />;
-    case "featured_clips":
-      return <FeaturedClipsWidget profile={profile} />;
-    case "brand_partners":
-      return <BrandPartnersWidget profile={profile} isOwner={isOwner} />;
-    case "brand_safety":
-      return <BrandSafetyWidget profile={profile} isClaimed={isClaimed} />;
-    default:
-      return <WidgetPlaceholder widgetId={widgetId} />;
-  }
-}
-
-// ----------------------------------------------------------------
-// Main Grid Component
+// Main Grid Component — Figma V7 section layout
 // ----------------------------------------------------------------
 
 export function DashboardGrid({
@@ -190,84 +188,132 @@ export function DashboardGrid({
   }, []);
 
   return (
-    <div className="space-y-6">
-      {/* Dashboard header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#F2F3F5]">
-            {profile.displayName}
-          </h1>
-          <p className="mt-1 text-sm text-[#949BA4]">Creator Dashboard</p>
-        </div>
+    <div>
+      {/* Profile Header — full bleed */}
+      <DashboardProfileHeader profile={profile} isOwner={isOwner} />
+
+      {/* Content area */}
+      <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
+        {/* Customize button */}
         {isOwner && (
-          <button
-            type="button"
-            onClick={() => setToggleOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-xs font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setToggleOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-xs font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
             >
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            Customize
-          </button>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Customize
+            </button>
+          </div>
         )}
-      </div>
 
-      {/* Widget grid */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {WIDGET_ORDER.map((widgetId) => {
-          if (!enabledSet.has(widgetId)) return null;
+        {/* Row 1: Stats Row — full width */}
+        {renderGated(
+          "stats_row",
+          enabledSet,
+          isClaimed,
+          <StatsRow profile={profile} />,
+        )}
 
-          const def = WIDGET_REGISTRY[widgetId];
+        {/* Row 2: Brand Partners (2/3) | Channel Audience (1/3) */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {renderGated(
+            "brand_partners",
+            enabledSet,
+            isClaimed,
+            <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
+            "lg:col-span-2",
+          )}
+          {renderGated(
+            "demographics",
+            enabledSet,
+            isClaimed,
+            <DemographicsWidget profile={profile} isClaimed={isClaimed} />,
+          )}
+        </div>
 
-          // Access gate: show locked empty state for restricted widgets
-          if (def.access === "claimed" && !isClaimed) {
-            return (
-              <WidgetCard key={widgetId} widgetId={widgetId}>
-                <EmptyState
-                  variant="locked"
-                  title="Claim Required"
-                  message="Claim your profile to unlock this widget."
-                  actionLabel="Claim Profile"
-                  actionHref="/dashboard/claim"
-                  compact
-                />
-              </WidgetCard>
-            );
-          }
+        {/* Row 3: Popular Games (1/3) | Categories (1/3) | Last Streams (1/3) */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {renderGated(
+            "popular_games",
+            enabledSet,
+            isClaimed,
+            <PopularGamesWidget profile={profile} />,
+          )}
+          <CategoriesSection />
+          {renderGated(
+            "recent_streams",
+            enabledSet,
+            isClaimed,
+            <RecentStreamsWidget profile={profile} />,
+          )}
+        </div>
 
-          if (def.access === "connected" && !isClaimed) {
-            return (
-              <WidgetCard key={widgetId} widgetId={widgetId}>
-                <EmptyState
-                  variant="locked"
-                  title="Connect Accounts"
-                  message="Connect your platforms to see this data."
-                  actionLabel="Connect"
-                  actionHref="/dashboard/connections"
-                  compact
-                />
-              </WidgetCard>
-            );
-          }
+        {/* Row 4: Featured Clips — full width */}
+        {renderGated(
+          "featured_clips",
+          enabledSet,
+          isClaimed,
+          <FeaturedClipsWidget profile={profile} />,
+        )}
 
-          // Render P0 widgets or placeholder for P1/P2
-          return (
-            <WidgetCard key={widgetId} widgetId={widgetId}>
-              {renderWidget(widgetId, profile, isClaimed, isOwner)}
-            </WidgetCard>
-          );
-        })}
+        {/* Row 5: Follower Growth (2/3) | Viewer Count (1/3) */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {renderGated(
+            "follower_growth",
+            enabledSet,
+            isClaimed,
+            <FollowerGrowthWidget profile={profile} />,
+            "lg:col-span-2",
+          )}
+          {renderGated(
+            "viewer_count",
+            enabledSet,
+            isClaimed,
+            <ViewerCountWidget profile={profile} />,
+          )}
+        </div>
+
+        {/* Row 6: Featured Posts — full width */}
+        <FeaturedPostsSection />
+
+        {/* Row 7: Interests (1/2) | Streamer Qualities (1/2) */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <InterestsSection />
+          <StreamerQualitiesSection />
+        </div>
+
+        {/* Row 8: Rates (1/2) | Brand Safety (1/2) */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <RatesSection />
+          {renderGated(
+            "brand_safety",
+            enabledSet,
+            isClaimed,
+            <BrandSafetyWidget profile={profile} isClaimed={isClaimed} />,
+          )}
+        </div>
+
+        {/* Row 9: Platform Breakdown — full width */}
+        {renderGated(
+          "platform_breakdown",
+          enabledSet,
+          isClaimed,
+          <PlatformBreakdownWidget profile={profile} />,
+        )}
       </div>
 
       {/* Widget toggle drawer */}
