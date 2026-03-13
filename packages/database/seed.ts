@@ -487,6 +487,146 @@ function generateFollowerTimeseries(
 }
 
 // ============================================================
+// DEV USER DATA — realistic fake data for every widget
+// ============================================================
+
+const DEV_BRAND_PARTNERS = [
+  {
+    brandName: "Rogue Energy",
+    brandLogoUrl: "https://i.imgur.com/1Q9Z1Zm.png",
+  },
+  { brandName: "Logitech", brandLogoUrl: "https://i.imgur.com/6aJkS1L.png" },
+  { brandName: "HelloFresh", brandLogoUrl: "https://i.imgur.com/3Z5j9Ux.png" },
+  { brandName: "NordVPN", brandLogoUrl: "https://i.imgur.com/7hZ2w1x.png" },
+  { brandName: "Chipotle", brandLogoUrl: "https://i.imgur.com/5cR3q2y.png" },
+  { brandName: "Stake", brandLogoUrl: "https://i.imgur.com/4dF8t3z.png" },
+  { brandName: "SteelSeries", brandLogoUrl: null },
+  { brandName: "G FUEL", brandLogoUrl: null },
+];
+
+const DEV_EXTENDED_METRICS = {
+  avg_viewers: 12450,
+  peak_viewers: 89200,
+  live_viewer_count: 15300,
+  hours_streamed: 186,
+  avg_stream_duration_hours: 6.2,
+  subscriber_count: 24500,
+  brand_safety_score: 82,
+  brand_safety_rating: "safe" as const,
+  brand_safety_source: "Automated analysis",
+  brand_safety_tags: [
+    "15+ Games",
+    "Family Friendly",
+    "Travel",
+    "Hiking",
+    "Stocks",
+    "GTA V",
+    "Basketball",
+    "Cooking",
+  ],
+  top_games: [
+    { name: "World of Warcraft", avgViewers: 18200, hoursPlayed: 62 },
+    { name: "Path of Exile", avgViewers: 14800, hoursPlayed: 48 },
+    { name: "Call of Duty: Warzone", avgViewers: 11200, hoursPlayed: 35 },
+    { name: "Cyberpunk 2077", avgViewers: 9600, hoursPlayed: 22 },
+    { name: "Fortnite", avgViewers: 8100, hoursPlayed: 19 },
+  ],
+  clips: [
+    {
+      id: "clip_001",
+      title: "INSANE clutch in Warzone!",
+      url: "https://clips.twitch.tv/example1",
+      thumbnailUrl: "https://picsum.photos/seed/clip1/320/180",
+      viewCount: 245000,
+      createdAt: "2026-02-28T14:30:00Z",
+      duration: 30,
+    },
+    {
+      id: "clip_002",
+      title: "First kill of the stream",
+      url: "https://clips.twitch.tv/example2",
+      thumbnailUrl: "https://picsum.photos/seed/clip2/320/180",
+      viewCount: 182000,
+      createdAt: "2026-03-01T19:15:00Z",
+      duration: 25,
+    },
+    {
+      id: "clip_003",
+      title: "Raid boss down FINALLY",
+      url: "https://clips.twitch.tv/example3",
+      thumbnailUrl: "https://picsum.photos/seed/clip3/320/180",
+      viewCount: 134000,
+      createdAt: "2026-03-05T21:00:00Z",
+      duration: 45,
+    },
+    {
+      id: "clip_004",
+      title: "Chat made me do this...",
+      url: "https://clips.twitch.tv/example4",
+      thumbnailUrl: "https://picsum.photos/seed/clip4/320/180",
+      viewCount: 98000,
+      createdAt: "2026-03-08T16:45:00Z",
+      duration: 20,
+    },
+    {
+      id: "clip_005",
+      title: "New personal best speedrun",
+      url: "https://clips.twitch.tv/example5",
+      thumbnailUrl: "https://picsum.photos/seed/clip5/320/180",
+      viewCount: 76000,
+      createdAt: "2026-03-10T22:30:00Z",
+      duration: 60,
+    },
+    {
+      id: "clip_006",
+      title: "Reaction to 1M followers",
+      url: "https://clips.twitch.tv/example6",
+      thumbnailUrl: "https://picsum.photos/seed/clip6/320/180",
+      viewCount: 312000,
+      createdAt: "2026-03-12T12:00:00Z",
+      duration: 35,
+    },
+  ],
+};
+
+const DEV_DEMOGRAPHICS = {
+  ageGenderData: {
+    "13-17": { male: 8, female: 2 },
+    "18-24": { male: 32, female: 6 },
+    "25-34": { male: 28, female: 5 },
+    "35-44": { male: 10, female: 3 },
+    "45-64": { male: 4, female: 2 },
+  },
+  countryData: {
+    US: 42,
+    GB: 14,
+    CA: 11,
+    DE: 8,
+    BR: 6,
+    FR: 5,
+    AU: 4,
+    SE: 3,
+    KR: 3,
+    JP: 2,
+    Other: 2,
+  },
+  deviceData: {
+    desktop: 62,
+    mobile: 28,
+    tablet: 6,
+    tv: 4,
+  },
+  trafficSources: {
+    browse: 35,
+    search: 22,
+    external: 18,
+    notifications: 12,
+    channel_page: 8,
+    other: 5,
+  },
+};
+
+// ============================================================
 // MAIN SEED
 // ============================================================
 
@@ -494,6 +634,7 @@ async function main() {
   console.log("Clearing existing data...");
 
   // Delete in dependency order
+  await prisma.creatorAnalytics.deleteMany();
   await prisma.creatorGrowthRollup.deleteMany();
   await prisma.metricSnapshot.deleteMany();
   await prisma.gameViewerSnapshot.deleteMany();
@@ -506,6 +647,7 @@ async function main() {
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.verificationToken.deleteMany();
+  await prisma.reportLead.deleteMany();
   await prisma.user.deleteMany();
 
   console.log("Seeding creators...");
@@ -514,8 +656,22 @@ async function main() {
   faker.seed(42);
 
   // ============================================================
-  // USERS (5 claimed creators will link to these)
+  // USERS (5 generic + 1 dev user with full data)
   // ============================================================
+
+  // Pre-computed bcrypt hash of "password123" (12 rounds)
+  const DEV_PASSWORD_HASH =
+    "$2b$12$Flw.wxfey1S.CqZ1Kz3Bwu1QAUhOZt22mYp45HeotWEL.1E0dUkLy";
+
+  const devUser = await prisma.user.create({
+    data: {
+      email: "dev@twitchmetrics.test",
+      name: "DevStreamer",
+      passwordHash: DEV_PASSWORD_HASH,
+      emailVerified: new Date(),
+      role: "admin",
+    },
+  });
 
   const users = await Promise.all(
     Array.from({ length: 5 }, (_, i) =>
@@ -531,10 +687,232 @@ async function main() {
   );
 
   // ============================================================
+  // DEV USER — FULLY LOADED CREATOR PROFILE
+  // ============================================================
+
+  console.log("Seeding dev user with full data...");
+
+  const devProfile = await prisma.creatorProfile.create({
+    data: {
+      displayName: "DevStreamer",
+      slug: "devstreamer",
+      avatarUrl: "https://i.pravatar.cc/300?u=devstreamer",
+      bannerUrl: "https://picsum.photos/seed/devbanner/1920/400",
+      bio: "Full-time variety streamer and content creator. Competitive FPS player turned community builder. Partnered on Twitch, growing on YouTube. Welcome to the stream!",
+      country: "US",
+      primaryPlatform: "twitch",
+      state: "claimed",
+      snapshotTier: "tier1",
+      totalFollowers: BigInt(1_250_000),
+      totalViews: BigInt(185_000_000),
+      searchText: "devstreamer dev streamer",
+      userId: devUser.id,
+      claimedAt: new Date("2025-06-15"),
+      lastSnapshotAt: new Date(),
+      widgetConfig: [
+        "stats_row",
+        "brand_partners",
+        "demographics",
+        "popular_games",
+        "recent_streams",
+        "featured_clips",
+        "follower_growth",
+        "viewer_count",
+        "brand_safety",
+        "platform_breakdown",
+      ],
+    },
+  });
+
+  // Dev user platform accounts — 4 platforms
+  const devPlatformData: Array<{
+    platform: Platform;
+    followers: bigint;
+    views: bigint;
+    username: string;
+  }> = [
+    {
+      platform: "twitch",
+      followers: BigInt(850_000),
+      views: BigInt(120_000_000),
+      username: "devstreamer",
+    },
+    {
+      platform: "youtube",
+      followers: BigInt(320_000),
+      views: BigInt(55_000_000),
+      username: "DevStreamerYT",
+    },
+    {
+      platform: "instagram",
+      followers: BigInt(65_000),
+      views: BigInt(8_000_000),
+      username: "devstreamer_ig",
+    },
+    {
+      platform: "x",
+      followers: BigInt(15_000),
+      views: BigInt(2_000_000),
+      username: "devstreamer",
+    },
+  ];
+
+  await prisma.platformAccount.createMany({
+    data: devPlatformData.map((p) => ({
+      creatorProfileId: devProfile.id,
+      platform: p.platform,
+      platformUserId: faker.string.numeric(10),
+      platformUsername: p.username,
+      platformDisplayName: "DevStreamer",
+      platformUrl: `https://${p.platform === "x" ? "x.com" : p.platform + ".tv"}/${p.username}`,
+      followerCount: p.followers,
+      totalViews: p.views,
+      isOAuthConnected: true,
+      lastSyncedAt: new Date(),
+      ...(p.platform === "youtube" ? { subscriberCount: p.followers } : {}),
+    })),
+  });
+
+  // Dev user brand partnerships
+  await prisma.brandPartnership.createMany({
+    data: DEV_BRAND_PARTNERS.map((bp, i) => ({
+      creatorProfileId: devProfile.id,
+      brandName: bp.brandName,
+      brandLogoUrl: bp.brandLogoUrl,
+      campaignName: i < 4 ? `${bp.brandName} x DevStreamer` : null,
+      startDate: new Date(Date.now() - (12 - i) * 30 * 24 * 60 * 60 * 1000),
+      endDate:
+        i < 3
+          ? new Date(Date.now() - (6 - i) * 30 * 24 * 60 * 60 * 1000)
+          : null,
+      isPublic: true,
+    })),
+  });
+
+  // Dev user metric snapshots — 90 days, all 4 platforms, WITH extendedMetrics
+  const DAYS = 90;
+  const now = new Date();
+
+  for (const pData of devPlatformData) {
+    const series = generateFollowerTimeseries(
+      Number(pData.followers),
+      "up",
+      DAYS,
+    );
+
+    const snapshots = series.map((followers, dayIdx) => {
+      const snapshotAt = new Date(
+        now.getTime() - (DAYS - dayIdx) * 24 * 60 * 60 * 1000,
+      );
+
+      // Only include extendedMetrics on the primary platform's snapshots
+      const ext =
+        pData.platform === "twitch"
+          ? {
+              ...DEV_EXTENDED_METRICS,
+              // Vary viewer counts slightly per day
+              avg_viewers: Math.floor(
+                DEV_EXTENDED_METRICS.avg_viewers * (0.8 + Math.random() * 0.4),
+              ),
+              peak_viewers: Math.floor(
+                DEV_EXTENDED_METRICS.peak_viewers * (0.7 + Math.random() * 0.6),
+              ),
+              live_viewer_count:
+                dayIdx === DAYS - 1
+                  ? DEV_EXTENDED_METRICS.live_viewer_count
+                  : 0,
+            }
+          : undefined;
+
+      return {
+        creatorProfileId: devProfile.id,
+        platform: pData.platform,
+        snapshotAt,
+        followerCount: BigInt(followers),
+        totalViews: BigInt(Math.floor(Number(pData.views) * (dayIdx / DAYS))),
+        ...(pData.platform === "youtube"
+          ? { subscriberCount: BigInt(followers) }
+          : {}),
+        postCount: Math.floor(Math.random() * 50) + dayIdx,
+        extendedMetrics: ext ?? undefined,
+      };
+    });
+
+    for (let j = 0; j < snapshots.length; j += 500) {
+      const batch = snapshots.slice(j, j + 500);
+      await prisma.metricSnapshot.createMany({ data: batch });
+    }
+  }
+
+  // Dev user creator analytics — demographics data
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  for (const pData of devPlatformData.slice(0, 2)) {
+    // Twitch + YouTube
+    await prisma.creatorAnalytics.create({
+      data: {
+        creatorProfileId: devProfile.id,
+        platform: pData.platform,
+        periodStart: thirtyDaysAgo,
+        periodEnd: now,
+        estimatedMinutesWatched: BigInt(
+          Math.floor(8_000_000 + Math.random() * 4_000_000),
+        ),
+        averageViewDuration: 1800 + Math.floor(Math.random() * 1200),
+        subscribersGained: Math.floor(2000 + Math.random() * 3000),
+        subscribersLost: Math.floor(200 + Math.random() * 500),
+        estimatedRevenue: 12000 + Math.random() * 8000,
+        views: BigInt(Math.floor(2_000_000 + Math.random() * 3_000_000)),
+        likes: Math.floor(50_000 + Math.random() * 100_000),
+        comments: Math.floor(5_000 + Math.random() * 15_000),
+        shares: Math.floor(2_000 + Math.random() * 8_000),
+        impressions: BigInt(
+          Math.floor(10_000_000 + Math.random() * 20_000_000),
+        ),
+        reach: BigInt(Math.floor(5_000_000 + Math.random() * 10_000_000)),
+        profileViews: Math.floor(100_000 + Math.random() * 200_000),
+        websiteClicks: Math.floor(5_000 + Math.random() * 15_000),
+        subscriberCount: Number(pData.followers),
+        ageGenderData: DEV_DEMOGRAPHICS.ageGenderData,
+        countryData: DEV_DEMOGRAPHICS.countryData,
+        deviceData: DEV_DEMOGRAPHICS.deviceData,
+        trafficSources: DEV_DEMOGRAPHICS.trafficSources,
+      },
+    });
+  }
+
+  // Dev user growth rollups — all platforms
+  for (const pData of devPlatformData) {
+    const latestFollowers = Number(pData.followers);
+    const delta1d = Math.floor(latestFollowers * 0.003);
+    const delta7d = Math.floor(latestFollowers * 0.018);
+    const delta30d = Math.floor(latestFollowers * 0.065);
+
+    await prisma.creatorGrowthRollup.create({
+      data: {
+        creatorProfileId: devProfile.id,
+        platform: pData.platform,
+        followerCount: pData.followers,
+        delta1d: BigInt(delta1d),
+        delta7d: BigInt(delta7d),
+        delta30d: BigInt(delta30d),
+        pct1d: 0.3,
+        pct7d: 1.8,
+        pct30d: 6.5,
+        trendDirection: "UP",
+        acceleration: "ACCELERATING",
+      },
+    });
+  }
+
+  console.log(
+    "  Dev user fully seeded (4 platforms, partnerships, analytics, snapshots)",
+  );
+
+  // ============================================================
   // 50 CREATOR PROFILES
   // ============================================================
 
-  const usedSlugs = new Set<string>();
+  const usedSlugs = new Set<string>(["devstreamer"]);
   const creatorData: Array<{
     displayName: string;
     slug: string;
@@ -658,8 +1036,6 @@ async function main() {
 
   console.log("Seeding metric snapshots (this may take a moment)...");
 
-  const DAYS = 90;
-  const now = new Date();
   let snapshotCount = 0;
 
   for (let i = 0; i < creators.length; i++) {
@@ -868,15 +1244,22 @@ async function main() {
   // ============================================================
 
   console.log("\nSeed complete:");
-  console.log(`  - ${users.length} users`);
+  console.log(`  - ${users.length + 1} users (incl. dev@twitchmetrics.test)`);
   console.log(
-    `  - ${creators.length} creator profiles (${creatorData.filter((c) => c.state === "claimed").length} claimed)`,
+    `  - ${creators.length + 1} creator profiles (${creatorData.filter((c) => c.state === "claimed").length + 1} claimed)`,
   );
-  console.log(`  - ${platformAccountCount} platform accounts`);
-  console.log(`  - ${snapshotCount} metric snapshots`);
-  console.log(`  - ${rollupCount} growth rollups`);
+  console.log(
+    `  - ${platformAccountCount + devPlatformData.length} platform accounts`,
+  );
+  console.log(
+    `  - ${snapshotCount + DAYS * devPlatformData.length} metric snapshots`,
+  );
+  console.log(`  - ${rollupCount + devPlatformData.length} growth rollups`);
+  console.log(`  - ${DEV_BRAND_PARTNERS.length} brand partnerships (dev user)`);
+  console.log(`  - 2 creator analytics records (dev user)`);
   console.log(`  - ${games.length} games`);
   console.log(`  - ${games.length * 6} game viewer snapshots`);
+  console.log(`\n  Login: dev@twitchmetrics.test (admin, slug: devstreamer)`);
 }
 
 main()

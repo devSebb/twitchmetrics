@@ -28,10 +28,10 @@ async function getLandingData() {
         },
       },
     }),
-    // Trending creators by 7d growth
+    // Trending creators by 7d growth (fetch extra to account for dedup)
     db.creatorGrowthRollup.findMany({
       orderBy: { delta7d: "desc" },
-      take: 5,
+      take: 15,
       include: {
         creatorProfile: {
           include: { platformAccounts: true },
@@ -70,26 +70,35 @@ async function getLandingData() {
     })(),
   }));
 
-  // Shape trending creators from rollups
-  const trendingCreators = serializeBigInt(trendingRollupsRaw).map((r) => {
-    const c = r.creatorProfile;
-    return {
-      displayName: c.displayName,
-      slug: c.slug,
-      avatarUrl: c.avatarUrl,
-      totalFollowers: String(c.totalFollowers),
-      primaryPlatform: c.primaryPlatform,
-      platformAccounts: c.platformAccounts.map((a) => ({
-        platform: a.platform,
-        platformUsername: a.platformUsername,
-      })),
-      growthRollup: {
-        delta7d: String(r.delta7d),
-        pct7d: r.pct7d,
-        trendDirection: r.trendDirection,
-      },
-    };
-  });
+  // Shape trending creators from rollups — deduplicate by slug since a
+  // creator with multiple platforms can appear more than once
+  const seenSlugs = new Set<string>();
+  const trendingCreators = serializeBigInt(trendingRollupsRaw)
+    .filter((r) => {
+      if (seenSlugs.has(r.creatorProfile.slug)) return false;
+      seenSlugs.add(r.creatorProfile.slug);
+      return true;
+    })
+    .slice(0, 5)
+    .map((r) => {
+      const c = r.creatorProfile;
+      return {
+        displayName: c.displayName,
+        slug: c.slug,
+        avatarUrl: c.avatarUrl,
+        totalFollowers: String(c.totalFollowers),
+        primaryPlatform: c.primaryPlatform,
+        platformAccounts: c.platformAccounts.map((a) => ({
+          platform: a.platform,
+          platformUsername: a.platformUsername,
+        })),
+        growthRollup: {
+          delta7d: String(r.delta7d),
+          pct7d: r.pct7d,
+          trendDirection: r.trendDirection,
+        },
+      };
+    });
 
   // Shape top games
   const topGames = topGamesRaw.map((g) => ({

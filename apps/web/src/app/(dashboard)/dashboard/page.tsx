@@ -60,6 +60,7 @@ export default async function DashboardPage() {
   });
 
   if (!profile) {
+    console.log("[dashboard] No profile found for userId:", session.user.id);
     redirect("/dashboard/claim");
   }
 
