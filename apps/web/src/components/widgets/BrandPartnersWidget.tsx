@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { trpc } from "@/lib/trpc";
+import { getSafeImageSrc } from "@/lib/safeImage";
 import { EmptyState } from "./EmptyState";
 import type {
   SerializedProfile,
@@ -39,26 +40,24 @@ function BrandLogo({
 }: {
   partnership: SerializedBrandPartnership;
 }) {
-  const [imgError, setImgError] = useState(false);
+  const logoSrc = getSafeImageSrc(partnership.brandLogoUrl);
 
-  if (partnership.brandLogoUrl && !imgError) {
+  if (logoSrc) {
     return (
       <div className="relative h-10 w-10 overflow-hidden rounded-lg bg-[#2B2D31]">
         <Image
-          src={partnership.brandLogoUrl}
+          src={logoSrc}
           alt={partnership.brandName}
           fill
           sizes="40px"
           className="object-cover"
           loading="lazy"
-          unoptimized
-          onError={() => setImgError(true)}
         />
       </div>
     );
   }
 
-  // Fallback: first letter
+  // Fallback: first letter (no safe URL or disallowed host)
   return (
     <div
       className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white"
