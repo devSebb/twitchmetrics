@@ -24,6 +24,9 @@ export default async function SettingsPage() {
       passwordHash: true,
       creatorProfile: {
         select: {
+          slug: true,
+          state: true,
+          widgetConfig: true,
           platformAccounts: {
             where: { isOAuthConnected: true },
             select: { platform: true },
@@ -32,6 +35,11 @@ export default async function SettingsPage() {
       },
     },
   });
+
+  const creatorSlug = user?.creatorProfile?.slug ?? null;
+  const isClaimed =
+    user?.creatorProfile?.state === "claimed" ||
+    user?.creatorProfile?.state === "premium";
 
   return (
     <div className="space-y-6">
@@ -50,6 +58,8 @@ export default async function SettingsPage() {
           user?.creatorProfile?.platformAccounts.map((item) => item.platform) ??
           []
         }
+        creatorSlug={creatorSlug}
+        isClaimed={isClaimed}
       />
     </div>
   );

@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { trpc } from "@/lib/trpc";
 import { Button, Card } from "@/components/ui";
+import {
+  WIDGET_ORDER,
+  WIDGET_REGISTRY,
+  type WidgetId,
+} from "@/lib/constants/widgets";
 
 type SettingsFormProps = {
   name: string | null;
@@ -11,6 +17,8 @@ type SettingsFormProps = {
   image: string | null;
   hasPassword: boolean;
   connectedPlatforms: string[];
+  creatorSlug: string | null;
+  isClaimed: boolean;
 };
 
 export function SettingsForm({
@@ -19,6 +27,8 @@ export function SettingsForm({
   image,
   hasPassword,
   connectedPlatforms,
+  creatorSlug,
+  isClaimed,
 }: SettingsFormProps) {
   const [displayName, setDisplayName] = useState(name ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -181,6 +191,64 @@ export function SettingsForm({
           Manage connections
         </a>
       </Card>
+
+      {/* Widget Preferences */}
+      <Card>
+        <h2 className="text-lg font-semibold text-[#F2F3F5]">
+          Widget preferences
+        </h2>
+        <p className="mt-1 text-sm text-[#949BA4]">
+          Control which widgets appear on your dashboard. You can also toggle
+          widgets from the gear icon on the dashboard.
+        </p>
+        <div className="mt-4 space-y-1">
+          {WIDGET_ORDER.map((widgetId) => {
+            const def = WIDGET_REGISTRY[widgetId];
+            return (
+              <div
+                key={widgetId}
+                className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[#383A40]"
+              >
+                <div>
+                  <span className="text-sm text-[#DBDEE1]">{def.label}</span>
+                  <span className="ml-2 rounded bg-[#383A40] px-1.5 py-0.5 text-[10px] text-[#949BA4]">
+                    {def.priority}
+                  </span>
+                </div>
+                <span className="text-xs text-[#949BA4]">
+                  {def.defaultEnabled ? "On by default" : "Off by default"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-[#949BA4]">
+          Use the dashboard widget toggle for real-time changes.
+        </p>
+      </Card>
+
+      {/* Media Kit */}
+      {creatorSlug && (
+        <Card>
+          <h2 className="text-lg font-semibold text-[#F2F3F5]">Media kit</h2>
+          <p className="mt-1 text-sm text-[#949BA4]">
+            Your public media kit page showcases your analytics and brand
+            partnerships to potential sponsors.
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <Link href={`/creator/${creatorSlug}/media-kit`}>
+              <Button variant="secondary" size="sm">
+                View Media Kit
+              </Button>
+            </Link>
+            {!isClaimed && (
+              <span className="text-xs text-[#949BA4]">
+                Claim your profile to unlock full media kit features.
+              </span>
+            )}
+          </div>
+        </Card>
+      )}
 
       <Card className="border-[#7f1d1d] bg-[#3f1f24]">
         <h2 className="text-lg font-semibold text-[#F2F3F5]">Danger zone</h2>

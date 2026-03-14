@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { ManagerDashboard } from "@/components/manager/ManagerDashboard";
 
 export const metadata: Metadata = {
-  title: "Roster",
+  title: "Talent Manager Dashboard",
   robots: { index: false, follow: false },
 };
 
-export default function RosterPage() {
-  // TODO: implement talent manager roster grid
-  return (
-    <div>
-      <h1 className="text-3xl font-bold">Creator Roster</h1>
-    </div>
-  );
+export default async function RosterPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+  if (session.user.role !== "talent_manager") redirect("/dashboard");
+
+  return <ManagerDashboard userId={session.user.id} />;
 }

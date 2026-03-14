@@ -199,6 +199,14 @@ export function DashboardNavbar({
                   View Profile
                 </Link>
               )}
+              {user.role === "talent_manager" && (
+                <Link
+                  href="/dashboard/roster"
+                  className="block px-4 py-2 text-sm text-[#DBDEE1] hover:bg-[#313338]"
+                >
+                  Roster
+                </Link>
+              )}
               <Link
                 href="/dashboard/settings"
                 className="block px-4 py-2 text-sm text-[#DBDEE1] hover:bg-[#313338]"
@@ -301,6 +309,14 @@ export function DashboardNavbar({
                 className="block rounded-md px-3 py-2 text-sm text-[#DBDEE1] hover:bg-[#313338]"
               >
                 View Profile
+              </Link>
+            )}
+            {user.role === "talent_manager" && (
+              <Link
+                href="/dashboard/roster"
+                className="block rounded-md px-3 py-2 text-sm text-[#DBDEE1] hover:bg-[#313338]"
+              >
+                Roster
               </Link>
             )}
             <Link
