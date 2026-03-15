@@ -90,6 +90,11 @@ export async function approveClaimRequest(
         ownerUserId: claim.userId,
       },
     );
+    // Auto-promote claimed creator to Tier 1 for higher snapshot frequency
+    await prisma.creatorProfile.update({
+      where: { id: claim.creatorProfileId },
+      data: { snapshotTier: "tier1" },
+    });
     await inngest.send({
       name: "claim/approved",
       data: {
@@ -109,6 +114,11 @@ export async function approveClaimRequest(
         ownerUserId: claim.userId,
       },
     );
+    // Auto-promote claimed creator to Tier 1 for higher snapshot frequency
+    await prisma.creatorProfile.update({
+      where: { id: claim.creatorProfileId },
+      data: { snapshotTier: "tier1" },
+    });
     await inngest.send({
       name: "claim/approved",
       data: {
