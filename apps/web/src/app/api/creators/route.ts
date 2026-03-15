@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { buildMeta, parsePagination } from "@/app/api/_lib/pagination";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -78,6 +79,13 @@ export async function GET(request: Request) {
   const query = searchParams.get("q")?.trim() || null;
   const platform = parsePlatform(searchParams.get("platform"));
   const sort = searchParams.get("sort");
+
+  // Cache by normalized query params
+  const cacheKey = `creators:list:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
 
   const whereClause = buildWhereClause(platform, query);
   const orderClause = getOrderClause(sort);
@@ -176,10 +184,11 @@ export async function GET(request: Request) {
       };
     });
 
-  return NextResponse.json(
-    serializeBigInt({
-      data,
-      meta: buildMeta(total, page, limit),
-    }),
-  );
+  const response = serializeBigInt({
+    data,
+    meta: buildMeta(total, page, limit),
+  });
+
+  await cacheSet(cacheKey, response, CACHE_TTL.CREATOR_LIST);
+  return NextResponse.json(response);
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Platform } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -86,6 +87,13 @@ export async function GET(
     );
   }
 
+  // Check cache
+  const cacheKey = `creator:${slug}:snapshots:${platform}:${metric}:${period}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   const creator = await db.creatorProfile.findUnique({
     where: { slug },
     select: { id: true },
@@ -148,18 +156,19 @@ export async function GET(
       a.date!.localeCompare(b.date!),
     );
 
-    return NextResponse.json(
-      serializeBigInt({
-        data,
-        meta: {
-          period,
-          platform: "all",
-          metric,
-          dataPoints: data.length,
-          platforms: [...platformsSeen],
-        },
-      }),
-    );
+    const response = serializeBigInt({
+      data,
+      meta: {
+        period,
+        platform: "all",
+        metric,
+        dataPoints: data.length,
+        platforms: [...platformsSeen],
+      },
+    });
+
+    await cacheSet(cacheKey, response, CACHE_TTL.CREATOR_SNAPSHOTS);
+    return NextResponse.json(response);
   }
 
   // ── Single platform response ──
@@ -187,15 +196,16 @@ export async function GET(
     };
   });
 
-  return NextResponse.json(
-    serializeBigInt({
-      data,
-      meta: {
-        period,
-        platform,
-        metric,
-        dataPoints: data.length,
-      },
-    }),
-  );
+  const response = serializeBigInt({
+    data,
+    meta: {
+      period,
+      platform,
+      metric,
+      dataPoints: data.length,
+    },
+  });
+
+  await cacheSet(cacheKey, response, CACHE_TTL.CREATOR_SNAPSHOTS);
+  return NextResponse.json(response);
 }

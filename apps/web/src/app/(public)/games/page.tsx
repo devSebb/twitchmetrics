@@ -9,6 +9,8 @@ import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { GameSortControls } from "@/components/games/GameSortControls";
 import { Suspense } from "react";
 
+export const revalidate = 300; // ISR: revalidate every 5 minutes
+
 export const metadata: Metadata = {
   title: "Top Games",
   description:

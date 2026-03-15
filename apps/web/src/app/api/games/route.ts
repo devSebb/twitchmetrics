@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { buildMeta, parsePagination } from "@/app/api/_lib/pagination";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 type GameIdRow = { id: string };
 type TotalRow = { total: bigint };
@@ -53,6 +54,12 @@ export async function GET(request: Request) {
   const genre = searchParams.get("genre")?.trim() || null;
   const sort = searchParams.get("sort");
 
+  const cacheKey = `games:list:p${page}:l${limit}:s${sort ?? "viewers"}:q${query ?? ""}:g${genre ?? ""}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   const whereClause = buildWhereClause(genre, query);
   const orderClause = getOrderClause(sort);
 
@@ -91,10 +98,11 @@ export async function GET(request: Request) {
     .map((id) => gameById.get(id))
     .filter((game): game is NonNullable<typeof game> => Boolean(game));
 
-  return NextResponse.json(
-    serializeBigInt({
-      data,
-      meta: buildMeta(total, page, limit),
-    }),
-  );
+  const response = serializeBigInt({
+    data,
+    meta: buildMeta(total, page, limit),
+  });
+
+  await cacheSet(cacheKey, response, CACHE_TTL.GAME_LIST);
+  return NextResponse.json(response);
 }

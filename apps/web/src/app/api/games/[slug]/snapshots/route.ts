@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 const VALID_METRICS = ["viewers", "channels"] as const;
 const VALID_PERIODS = ["24h", "7d", "30d"] as const;
@@ -48,6 +49,12 @@ export async function GET(
     );
   }
 
+  const cacheKey = `game:${slug}:snapshots:${metric}:${period}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   const game = await db.game.findUnique({
     where: { slug },
     select: { id: true },
@@ -84,12 +91,15 @@ export async function GET(
       metric === "channels" ? snapshot.totalChannels : snapshot.totalViewers,
   }));
 
-  return NextResponse.json({
+  const response = {
     data,
     meta: {
       period,
       metric,
       dataPoints: data.length,
     },
-  });
+  };
+
+  await cacheSet(cacheKey, response, CACHE_TTL.GAME_SNAPSHOTS);
+  return NextResponse.json(response);
 }

@@ -7,6 +7,7 @@ import {
 import { createLogger } from "@/lib/logger";
 import { getTierForCreator } from "@/lib/constants/tiers";
 import { getAdapter } from "@/server/adapters";
+import { cacheInvalidate } from "@/server/services/cache";
 
 const log = createLogger("snapshot-worker");
 
@@ -93,6 +94,20 @@ export async function runTierSnapshot(
             "Failed to update profile aggregates",
           );
         }
+
+        // Invalidate cache for this creator (non-blocking)
+        try {
+          const slug = await getCreatorSlug(profile.id);
+          if (slug) {
+            await cacheInvalidate(`creator:${slug}`);
+            await cacheInvalidate(`creator:${slug}:*`);
+          }
+        } catch (err) {
+          log.warn(
+            { err, creatorProfileId: profile.id },
+            "Cache invalidation failed — continuing",
+          );
+        }
       }
     });
 
@@ -100,6 +115,13 @@ export async function runTierSnapshot(
     if (i + BATCH_SIZE < profiles.length) {
       await step.sleep(`rate-limit-pause-${tier}-${batchIndex}`, "5s");
     }
+  }
+
+  // Invalidate trending/landing cache after a full tier batch
+  try {
+    await cacheInvalidate("trending:landing");
+  } catch {
+    // Non-blocking
   }
 
   log.info(
@@ -161,6 +183,16 @@ async function snapshotPlatformAccount(
       lastSyncedAt: snapshotData.snapshotAt,
     },
   });
+}
+
+async function getCreatorSlug(
+  creatorProfileId: string,
+): Promise<string | null> {
+  const profile = await prisma.creatorProfile.findUnique({
+    where: { id: creatorProfileId },
+    select: { slug: true },
+  });
+  return profile?.slug ?? null;
 }
 
 async function updateProfileAggregates(

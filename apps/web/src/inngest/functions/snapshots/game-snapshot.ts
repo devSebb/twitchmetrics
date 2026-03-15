@@ -2,6 +2,7 @@ import { prisma } from "@twitchmetrics/database";
 import { inngest } from "../../client";
 import { twitchAdapter } from "@/server/adapters/twitch";
 import { createLogger } from "@/lib/logger";
+import { cacheInvalidate } from "@/server/services/cache";
 
 const log = createLogger("game-snapshot");
 
@@ -22,7 +23,7 @@ export const gameSnapshot = inngest.createFunction(
         // Match to existing Game record by Twitch game ID
         const game = await prisma.game.findUnique({
           where: { twitchGameId: gameData.platformGameId },
-          select: { id: true },
+          select: { id: true, slug: true },
         });
 
         if (!game) {
@@ -56,6 +57,14 @@ export const gameSnapshot = inngest.createFunction(
             },
           },
         });
+
+        // Invalidate cache for this game (non-blocking)
+        try {
+          await cacheInvalidate(`game:${game.slug}`);
+          await cacheInvalidate(`game:${game.slug}:*`);
+        } catch {
+          // Non-blocking
+        }
       }
 
       return { matched, unmatched, total: topGames.length };

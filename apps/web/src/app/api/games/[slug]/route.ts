@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
+  const cacheKey = `game:${slug}`;
+
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json({ data: cached, meta: {} });
+  }
 
   const game = await db.game.findUnique({
     where: { slug },
@@ -44,14 +51,12 @@ export async function GET(
     },
   });
 
-  return NextResponse.json(
-    serializeBigInt({
-      data: {
-        ...game,
-        latestSnapshot: game.viewerSnapshots[0] ?? null,
-        topCreators,
-      },
-      meta: {},
-    }),
-  );
+  const serialized = serializeBigInt({
+    ...game,
+    latestSnapshot: game.viewerSnapshots[0] ?? null,
+    topCreators,
+  });
+
+  await cacheSet(cacheKey, serialized, CACHE_TTL.GAME_PROFILE);
+  return NextResponse.json({ data: serialized, meta: {} });
 }

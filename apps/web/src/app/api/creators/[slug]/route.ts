@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 export async function GET(
   _request: Request,
@@ -14,6 +15,13 @@ export async function GET(
   if (rateLimited) return rateLimited;
 
   const { slug } = await context.params;
+  const cacheKey = `creator:${slug}`;
+
+  // Check cache first
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json({ data: cached, meta: {} });
+  }
 
   const creator = await db.creatorProfile.findUnique({
     where: { slug },
@@ -106,10 +114,10 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(
-    serializeBigInt({
-      data: creator,
-      meta: {},
-    }),
-  );
+  const serialized = serializeBigInt(creator);
+
+  // Cache serialized result (non-blocking)
+  await cacheSet(cacheKey, serialized, CACHE_TTL.CREATOR_PROFILE);
+
+  return NextResponse.json({ data: serialized, meta: {} });
 }

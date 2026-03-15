@@ -3,6 +3,7 @@ import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
+import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
 type SearchType = "all" | "creators" | "games";
 
@@ -59,6 +60,12 @@ export async function GET(request: Request) {
     );
   }
 
+  const cacheKey = `search:${type}:${query.toLowerCase()}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   const creatorsPromise =
     type === "games"
       ? Promise.resolve<CreatorSearchRow[]>([])
@@ -97,16 +104,17 @@ export async function GET(request: Request) {
 
   const [creators, games] = await Promise.all([creatorsPromise, gamesPromise]);
 
-  return NextResponse.json(
-    serializeBigInt({
-      data: {
-        creators,
-        games,
-      },
-      meta: {
-        query,
-        totalResults: creators.length + games.length,
-      },
-    }),
-  );
+  const response = serializeBigInt({
+    data: {
+      creators,
+      games,
+    },
+    meta: {
+      query,
+      totalResults: creators.length + games.length,
+    },
+  });
+
+  await cacheSet(cacheKey, response, CACHE_TTL.SEARCH_RESULTS);
+  return NextResponse.json(response);
 }

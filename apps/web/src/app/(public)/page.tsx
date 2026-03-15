@@ -112,6 +112,8 @@ async function getLandingData() {
   return { topCreators, trendingCreators, topGames };
 }
 
+export const revalidate = 600; // ISR: revalidate every 10 minutes
+
 export const metadata: Metadata = {
   title: `${SITE_NAME} | Creator Analytics Platform`,
   description: DEFAULT_DESCRIPTION,
