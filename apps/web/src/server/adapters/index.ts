@@ -2,10 +2,16 @@ import type { Platform } from "@twitchmetrics/database";
 import type { PlatformAdapter } from "./types";
 import { twitchAdapter } from "./twitch";
 import { youtubeAdapter } from "./youtube";
+import { instagramAdapter } from "./instagram";
+import { tiktokAdapter } from "./tiktok";
+import { xAdapter } from "./x";
 
 const ADAPTER_MAP: Partial<Record<Platform, PlatformAdapter>> = {
   twitch: twitchAdapter,
   youtube: youtubeAdapter,
+  instagram: instagramAdapter,
+  tiktok: tiktokAdapter,
+  x: xAdapter,
 };
 
 /**

@@ -6,24 +6,11 @@ import {
 } from "@twitchmetrics/database";
 import { createLogger } from "@/lib/logger";
 import { getTierForCreator } from "@/lib/constants/tiers";
-import type { PlatformAdapter } from "@/server/adapters/types";
-import { twitchAdapter } from "@/server/adapters/twitch";
-import { youtubeAdapter } from "@/server/adapters/youtube";
+import { getAdapter } from "@/server/adapters";
 
 const log = createLogger("snapshot-worker");
 
 const BATCH_SIZE = 50;
-
-function getAdapterForPlatform(platform: Platform): PlatformAdapter | null {
-  switch (platform) {
-    case "twitch":
-      return twitchAdapter;
-    case "youtube":
-      return youtubeAdapter;
-    default:
-      return null; // Other platforms not yet implemented
-  }
-}
 
 type SnapshotableProfile = {
   id: string;
@@ -133,7 +120,7 @@ async function snapshotPlatformAccount(
     accessToken: string | null;
   },
 ): Promise<void> {
-  const adapter = getAdapterForPlatform(account.platform);
+  const adapter = getAdapter(account.platform);
   if (!adapter) {
     // Platform adapter not yet implemented — skip silently
     return;
