@@ -39,3 +39,11 @@ PLAN-*.md
 
 # design reference images
 docs/design-reference/
+
+# stage docs
+docs/STAGE0-4-PIPELINE-CLOSURE.md
+docs/STAGE4-HARDENING-QA.md
+docs/STAGE5-01-TIER-SCHEDULER-PIPELINE.md
+docs/STAGE5-02-PLATFORM-ADAPTERS.md
+docs/STAGE5-03-CACHING-PERFORMANCE.md
+docs/STAGE5-04-GROWTH-ENGINE.md
