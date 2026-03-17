@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { SearchBar } from "@/components/search";
+import { getSession } from "@/server/auth-cache";
+import { HeaderUserMenu } from "./HeaderUserMenu";
 
 const NAV_LINKS = [
   { label: "Channels", href: "/creators" },
@@ -8,7 +10,10 @@ const NAV_LINKS = [
   { label: "Reports", href: "/reports" },
 ] as const;
 
-export function Header() {
+export async function Header() {
+  const session = await getSession();
+  const user = session?.user ?? null;
+
   return (
     <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
@@ -42,20 +47,29 @@ export function Header() {
           <SearchBar mode="compact" />
         </div>
 
-        {/* Auth buttons */}
+        {/* Auth section */}
         <div className="ml-auto flex items-center gap-2 sm:ml-0">
-          <Link
-            href="/login"
-            className="rounded-md px-3 py-1.5 text-sm text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#DBDEE1]"
-          >
-            Log In
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-md bg-[#E32C19] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
-          >
-            Sign Up
-          </Link>
+          {user ? (
+            <HeaderUserMenu
+              name={user.name ?? null}
+              image={user.image ?? null}
+            />
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-md px-3 py-1.5 text-sm text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#DBDEE1]"
+              >
+                Log In
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-md bg-[#E32C19] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>

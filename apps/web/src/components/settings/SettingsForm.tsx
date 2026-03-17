@@ -164,10 +164,22 @@ export function SettingsForm({
         <h2 className="text-lg font-semibold text-[#F2F3F5]">
           Notification preferences
         </h2>
-        <div className="mt-4 space-y-2 text-sm text-[#949BA4]">
-          <p>Email notifications for claim updates (coming soon)</p>
-          <p>Weekly analytics digest (coming soon)</p>
-          <p>Connection alerts (coming soon)</p>
+        <div className="mt-4 divide-y divide-[#3F4147]">
+          {[
+            "Email notifications for claim updates",
+            "Weekly analytics digest",
+            "Connection alerts",
+          ].map((pref) => (
+            <div
+              key={pref}
+              className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+            >
+              <span className="text-sm text-[#DBDEE1]">{pref}</span>
+              <span className="rounded bg-[#383A40] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#949BA4]">
+                Soon
+              </span>
+            </div>
+          ))}
         </div>
       </Card>
 
@@ -175,13 +187,22 @@ export function SettingsForm({
         <h2 className="text-lg font-semibold text-[#F2F3F5]">
           Connected accounts
         </h2>
-        <div className="mt-4 space-y-2 text-sm text-[#DBDEE1]">
+        <div className="mt-4">
           {connectedPlatforms.length > 0 ? (
-            connectedPlatforms.map((platform) => (
-              <p key={platform}>{platform}</p>
-            ))
+            <div className="flex flex-wrap gap-2">
+              {connectedPlatforms.map((platform) => (
+                <span
+                  key={platform}
+                  className="rounded-full border border-[#3F4147] bg-[#383A40] px-3 py-1 text-xs font-medium capitalize text-[#DBDEE1]"
+                >
+                  {platform}
+                </span>
+              ))}
+            </div>
           ) : (
-            <p className="text-[#949BA4]">No connected platforms yet.</p>
+            <p className="text-sm text-[#949BA4]">
+              No connected platforms yet.
+            </p>
           )}
         </div>
         <a

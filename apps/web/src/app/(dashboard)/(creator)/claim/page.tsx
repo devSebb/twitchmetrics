@@ -20,7 +20,7 @@ export default async function ClaimProfilePage({
 
   if (!profileId) {
     return (
-      <div className="space-y-8">
+      <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-3xl font-bold text-[#F2F3F5]">
             Claim Your Profile
@@ -50,7 +50,7 @@ export default async function ClaimProfilePage({
 
   if (!profile) {
     return (
-      <div className="space-y-8">
+      <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-6">
         <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
           <h1 className="text-2xl font-bold text-[#F2F3F5]">
             Claim Your Profile
@@ -65,7 +65,7 @@ export default async function ClaimProfilePage({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 px-4 py-8 sm:px-6">
       <h1 className="text-3xl font-bold text-[#F2F3F5]">Claim Your Profile</h1>
       <ClaimFlow
         profile={{
