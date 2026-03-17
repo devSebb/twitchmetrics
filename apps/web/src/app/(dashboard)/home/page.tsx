@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
 import { ClaimCTA, CreatorQuickStats } from "@/components/dashboard";
 import { Card } from "@/components/ui";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
 
 export const metadata: Metadata = {
   title: "Dashboard Home",
@@ -16,7 +16,7 @@ function formatBigint(value: bigint): string {
 }
 
 export default async function DashboardHomePage() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     redirect("/login");
   }

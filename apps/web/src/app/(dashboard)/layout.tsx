@@ -1,15 +1,28 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
 import { DashboardNavbar } from "@/components/dashboard";
 import { Footer } from "@/components/layout/Footer";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
+
+const getNavProfile = cache((userId: string) =>
+  prisma.creatorProfile.findUnique({
+    where: { userId },
+    select: {
+      displayName: true,
+      slug: true,
+      avatarUrl: true,
+      state: true,
+    },
+  }),
+);
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     redirect("/login");
   }
@@ -18,15 +31,7 @@ export default async function DashboardLayout({
     redirect("/onboarding");
   }
 
-  const creatorProfile = await prisma.creatorProfile.findUnique({
-    where: { userId: session.user.id },
-    select: {
-      displayName: true,
-      slug: true,
-      avatarUrl: true,
-      state: true,
-    },
-  });
+  const creatorProfile = await getNavProfile(session.user.id);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#2B2D31]">

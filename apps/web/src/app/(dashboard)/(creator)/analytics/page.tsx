@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { prisma, type Platform } from "@twitchmetrics/database";
 import { AnalyticsDashboard } from "@/components/analytics";
 import { Button } from "@/components/ui";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
 import { inngest } from "@/inngest/client";
 
 export const metadata: Metadata = {
@@ -111,7 +111,7 @@ function serializeAnalytics(data: {
 }
 
 export default async function CreatorAnalyticsPage() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     return null;
   }

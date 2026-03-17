@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { CreatorDetailView } from "@/components/manager/CreatorDetailView";
 import type { Platform } from "@twitchmetrics/database";
@@ -21,7 +21,7 @@ export async function generateMetadata({
 }
 
 export default async function TalentManagerCreatorPage({ params }: PageProps) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) redirect("/login");
   if (session.user.role !== "talent_manager") redirect("/dashboard");
 

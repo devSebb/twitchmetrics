@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
 
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) {
     redirect("/login");
   }

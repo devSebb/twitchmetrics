@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/server/db";
@@ -17,7 +18,7 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-async function getCreator(slug: string) {
+const getCreator = cache(async (slug: string) => {
   const creator = await db.creatorProfile.findUnique({
     where: { slug },
     include: {
@@ -34,7 +35,7 @@ async function getCreator(slug: string) {
 
   if (!creator) return null;
   return serializeBigInt(creator);
-}
+});
 
 export async function generateMetadata({
   params,

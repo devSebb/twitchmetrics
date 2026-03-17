@@ -40,6 +40,7 @@ export function GrowthSection({
       if (!res.ok) throw new Error("Failed to fetch snapshots");
       return res.json() as Promise<SnapshotResponse>;
     },
+    staleTime: 5 * 60 * 1000,
   });
 
   return (

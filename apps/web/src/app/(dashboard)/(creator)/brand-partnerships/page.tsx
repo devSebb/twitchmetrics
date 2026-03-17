@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { BrandPartnersWidget } from "@/components/widgets";
 import { Button } from "@/components/ui";
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 export default async function BrandPartnershipsPage() {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) redirect("/login");
 
   const profile = await prisma.creatorProfile.findUnique({

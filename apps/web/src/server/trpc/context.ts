@@ -1,9 +1,9 @@
 import { headers } from "next/headers";
 import { prisma } from "@twitchmetrics/database";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/server/auth-cache";
 
 export async function createContext() {
-  const [session, headerStore] = await Promise.all([auth(), headers()]);
+  const [session, headerStore] = await Promise.all([getSession(), headers()]);
 
   return {
     prisma,
