@@ -8,6 +8,7 @@ import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
 import { formatNumber, formatPercent, formatDate } from "@/lib/utils/format";
 import { Badge, Button, Card } from "@/components/ui";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { PlatformIcon } from "@/components/shared";
 
 type PlatformAccount = {
   platform: Platform;
@@ -102,20 +103,6 @@ function TrendArrow({ direction }: { direction: string | null }) {
     >
       <path d="M5 12h14" />
     </svg>
-  );
-}
-
-function PlatformIcon({ platform }: { platform: Platform }) {
-  const config = PLATFORM_CONFIG[platform];
-  return (
-    <div
-      className="flex h-8 w-8 items-center justify-center rounded-lg"
-      style={{ backgroundColor: config.color }}
-    >
-      <span className="text-xs font-bold text-white">
-        {config.name.charAt(0)}
-      </span>
-    </div>
   );
 }
 
@@ -260,7 +247,11 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
                   key={account.platform}
                   className="flex items-center gap-3 transition-colors hover:border-[#4E5058]"
                 >
-                  <PlatformIcon platform={account.platform} />
+                  <PlatformIcon
+                    platform={account.platform}
+                    size="lg"
+                    rounded="lg"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-medium text-[#DBDEE1]">

@@ -14,9 +14,11 @@ import {
   TrendingSection,
   CtaSection,
 } from "@/components/landing";
+import { getTrendingCreators } from "@/server/services/trending";
+import type { Platform } from "@twitchmetrics/database";
 
 async function getLandingData() {
-  const [topCreatorsRaw, trendingRollupsRaw, topGamesRaw] = await Promise.all([
+  const [topCreatorsRaw, trendingRaw, topGamesRaw] = await Promise.all([
     // Top 10 creators by followers (for showcase + top channels)
     db.creatorProfile.findMany({
       orderBy: { totalFollowers: "desc" },
@@ -28,16 +30,8 @@ async function getLandingData() {
         },
       },
     }),
-    // Trending creators by 7d growth (fetch extra to account for dedup)
-    db.creatorGrowthRollup.findMany({
-      orderBy: { delta7d: "desc" },
-      take: 15,
-      include: {
-        creatorProfile: {
-          include: { platformAccounts: true },
-        },
-      },
-    }),
+    // Trending creators via scoring service (cached)
+    getTrendingCreators(10),
     // Top games by current viewers
     db.game.findMany({
       orderBy: { currentViewers: "desc" },
@@ -70,35 +64,20 @@ async function getLandingData() {
     })(),
   }));
 
-  // Shape trending creators from rollups — deduplicate by slug since a
-  // creator with multiple platforms can appear more than once
-  const seenSlugs = new Set<string>();
-  const trendingCreators = serializeBigInt(trendingRollupsRaw)
-    .filter((r) => {
-      if (seenSlugs.has(r.creatorProfile.slug)) return false;
-      seenSlugs.add(r.creatorProfile.slug);
-      return true;
-    })
-    .slice(0, 5)
-    .map((r) => {
-      const c = r.creatorProfile;
-      return {
-        displayName: c.displayName,
-        slug: c.slug,
-        avatarUrl: c.avatarUrl,
-        totalFollowers: String(c.totalFollowers),
-        primaryPlatform: c.primaryPlatform,
-        platformAccounts: c.platformAccounts.map((a) => ({
-          platform: a.platform,
-          platformUsername: a.platformUsername,
-        })),
-        growthRollup: {
-          delta7d: String(r.delta7d),
-          pct7d: r.pct7d,
-          trendDirection: r.trendDirection,
-        },
-      };
-    });
+  // Map trending service results to the shape TrendingSection expects
+  const trendingCreators = trendingRaw.slice(0, 5).map((t) => ({
+    displayName: t.displayName,
+    slug: t.slug,
+    avatarUrl: t.avatarUrl,
+    totalFollowers: t.totalFollowers,
+    primaryPlatform: t.primaryPlatform as Platform,
+    platformAccounts: [] as { platform: Platform; platformUsername: string }[],
+    growthRollup: {
+      delta7d: "0",
+      pct7d: t.followerPct7d,
+      trendDirection: t.trendDirection,
+    },
+  }));
 
   // Shape top games
   const topGames = topGamesRaw.map((g) => ({

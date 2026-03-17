@@ -8,6 +8,7 @@ import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber, formatPercent } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { PlatformIcon, SyncStatus } from "@/components/shared";
 
 type PlatformAccountData = {
   platform: Platform;
@@ -35,6 +36,7 @@ type CreatorHeaderProps = {
     state: ProfileState;
     primaryPlatform: Platform;
     totalFollowers: string;
+    lastSnapshotAt: string | null;
     platformAccounts: PlatformAccountData[];
     growthRollups: GrowthRollupData[];
   };
@@ -93,19 +95,6 @@ function ClaimStatus({
   }
 }
 
-function PlatformIcon({ platform }: { platform: Platform }) {
-  const config = PLATFORM_CONFIG[platform];
-  return (
-    <span
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
-      style={{ backgroundColor: config.color || "#383A40" }}
-      title={config.name}
-    >
-      {config.name.charAt(0)}
-    </span>
-  );
-}
-
 export function CreatorHeader({ creator }: CreatorHeaderProps) {
   const totalFollowers = Number(creator.totalFollowers);
   const safeBannerUrl = getSafeImageSrc(creator.bannerUrl);
@@ -159,6 +148,7 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#949BA4]">
             {creator.country && <span>{creator.country}</span>}
+            <SyncStatus lastSyncedAt={creator.lastSnapshotAt} />
           </div>
         </div>
 
@@ -188,7 +178,7 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
               className="transition-opacity hover:opacity-80"
             >
               <Badge variant="platform" platform={account.platform}>
-                <PlatformIcon platform={account.platform} />
+                <PlatformIcon platform={account.platform} size="sm" />
                 {account.followerCount
                   ? formatNumber(Number(account.followerCount))
                   : "—"}
@@ -220,7 +210,7 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
           return (
             <Card key={account.platform} className="p-3">
               <div className="mb-1 flex items-center gap-1.5">
-                <PlatformIcon platform={account.platform} />
+                <PlatformIcon platform={account.platform} size="sm" />
                 <span className="text-xs font-medium text-[#949BA4]">
                   {config.name}
                 </span>

@@ -114,6 +114,9 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     state: creator.state,
     primaryPlatform: creator.primaryPlatform,
     totalFollowers: String(creator.totalFollowers),
+    lastSnapshotAt: creator.lastSnapshotAt
+      ? String(creator.lastSnapshotAt)
+      : null,
     platformAccounts: creator.platformAccounts.map((a) => ({
       platform: a.platform,
       platformUsername: a.platformUsername,

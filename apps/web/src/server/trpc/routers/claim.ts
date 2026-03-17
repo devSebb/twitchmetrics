@@ -21,6 +21,15 @@ function attemptsRemainingFromNotes(notes: string | null): number | null {
   return Math.max(0, 3 - attempts);
 }
 
+function extractClientIp(headers: Headers): string {
+  const forwarded = headers.get("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return headers.get("x-real-ip") ?? "unknown";
+}
+
 export const claimRouter = router({
   initiate: protectedProcedure
     .input(
@@ -29,15 +38,16 @@ export const claimRouter = router({
         method: z.nativeEnum(ClaimMethod),
         platform: z.nativeEnum(Platform),
         evidenceUrls: z.array(z.string().url()).max(5).optional(),
-        clientIp: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const clientIp = extractClientIp(ctx.headers);
+
       const guard = await validateClaimAttempt(
         ctx.user.id,
         input.creatorProfileId,
         input.method,
-        input.clientIp ?? "unknown",
+        clientIp,
       );
       if (!guard.allowed) {
         throw new TRPCError({
@@ -72,11 +82,20 @@ export const claimRouter = router({
     .mutation(async ({ ctx, input }) => {
       const claimRequest = await ctx.prisma.claimRequest.findUnique({
         where: { id: input.claimRequestId },
-        select: { id: true, userId: true },
+        select: { id: true, userId: true, updatedAt: true },
       });
 
       if (!claimRequest || claimRequest.userId !== ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const secondsSinceUpdate =
+        (Date.now() - claimRequest.updatedAt.getTime()) / 1000;
+      if (secondsSinceUpdate < 5) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Please wait before trying again",
+        });
       }
 
       return verifyBioChallenge(input.claimRequestId);
@@ -106,6 +125,66 @@ export const claimRouter = router({
         challengeExpiresAt:
           latestClaim.challengeExpiresAt?.toISOString() ?? null,
       };
+    }),
+
+  checkConnection: protectedProcedure
+    .input(z.object({ creatorProfileId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { id: input.creatorProfileId },
+        select: {
+          primaryPlatform: true,
+          platformAccounts: {
+            select: { platformUserId: true, platform: true },
+            take: 1,
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
+
+      if (!profile) {
+        return {
+          connected: false,
+          matches: false,
+          platform: null,
+          provider: null,
+        };
+      }
+
+      const providerByPlatform: Partial<Record<Platform, string>> = {
+        twitch: "twitch",
+        youtube: "google",
+        x: "twitter",
+        instagram: "instagram",
+        tiktok: "tiktok",
+      };
+
+      const platform = profile.primaryPlatform;
+      const provider = providerByPlatform[platform] ?? null;
+
+      if (!provider) {
+        return { connected: false, matches: false, platform, provider: null };
+      }
+
+      const account = await ctx.prisma.account.findFirst({
+        where: { userId: ctx.user.id, provider },
+        select: { providerAccountId: true },
+        orderBy: { id: "desc" },
+      });
+
+      if (!account?.providerAccountId) {
+        return { connected: false, matches: false, platform, provider };
+      }
+
+      const primaryPlatformAccount = profile.platformAccounts.find(
+        (pa) => pa.platform === platform,
+      );
+
+      const matches =
+        !!primaryPlatformAccount &&
+        primaryPlatformAccount.platformUserId === account.providerAccountId;
+
+      return { connected: true, matches, platform, provider };
     }),
 
   myClaims: protectedProcedure.query(async ({ ctx }) => {

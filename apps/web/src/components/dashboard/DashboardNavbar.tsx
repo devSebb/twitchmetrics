@@ -82,11 +82,15 @@ export function DashboardNavbar({
     <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
         {/* Logo */}
-        <Link
-          href="/"
-          className="mr-2 shrink-0 text-lg font-bold text-[#F2F3F5]"
-        >
-          TwitchMetrics
+        <Link href="/" className="relative mr-2 flex h-9 shrink-0">
+          <Image
+            src="/brand/logo.png"
+            alt="TwitchMetrics"
+            width={180}
+            height={48}
+            className="h-9 w-auto object-contain object-left"
+            priority
+          />
         </Link>
 
         {/* Desktop nav links */}

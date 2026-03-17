@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const NAV_SECTIONS = [
   {
@@ -77,11 +78,15 @@ export function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-[#3F4147]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-6 sm:flex-row">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-bold text-[#F2F3F5]">
-              TwitchMetrics
-            </span>
-          </div>
+          <Link href="/" className="relative flex h-8 flex-shrink-0">
+            <Image
+              src="/brand/logo.png"
+              alt="TwitchMetrics"
+              width={160}
+              height={43}
+              className="h-8 w-auto object-contain object-left"
+            />
+          </Link>
           <div className="flex gap-6 text-xs text-[#949BA4]">
             <Link
               href="/terms"

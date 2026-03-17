@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -110,8 +111,21 @@ export function Sidebar({ user, creatorProfile }: SidebarProps) {
       >
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-[#3F4147] px-4 py-4">
-            <Link href="/" className="text-lg font-bold text-[#F2F3F5]">
-              {collapsed ? "TM" : "TwitchMetrics"}
+            <Link
+              href="/"
+              className="relative flex flex-shrink-0 overflow-hidden"
+            >
+              {collapsed ? (
+                <span className="text-lg font-bold text-[#F2F3F5]">TM</span>
+              ) : (
+                <Image
+                  src="/brand/logo.png"
+                  alt="TwitchMetrics"
+                  width={180}
+                  height={48}
+                  className="h-9 w-auto object-contain object-left"
+                />
+              )}
             </Link>
             <button
               type="button"

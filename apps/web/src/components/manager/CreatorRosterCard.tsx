@@ -200,9 +200,12 @@ export function CreatorRosterCard({
 
       {/* Actions */}
       <div className="mt-auto flex items-center gap-2 border-t border-[#3F4147] pt-3 mt-3">
-        <Link href={`/creator/${creator.slug}`} className="flex-1">
+        <Link
+          href={`/talent-manager/creator/${creator.slug}`}
+          className="flex-1"
+        >
           <Button variant="secondary" size="sm" className="w-full">
-            View Profile
+            Manage
           </Button>
         </Link>
         <Button

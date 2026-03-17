@@ -106,7 +106,7 @@ export async function verifyBioChallenge(
 
   const devBypass =
     process.env.NODE_ENV !== "production" &&
-    process.env.CLAIM_BIO_VERIFY_DEV_BYPASS !== "false";
+    process.env.CLAIM_BIO_VERIFY_DEV_BYPASS === "true";
   const isVerified =
     devBypass || candidateBio.includes(claimRequest.challengeCode);
 

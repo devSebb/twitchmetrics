@@ -1,5 +1,4 @@
-import { SearchBar } from "@/components/search";
-import { ClaimFlow } from "@/components/claim";
+import { ClaimFlow, ClaimSearchBar, MyClaimsHistory } from "@/components/claim";
 import { prisma } from "@twitchmetrics/database";
 import type { Metadata } from "next";
 
@@ -9,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 type ClaimPageProps = {
-  searchParams: Promise<{ profile?: string }>;
+  searchParams: Promise<{ profile?: string; resume?: string }>;
 };
 
 export default async function ClaimProfilePage({
@@ -17,17 +16,22 @@ export default async function ClaimProfilePage({
 }: ClaimPageProps) {
   const params = await searchParams;
   const profileId = params.profile;
+  const resumeOAuth = params.resume === "oauth";
 
   if (!profileId) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">
-          Claim Your Profile
-        </h1>
-        <p className="text-sm text-[#949BA4]">
-          Search for your profile and begin verification.
-        </p>
-        <SearchBar mode="full" autoFocus />
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-[#F2F3F5]">
+            Claim Your Profile
+          </h1>
+          <p className="mt-2 text-sm text-[#949BA4]">
+            Search for your creator profile, verify ownership, and unlock
+            analytics and creator tools.
+          </p>
+        </div>
+        <ClaimSearchBar />
+        <MyClaimsHistory />
       </div>
     );
   }
@@ -46,11 +50,16 @@ export default async function ClaimProfilePage({
 
   if (!profile) {
     return (
-      <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-        <h1 className="text-2xl font-bold text-[#F2F3F5]">
-          Claim Your Profile
-        </h1>
-        <p className="mt-2 text-sm text-[#f87171]">Profile not found.</p>
+      <div className="space-y-8">
+        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
+          <h1 className="text-2xl font-bold text-[#F2F3F5]">
+            Claim Your Profile
+          </h1>
+          <p className="mt-2 text-sm text-[#f87171]">
+            Profile not found. It may have been removed or the link is invalid.
+          </p>
+        </div>
+        <ClaimSearchBar />
       </div>
     );
   }
@@ -67,6 +76,7 @@ export default async function ClaimProfilePage({
           primaryPlatform: profile.primaryPlatform,
           totalFollowers: profile.totalFollowers.toString(),
         }}
+        autoResumeOAuth={resumeOAuth}
       />
     </div>
   );

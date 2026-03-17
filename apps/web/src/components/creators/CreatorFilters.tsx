@@ -2,16 +2,20 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { Platform } from "@twitchmetrics/database";
+import { PlatformIcon } from "@/components/shared";
 
-const PLATFORMS = [
+const PLATFORMS: Array<
+  { label: string; value: "" } | { label: string; value: Platform }
+> = [
   { label: "All", value: "" },
-  { label: "Twitch", value: "twitch", color: "#9146ff" },
-  { label: "YouTube", value: "youtube", color: "#ff0000" },
-  { label: "Instagram", value: "instagram", color: "#e4405f" },
-  { label: "TikTok", value: "tiktok", color: "#000000" },
-  { label: "X", value: "x", color: "#000000" },
-  { label: "Kick", value: "kick", color: "#53fc18" },
-] as const;
+  { label: "Twitch", value: "twitch" },
+  { label: "YouTube", value: "youtube" },
+  { label: "Instagram", value: "instagram" },
+  { label: "TikTok", value: "tiktok" },
+  { label: "X", value: "x" },
+  { label: "Kick", value: "kick" },
+];
 
 const SORTS = [
   { label: "Followers", value: "followers" },
@@ -42,7 +46,7 @@ export function CreatorFilters() {
       <div className="flex flex-wrap gap-1 rounded-md bg-[#1E1F22] p-0.5">
         {PLATFORMS.map((p) => (
           <button
-            key={p.value}
+            key={p.value || "all"}
             onClick={() => updateParams("platform", p.value)}
             className={cn(
               "flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
@@ -51,12 +55,7 @@ export function CreatorFilters() {
                 : "text-[#949BA4] hover:text-[#DBDEE1]",
             )}
           >
-            {"color" in p && (
-              <span
-                className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: p.color }}
-              />
-            )}
+            {p.value ? <PlatformIcon platform={p.value} size="xs" /> : null}
             {p.label}
           </button>
         ))}

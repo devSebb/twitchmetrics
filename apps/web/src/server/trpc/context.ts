@@ -1,16 +1,18 @@
-import { prisma } from "@twitchmetrics/database"
-import { auth } from "@/lib/auth"
+import { headers } from "next/headers";
+import { prisma } from "@twitchmetrics/database";
+import { auth } from "@/lib/auth";
 
 export async function createContext() {
-  const session = await auth()
+  const [session, headerStore] = await Promise.all([auth(), headers()]);
 
   return {
     prisma,
     session,
+    headers: headerStore,
     user: session?.user
       ? { id: session.user.id, role: session.user.role }
       : null,
-  }
+  };
 }
 
-export type Context = Awaited<ReturnType<typeof createContext>>
+export type Context = Awaited<ReturnType<typeof createContext>>;

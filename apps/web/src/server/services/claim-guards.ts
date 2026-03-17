@@ -93,7 +93,7 @@ export async function validateClaimAttempt(
   }
 
   const isHighValue = Number(creatorProfile.totalFollowers) > 100_000;
-  if (isHighValue && method !== "oauth" && method !== "cross_platform") {
+  if (isHighValue && method !== "oauth") {
     return {
       allowed: false,
       reason: "High-value profiles require OAuth verification",

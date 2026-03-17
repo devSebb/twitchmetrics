@@ -17,6 +17,8 @@
     "worker:backfill-search": "tsx workers/backfill-search-data.ts",
     "worker:import-games": "tsx workers/import-games.ts",
     "worker:snapshot-scheduler": "tsx workers/snapshot-scheduler.ts",
+    "worker:growth-rollup": "tsx workers/growth-rollup.ts",
+    "worker:search-reindex": "tsx workers/search-reindex.ts",
     "prepare": "husky"
   },
   "lint-staged": {

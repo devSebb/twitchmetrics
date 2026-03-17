@@ -5,7 +5,6 @@ import {
   type ClaimStatus,
   type Platform,
 } from "@twitchmetrics/database";
-import { scoreUsernameMatch } from "@/server/services/link-extraction";
 import { inngest } from "@/inngest/client";
 import { transitionProfileState } from "./profile-state";
 
@@ -31,7 +30,7 @@ const PROVIDER_BY_PLATFORM: Partial<Record<Platform, string>> = {
 };
 
 function generateChallengeCode(): string {
-  return `tm-verify-${randomBytes(4).toString("hex")}`;
+  return `tm-verify-${randomBytes(6).toString("hex")}`;
 }
 
 export async function approveClaimRequest(
@@ -234,64 +233,6 @@ async function oauthMatchForClaim(input: InitiateClaimInput): Promise<boolean> {
   return Boolean(matchingPlatformAccount);
 }
 
-async function crossPlatformMatchForClaim(
-  input: InitiateClaimInput,
-): Promise<boolean> {
-  const creatorAccounts = await prisma.platformAccount.findMany({
-    where: { creatorProfileId: input.creatorProfileId },
-    select: {
-      platform: true,
-      platformUsername: true,
-      platformUrl: true,
-    },
-  });
-
-  const claimantProfile = await prisma.creatorProfile.findUnique({
-    where: { userId: input.userId },
-    include: {
-      platformAccounts: {
-        select: {
-          platform: true,
-          platformUsername: true,
-          platformUrl: true,
-        },
-      },
-    },
-  });
-  const claimantAccounts = claimantProfile?.platformAccounts ?? [];
-
-  let bestConfidence = 0;
-  for (const profileAccount of creatorAccounts) {
-    for (const claimantAccount of claimantAccounts) {
-      const confidenceLevel = scoreUsernameMatch(
-        profileAccount.platformUsername,
-        claimantAccount.platformUsername,
-      );
-      const numericConfidence =
-        confidenceLevel === "HIGH"
-          ? 1
-          : confidenceLevel === "MEDIUM"
-            ? 0.8
-            : confidenceLevel === "LOW"
-              ? 0.5
-              : 0;
-      if (numericConfidence > bestConfidence) {
-        bestConfidence = numericConfidence;
-      }
-
-      if (
-        profileAccount.platformUrl &&
-        claimantAccount.platformUrl &&
-        profileAccount.platformUrl.includes(claimantAccount.platformUsername)
-      ) {
-        bestConfidence = Math.max(bestConfidence, 0.8);
-      }
-    }
-  }
-
-  return bestConfidence >= 0.8;
-}
-
 async function startBioChallenge(
   input: InitiateClaimInput,
 ): Promise<InitiateClaimResult> {
@@ -359,23 +300,6 @@ export async function initiateClaim(
 
     await approveClaimRequest(claimRequestId, "system");
     return { status: "auto_approved", claimRequestId };
-  }
-
-  if (input.method === "cross_platform") {
-    const matched = await crossPlatformMatchForClaim(input);
-    if (matched) {
-      const claimRequestId = await createClaimRequest({
-        userId: input.userId,
-        creatorProfileId: input.creatorProfileId,
-        method: "cross_platform",
-        platform: input.platform,
-        status: "approved",
-      });
-      await approveClaimRequest(claimRequestId, "system");
-      return { status: "auto_approved", claimRequestId };
-    }
-
-    return startBioChallenge(input);
   }
 
   if (input.method === "bio_challenge") {

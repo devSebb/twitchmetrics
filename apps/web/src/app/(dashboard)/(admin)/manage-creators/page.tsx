@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CreatorManagement } from "@/components/admin";
 
 export const metadata: Metadata = {
   title: "Manage Creators",
@@ -6,10 +7,10 @@ export const metadata: Metadata = {
 };
 
 export default function AdminCreatorsPage() {
-  // TODO: implement creator management
   return (
-    <div>
-      <h1 className="text-3xl font-bold">Creator Management</h1>
+    <div className="space-y-4">
+      <h1 className="text-3xl font-bold text-[#F2F3F5]">Creator Management</h1>
+      <CreatorManagement />
     </div>
   );
 }

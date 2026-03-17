@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { LoginMethodSwitcher, SocialLoginButtons } from "@/components/auth";
 
 type LoginPageProps = {
@@ -39,11 +40,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-8 text-center shadow-xl">
-      <div className="space-y-1">
+      <div className="space-y-3">
         <p className="text-xs uppercase tracking-[0.16em] text-[#949BA4]">
           Welcome
         </p>
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">TwitchMetrics</h1>
+        <div className="relative mx-auto flex justify-center">
+          <Image
+            src="/brand/logo.png"
+            alt="TwitchMetrics"
+            width={220}
+            height={59}
+            className="h-14 w-auto object-contain"
+          />
+        </div>
         <p className="text-sm text-[#949BA4]">Log in to continue</p>
       </div>
 

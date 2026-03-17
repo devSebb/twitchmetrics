@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { SearchBar } from "@/components/search";
 
 const NAV_LINKS = [
@@ -12,10 +13,15 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
         {/* Logo */}
-        <Link href="/" className="flex-shrink-0">
-          <span className="text-lg font-bold text-[#F2F3F5]">
-            TwitchMetrics
-          </span>
+        <Link href="/" className="relative flex h-9 flex-shrink-0">
+          <Image
+            src="/brand/logo.png"
+            alt="TwitchMetrics"
+            width={180}
+            height={48}
+            className="h-9 w-auto object-contain object-left"
+            priority
+          />
         </Link>
 
         {/* Nav links */}
