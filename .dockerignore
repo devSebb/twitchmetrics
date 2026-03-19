@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.md
+docs
+.turbo
+.husky
+.vscode
+.idea
+coverage
+dist
+*.log
