@@ -46,6 +46,10 @@ function getNavItems(
       { label: "Home", href: "/dashboard/home" },
       { label: "Claim Reviews", href: "/dashboard/admin/claims" },
       { label: "Manage Creators", href: "/dashboard/admin/manage-creators" },
+      { label: "Users", href: "/dashboard/admin/users" },
+      { label: "System Metrics", href: "/dashboard/admin/metrics" },
+      { label: "Audit Log", href: "/dashboard/admin/audit-log" },
+      { label: "System Health", href: "/dashboard/admin/health" },
       { label: "Settings", href: "/dashboard/settings" },
     ];
   }

@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
-import AdminClaimsPage from "../../../(admin)/claims/page";
+import { ClaimReviewQueue } from "@/components/admin";
 
 export const metadata: Metadata = {
-  title: "Dashboard Claim Reviews",
+  title: "Claim Review Queue",
   robots: { index: false, follow: false },
 };
 
-export default AdminClaimsPage;
+export default function AdminClaimsPage() {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-3xl font-bold text-[#F2F3F5]">Claim Review Queue</h1>
+      <ClaimReviewQueue />
+    </div>
+  );
+}

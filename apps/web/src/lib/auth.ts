@@ -169,10 +169,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // TODO: Kick — Custom provider needed (no standard OAuth provider exists)
   ],
   callbacks: {
-    jwt: ({ token, user }) => {
+    jwt: async ({ token, user }) => {
       if (user) {
         token.id = user.id;
         token.role = (user as { role: string }).role;
+        token.suspended = (user as { suspended?: boolean }).suspended ?? false;
+        token.roleRefreshedAt = Date.now();
+      }
+      const ROLE_REFRESH_INTERVAL = 5 * 60 * 1000;
+      if (
+        Date.now() - ((token.roleRefreshedAt as number) ?? 0) >
+          ROLE_REFRESH_INTERVAL &&
+        token.id
+      ) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, suspended: true },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.suspended = dbUser.suspended;
+          token.roleRefreshedAt = Date.now();
+        }
       }
       return token;
     },
@@ -180,6 +198,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = (token.role as string) ?? "creator";
+        (session.user as { suspended?: boolean }).suspended =
+          (token.suspended as boolean) ?? false;
       }
       return session;
     },

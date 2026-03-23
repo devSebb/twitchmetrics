@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserRole } from "@twitchmetrics/database";
 import { SearchBar } from "@/components/search";
 import { Button, Card } from "@/components/ui";
 import { trpc } from "@/lib/trpc";
 
+type OnboardingRole = "creator" | "talent_manager" | "brand";
+
 type OnboardingWizardProps = {
   initialName: string | null;
-  initialRole: UserRole;
+  initialRole: OnboardingRole;
 };
 
 export function OnboardingWizard({
@@ -19,14 +20,14 @@ export function OnboardingWizard({
 }: OnboardingWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [role, setRole] = useState<UserRole>(initialRole);
+  const [role, setRole] = useState<OnboardingRole>(initialRole);
   const [name, setName] = useState(initialName ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const updateRole = trpc.auth.updateRole.useMutation();
   const completeOnboarding = trpc.auth.completeOnboarding.useMutation();
 
-  async function submitRole(nextRole: UserRole) {
+  async function submitRole(nextRole: OnboardingRole) {
     setError(null);
     setRole(nextRole);
     try {

@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { UserRole } from "@twitchmetrics/database";
 import { OnboardingWizard } from "@/components/onboarding";
 import { auth } from "@/lib/auth";
 
@@ -25,7 +24,13 @@ export default async function OnboardingPage() {
       </div>
       <OnboardingWizard
         initialName={session.user.name ?? null}
-        initialRole={(session.user.role as UserRole | undefined) ?? "creator"}
+        initialRole={
+          (["creator", "talent_manager", "brand"].includes(
+            session.user.role ?? "",
+          )
+            ? session.user.role
+            : "creator") as "creator" | "talent_manager" | "brand"
+        }
       />
     </div>
   );

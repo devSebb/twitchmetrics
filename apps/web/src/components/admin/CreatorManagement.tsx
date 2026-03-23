@@ -226,6 +226,43 @@ export function CreatorManagement() {
         <Button size="sm" onClick={() => setImportOpen(true)}>
           Bulk Import
         </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            if (items.length === 0) return;
+            const headers = [
+              "displayName",
+              "slug",
+              "state",
+              "tier",
+              "platform",
+              "totalFollowers",
+              "lastSnapshot",
+            ];
+            const rows = items.map((c) => [
+              c.displayName,
+              c.slug,
+              c.state,
+              c.snapshotTier,
+              c.primaryPlatform,
+              String(c.totalFollowers ?? 0),
+              c.lastSnapshotAt ? new Date(c.lastSnapshotAt).toISOString() : "",
+            ]);
+            const csv = [headers, ...rows]
+              .map((r) => r.map((v) => `"${v}"`).join(","))
+              .join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "creators.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Export CSV
+        </Button>
       </div>
 
       {/* Stats */}

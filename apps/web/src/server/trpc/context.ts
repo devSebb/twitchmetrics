@@ -10,7 +10,12 @@ export async function createContext() {
     session,
     headers: headerStore,
     user: session?.user
-      ? { id: session.user.id, role: session.user.role }
+      ? {
+          id: session.user.id,
+          role: session.user.role,
+          suspended:
+            (session.user as { suspended?: boolean }).suspended ?? false,
+        }
       : null,
   };
 }

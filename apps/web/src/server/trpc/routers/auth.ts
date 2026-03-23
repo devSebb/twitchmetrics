@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { UserRole } from "@twitchmetrics/database";
 import { TRPCError } from "@trpc/server";
 import { compare, hash } from "bcryptjs";
+import { logAudit } from "@/server/services/audit";
 import { protectedProcedure } from "../middleware";
 import { router } from "../root";
 
@@ -76,6 +76,11 @@ export const authRouter = router({
     }),
 
   deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
+    logAudit({
+      userId: ctx.user.id,
+      action: "auth.deleteAccount",
+    });
+
     const profile = await ctx.prisma.creatorProfile.findUnique({
       where: { userId: ctx.user.id },
       select: { id: true },
@@ -114,7 +119,7 @@ export const authRouter = router({
   }),
 
   updateRole: protectedProcedure
-    .input(z.object({ role: z.nativeEnum(UserRole) }))
+    .input(z.object({ role: z.enum(["creator", "talent_manager", "brand"]) }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUnique({
         where: { id: ctx.user.id },
@@ -131,11 +136,19 @@ export const authRouter = router({
         });
       }
 
-      return ctx.prisma.user.update({
+      const updated = await ctx.prisma.user.update({
         where: { id: ctx.user.id },
         data: { role: input.role },
         select: { id: true, role: true },
       });
+
+      logAudit({
+        userId: ctx.user.id,
+        action: "auth.updateRole",
+        metadata: { newRole: input.role },
+      });
+
+      return updated;
     }),
 
   completeOnboarding: protectedProcedure

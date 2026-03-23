@@ -1,20 +1,34 @@
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authConfig } from "@/lib/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((request) => {
-  if (request.auth) {
-    return NextResponse.next();
+  const { pathname } = request.nextUrl;
+
+  if (!request.auth) {
+    const { search } = request.nextUrl;
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const returnTo = `${pathname}${search}`;
+    const loginUrl = new URL("/login", request.nextUrl.origin);
+    loginUrl.searchParams.set("returnTo", returnTo);
+    return NextResponse.redirect(loginUrl);
   }
 
-  const { pathname, search } = request.nextUrl;
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Admin route protection at Edge level
+  if (pathname.startsWith("/dashboard/admin")) {
+    const role = (request.auth.user as { role?: string } | undefined)?.role;
+    if (role !== "admin") {
+      return NextResponse.redirect(
+        new URL("/dashboard/home", request.nextUrl.origin),
+      );
+    }
   }
 
-  const returnTo = `${pathname}${search}`;
-  const loginUrl = new URL("/login", request.nextUrl.origin);
-  loginUrl.searchParams.set("returnTo", returnTo);
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.next();
 });
 
 export const config = {

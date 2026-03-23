@@ -46,11 +46,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  silent: true,
-  hideSourceMaps: true,
-  disableLogger: true,
-});
+const sentryOrg = process.env.SENTRY_ORG;
+const sentryProject = process.env.SENTRY_PROJECT;
+
+export default sentryOrg && sentryProject
+  ? withSentryConfig(nextConfig, {
+      org: sentryOrg,
+      project: sentryProject,
+      authToken: process.env.SENTRY_AUTH_TOKEN ?? "",
+      silent: true,
+      sourcemaps: { disable: true },
+    })
+  : nextConfig;

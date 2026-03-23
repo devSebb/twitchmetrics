@@ -9,6 +9,7 @@ import {
   rejectClaimRequest,
 } from "@/server/services/claiming";
 import { validateClaimAttempt } from "@/server/services/claim-guards";
+import { logAudit } from "@/server/services/audit";
 import { adminProcedure, protectedProcedure } from "../middleware";
 import { router } from "../root";
 
@@ -269,6 +270,15 @@ export const claimRouter = router({
         },
       });
       await approveClaimRequest(input.claimRequestId, ctx.user.id);
+
+      logAudit({
+        userId: ctx.user.id,
+        action: "claim.approve",
+        targetType: "ClaimRequest",
+        targetId: input.claimRequestId,
+        metadata: { reviewNotes: input.reviewNotes },
+      });
+
       return { success: true };
     }),
 
@@ -286,6 +296,15 @@ export const claimRouter = router({
         input.reviewNotes,
         "rejected",
       );
+
+      logAudit({
+        userId: ctx.user.id,
+        action: "claim.reject",
+        targetType: "ClaimRequest",
+        targetId: input.claimRequestId,
+        metadata: { reviewNotes: input.reviewNotes },
+      });
+
       return { success: true };
     }),
 });
