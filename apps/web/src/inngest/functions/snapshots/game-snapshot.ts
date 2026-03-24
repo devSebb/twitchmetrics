@@ -171,6 +171,11 @@ export const gameSnapshot = inngest.createFunction(
             (a, b) => b.viewerCount - a.viewerCount,
           );
 
+          // Replace existing records for this game (avoid accumulating duplicates)
+          await prisma.gameTopChannel.deleteMany({
+            where: { gameId: game.id },
+          });
+
           // Most watched — top 6 by viewerCount
           const mostWatched = sorted.slice(0, 6);
           for (const s of mostWatched) {
@@ -187,7 +192,7 @@ export const gameSnapshot = inngest.createFunction(
                 slug: matchedCreator?.slug ?? null,
                 category: "most_watched",
                 avgViewers: s.viewerCount,
-                airtime: 1800, // snapshot interval
+                airtime: 1800,
                 viewerHours: BigInt(Math.floor(s.viewerCount * 0.5)),
               },
             });

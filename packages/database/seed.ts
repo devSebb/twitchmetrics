@@ -1137,7 +1137,7 @@ async function main() {
           slug: g.slug,
           twitchGameId: g.twitchGameId,
           igdbId: g.igdbId,
-          coverImageUrl: `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.slug}.jpg`,
+          coverImageUrl: `https://static-cdn.jtvnw.net/ttv-boxart/${encodeURIComponent(g.name)}-272x380.jpg`,
           summary: g.summary,
           releaseDate: new Date(g.releaseDate),
           genres: g.genres,

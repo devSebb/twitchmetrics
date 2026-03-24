@@ -283,6 +283,85 @@ export type ClipData = {
   duration: number;
 };
 
+export type TwitchUserDetail = {
+  id: string;
+  login: string;
+  displayName: string;
+  avatarUrl: string;
+  bio: string;
+  viewCount: number;
+};
+
+/**
+ * Batch-fetch user details by Twitch user IDs (max 100 per call).
+ */
+export async function fetchUserDetailsByIds(
+  userIds: string[],
+): Promise<TwitchUserDetail[]> {
+  if (userIds.length === 0) return [];
+  return withRetry(async () => {
+    const results: TwitchUserDetail[] = [];
+    for (let i = 0; i < userIds.length; i += 100) {
+      const batch = userIds.slice(i, i + 100);
+      const query = batch.map((id) => `id=${id}`).join("&");
+      const res = await helixFetch<PaginatedResponse<TwitchUser>>(
+        `/users?${query}`,
+      );
+      for (const u of res.data) {
+        results.push({
+          id: u.id,
+          login: u.login,
+          displayName: u.display_name,
+          avatarUrl: u.profile_image_url,
+          bio: u.description,
+          viewCount: u.view_count,
+        });
+      }
+    }
+    return results;
+  });
+}
+
+/**
+ * Fetch top live streams globally (not filtered by game).
+ * Uses GET /streams?first=100, paginating up to maxPages.
+ */
+export async function fetchTopStreams(
+  maxPages: number = 5,
+): Promise<GameStreamData[]> {
+  return withRetry(async () => {
+    const all: GameStreamData[] = [];
+    let cursor: string | undefined;
+
+    for (let page = 0; page < maxPages; page++) {
+      const params: Record<string, string> = { first: "100" };
+      if (cursor) params.after = cursor;
+
+      const res = await helixFetch<PaginatedResponse<TwitchStream>>(
+        "/streams",
+        params,
+      );
+
+      for (const s of res.data) {
+        all.push({
+          userId: s.user_id,
+          userName: s.user_name,
+          userLogin: s.user_login,
+          viewerCount: s.viewer_count,
+          language: s.language,
+          startedAt: s.started_at,
+          thumbnailUrl: s.thumbnail_url,
+        });
+      }
+
+      cursor = res.pagination?.cursor;
+      if (!cursor || res.data.length === 0) break;
+    }
+
+    return all;
+  });
+}
+
 /**
  * Fetch top clips for a broadcaster.
  * Uses GET /clips?broadcaster_id={id}&first={limit}
