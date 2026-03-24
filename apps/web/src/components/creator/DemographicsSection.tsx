@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import type { ProfileState } from "@twitchmetrics/database";
+import { UsersThree } from "@phosphor-icons/react/dist/ssr";
 import { BaseChart } from "@/components/charts";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -203,7 +204,8 @@ export function DemographicsSection({
   if (state === "unclaimed" || state === "pending_claim") {
     return (
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <UsersThree size={20} weight="duotone" className="text-[#949BA4]" />
           Channel Audience
         </h2>
         <BlurredOverlay />
@@ -214,7 +216,8 @@ export function DemographicsSection({
   if (!demographics) {
     return (
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <UsersThree size={20} weight="duotone" className="text-[#949BA4]" />
           Channel Audience
         </h2>
         <Card className="flex items-center justify-center py-10">

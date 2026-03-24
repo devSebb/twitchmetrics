@@ -44,6 +44,9 @@ importers:
       "@auth/prisma-adapter":
         specifier: ^2.7.0
         version: 2.11.1(@prisma/client@6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3))(nodemailer@6.10.1)
+      "@phosphor-icons/react":
+        specifier: ^2.1.10
+        version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       "@react-email/render":
         specifier: ^2.0.4
         version: 2.0.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -2155,6 +2158,16 @@ packages:
       {
         integrity: sha512-6oclG6Y3PiDFcoyk8srjLfVKyMfVCKJ27JwNPViuXziFpmdz+MZnZN/aKY0JGXgYuO/VghU0jcOAZgWXZ1Dmrw==,
       }
+
+  "@phosphor-icons/react@2.1.10":
+    resolution:
+      {
+        integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==,
+      }
+    engines: { node: ">=10" }
+    peerDependencies:
+      react: ">= 16.8"
+      react-dom: ">= 16.8"
 
   "@pinojs/redact@0.4.0":
     resolution:
@@ -9179,6 +9192,11 @@ snapshots:
       "@opentelemetry/core": 2.6.0(@opentelemetry/api@1.9.0)
 
   "@panva/hkdf@1.2.1": {}
+
+  "@phosphor-icons/react@2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)":
+    dependencies:
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   "@pinojs/redact@0.4.0": {}
 

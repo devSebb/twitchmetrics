@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChartLine } from "@phosphor-icons/react/dist/ssr";
 import { ViewerCountChart } from "@/components/charts/ViewerCountChart";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +55,10 @@ export function GameViewerChart({ slug, initialData }: GameViewerChartProps) {
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-[#F2F3F5]">Viewership History</h2>
+        <h2 className="flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <ChartLine size={20} weight="duotone" className="text-[#949BA4]" />
+          Viewership History
+        </h2>
         <div className="flex gap-1 rounded-md bg-[#1E1F22] p-0.5">
           {PERIODS.map((p) => (
             <button

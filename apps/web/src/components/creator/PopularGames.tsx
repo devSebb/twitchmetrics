@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { GameController } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { formatNumber, formatDuration } from "@/lib/utils/format";
 
@@ -17,7 +18,14 @@ export function PopularGames({ games }: PopularGamesProps) {
   if (games.length === 0) {
     return (
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">Popular Games</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <GameController
+            size={20}
+            weight="duotone"
+            className="text-[#949BA4]"
+          />
+          Popular Games
+        </h2>
         <Card className="flex items-center justify-center py-10">
           <p className="text-sm text-[#949BA4]">No game data available yet</p>
         </Card>

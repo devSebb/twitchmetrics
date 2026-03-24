@@ -3,6 +3,20 @@
  * IDs, display metadata, visibility defaults, and grid layout config.
  */
 
+import type { Icon } from "@phosphor-icons/react";
+import {
+  ChartBar,
+  TrendUp,
+  Eye,
+  UsersThree,
+  GameController,
+  FilmSlate,
+  ListBullets,
+  ShareNetwork,
+  Handshake,
+  ShieldCheck,
+} from "@phosphor-icons/react/dist/ssr";
+
 export type WidgetId =
   | "stats_row"
   | "follower_growth"
@@ -26,6 +40,7 @@ export type WidgetDefinition = {
   access: WidgetAccess;
   /** Grid column span at desktop (out of 3) */
   colSpan: 1 | 2 | 3;
+  icon: Icon;
 };
 
 export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
@@ -37,6 +52,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P0",
     access: "public",
     colSpan: 3,
+    icon: ChartBar,
   },
   follower_growth: {
     id: "follower_growth",
@@ -46,6 +62,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P0",
     access: "public",
     colSpan: 2,
+    icon: TrendUp,
   },
   demographics: {
     id: "demographics",
@@ -55,6 +72,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P0",
     access: "connected",
     colSpan: 1,
+    icon: UsersThree,
   },
   popular_games: {
     id: "popular_games",
@@ -64,6 +82,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P0",
     access: "public",
     colSpan: 1,
+    icon: GameController,
   },
   featured_clips: {
     id: "featured_clips",
@@ -73,6 +92,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P1",
     access: "public",
     colSpan: 2,
+    icon: FilmSlate,
   },
   viewer_count: {
     id: "viewer_count",
@@ -82,6 +102,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P0",
     access: "public",
     colSpan: 3,
+    icon: Eye,
   },
   recent_streams: {
     id: "recent_streams",
@@ -92,6 +113,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P1",
     access: "public",
     colSpan: 3,
+    icon: ListBullets,
   },
   platform_breakdown: {
     id: "platform_breakdown",
@@ -101,6 +123,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P1",
     access: "public",
     colSpan: 1,
+    icon: ShareNetwork,
   },
   brand_partners: {
     id: "brand_partners",
@@ -110,6 +133,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P1",
     access: "claimed",
     colSpan: 2,
+    icon: Handshake,
   },
   brand_safety: {
     id: "brand_safety",
@@ -119,6 +143,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     priority: "P2",
     access: "claimed",
     colSpan: 1,
+    icon: ShieldCheck,
   },
 };
 

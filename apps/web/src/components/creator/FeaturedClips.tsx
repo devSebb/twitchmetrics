@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { FilmSlate } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { formatNumber, formatRelativeTime } from "@/lib/utils/format";
 
@@ -18,7 +19,8 @@ export function FeaturedClips({ clips }: FeaturedClipsProps) {
     return (
       <div className="mt-6">
         <div className="flex items-center justify-between">
-          <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+            <FilmSlate size={20} weight="duotone" className="text-[#949BA4]" />
             Featured Clips
           </h2>
         </div>
@@ -32,7 +34,10 @@ export function FeaturedClips({ clips }: FeaturedClipsProps) {
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-[#F2F3F5]">Featured Clips</h2>
+        <h2 className="flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <FilmSlate size={20} weight="duotone" className="text-[#949BA4]" />
+          Featured Clips
+        </h2>
         <span className="text-xs text-[#949BA4]">Last 30 Days</span>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

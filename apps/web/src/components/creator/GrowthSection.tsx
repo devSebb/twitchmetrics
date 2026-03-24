@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { TrendUp } from "@phosphor-icons/react/dist/ssr";
 import { FollowerGrowthChart } from "@/components/charts";
 import type { Platform } from "@twitchmetrics/database";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
@@ -46,7 +47,10 @@ export function GrowthSection({
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-[#F2F3F5]">Follower Growth</h2>
+        <h2 className="flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <TrendUp size={20} weight="duotone" className="text-[#949BA4]" />
+          Follower Growth
+        </h2>
       </div>
 
       {/* Platform tabs */}

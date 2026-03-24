@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Handshake } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { getSafeImageSrc } from "@/lib/safeImage";
 
@@ -19,7 +20,8 @@ export function BrandPartnerships({ partnerships }: BrandPartnershipsProps) {
 
   return (
     <div className="mt-6">
-      <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+        <Handshake size={20} weight="duotone" className="text-[#949BA4]" />
         Past Partnerships
       </h2>
       <Card>

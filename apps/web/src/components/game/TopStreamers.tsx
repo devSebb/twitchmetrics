@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { Crown } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { formatNumber } from "@/lib/utils/format";
 import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
@@ -19,7 +20,10 @@ export function TopStreamers({ creators }: TopStreamersProps) {
   if (creators.length === 0) {
     return (
       <div className="mt-6">
-        <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">Top Streamers</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+          <Crown size={20} weight="duotone" className="text-[#949BA4]" />
+          Top Streamers
+        </h2>
         <Card className="flex items-center justify-center py-10">
           <p className="text-sm text-[#949BA4]">No streamer data available</p>
         </Card>

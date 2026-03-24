@@ -1,9 +1,13 @@
+import { SquaresFour } from "@phosphor-icons/react/dist/ssr";
 import { EmptyState } from "@/components/widgets/EmptyState";
 
 export function CategoriesSection() {
   return (
     <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-5">
-      <h3 className="mb-3 text-sm font-semibold text-[#F2F3F5]">Categories</h3>
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#F2F3F5]">
+        <SquaresFour size={16} weight="duotone" className="text-[#949BA4]" />
+        Categories
+      </h3>
       <EmptyState
         variant="no_data"
         title="Categories"
