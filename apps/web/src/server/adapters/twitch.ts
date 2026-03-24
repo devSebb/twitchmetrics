@@ -309,6 +309,86 @@ export async function fetchClips(
   });
 }
 
+/**
+ * Fetch top clips for a game.
+ * Uses GET /clips?game_id={id}&first={limit}
+ */
+export async function fetchClipsByGame(
+  twitchGameId: string,
+  limit: number = 8,
+): Promise<ClipData[]> {
+  return withRetry(async () => {
+    const data = await helixFetch<PaginatedResponse<TwitchClip>>("/clips", {
+      game_id: twitchGameId,
+      first: String(Math.min(limit, 25)),
+    });
+
+    return data.data.map((clip) => ({
+      id: clip.id,
+      title: clip.title,
+      thumbnailUrl: clip.thumbnail_url,
+      viewCount: clip.view_count,
+      createdAt: clip.created_at,
+      url: clip.url,
+      duration: clip.duration,
+    }));
+  });
+}
+
+export type GameStreamData = {
+  userId: string;
+  userName: string;
+  userLogin: string;
+  viewerCount: number;
+  language: string;
+  startedAt: string;
+  thumbnailUrl: string;
+};
+
+/**
+ * Fetch live streams for a game, paginating up to maxPages.
+ * Uses GET /streams?game_id={id}&first=100
+ */
+export async function fetchStreamsByGame(
+  twitchGameId: string,
+  maxPages: number = 5,
+): Promise<GameStreamData[]> {
+  return withRetry(async () => {
+    const all: GameStreamData[] = [];
+    let cursor: string | undefined;
+
+    for (let page = 0; page < maxPages; page++) {
+      const params: Record<string, string> = {
+        game_id: twitchGameId,
+        first: "100",
+      };
+      if (cursor) params.after = cursor;
+
+      const res = await helixFetch<PaginatedResponse<TwitchStream>>(
+        "/streams",
+        params,
+      );
+
+      for (const s of res.data) {
+        all.push({
+          userId: s.user_id,
+          userName: s.user_name,
+          userLogin: s.user_login,
+          viewerCount: s.viewer_count,
+          language: s.language,
+          startedAt: s.started_at,
+          thumbnailUrl: s.thumbnail_url,
+        });
+      }
+
+      cursor = res.pagination?.cursor;
+      if (!cursor || res.data.length === 0) break;
+    }
+
+    return all;
+  });
+}
+
 // ============================================================
 // TWITCH ADAPTER IMPLEMENTATION
 // ============================================================

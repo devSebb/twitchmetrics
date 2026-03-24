@@ -365,15 +365,64 @@ model Game {
   currentChannels Int    @default(0)
   peakViewers24h  Int    @default(0)
   avgViewers7d    Int    @default(0)
+  avgLiveChannels Int    @default(0)
   hoursWatched7d  BigInt @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  viewerSnapshots GameViewerSnapshot[]
+  viewerSnapshots    GameViewerSnapshot[]
+  broadcastLanguages GameBroadcastLanguage[]
+  topChannels        GameTopChannel[]
+  clips              GameClip[]
 
   @@index([currentViewers(sort: Desc)])
   @@index([name])
+}
+
+model GameBroadcastLanguage {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameId   String @db.Uuid
+  game     Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  language String
+  label    String
+  percent  Float
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([gameId, language])
+  @@index([gameId])
+}
+
+model GameTopChannel {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameId      String   @db.Uuid
+  game        Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  channelName String
+  avatarUrl   String?
+  slug        String?
+  category    String
+  avgViewers  Int      @default(0)
+  airtime     Int      @default(0)
+  viewerHours BigInt   @default(0)
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([gameId, category])
+}
+
+model GameClip {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameId       String   @db.Uuid
+  game         Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  clipId       String
+  title        String
+  thumbnailUrl String
+  url          String
+  viewCount    Int      @default(0)
+  createdAt    DateTime
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@unique([gameId, clipId])
+  @@index([gameId])
 }
 
 model GameViewerSnapshot {

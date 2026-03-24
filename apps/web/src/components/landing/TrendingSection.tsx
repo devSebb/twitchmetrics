@@ -1,5 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
+import {
+  Television,
+  GameController,
+  TrendUp,
+} from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { CreatorCard } from "@/components/shared/CreatorCard";
 import { formatNumber } from "@/lib/utils/format";
@@ -70,7 +75,12 @@ export function TrendingSection({
           {/* Top Channels */}
           <Card>
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-base font-bold text-[#F2F3F5]">
+              <h3 className="flex items-center gap-2 text-base font-bold text-[#F2F3F5]">
+                <Television
+                  size={16}
+                  weight="duotone"
+                  className="text-[#949BA4]"
+                />
                 Top Channels
               </h3>
               <Link
@@ -90,7 +100,14 @@ export function TrendingSection({
           {/* Top Games */}
           <Card>
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-base font-bold text-[#F2F3F5]">Top Games</h3>
+              <h3 className="flex items-center gap-2 text-base font-bold text-[#F2F3F5]">
+                <GameController
+                  size={16}
+                  weight="duotone"
+                  className="text-[#949BA4]"
+                />
+                Top Games
+              </h3>
               <Link
                 href="/games"
                 className="text-xs text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
@@ -140,7 +157,8 @@ export function TrendingSection({
         {/* Trending Creators - full width */}
         <Card className="mt-6">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-base font-bold text-[#E32C19]">
+            <h3 className="flex items-center gap-2 text-base font-bold text-[#E32C19]">
+              <TrendUp size={16} weight="duotone" className="text-[#E32C19]" />
               Trending Creators
             </h3>
             <Link

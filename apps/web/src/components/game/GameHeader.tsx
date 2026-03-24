@@ -1,6 +1,4 @@
 import Image from "next/image";
-import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
 import { formatNumber } from "@/lib/utils/format";
 
 type GameHeaderProps = {
@@ -8,7 +6,6 @@ type GameHeaderProps = {
     name: string;
     slug: string;
     coverImageUrl: string | null;
-    genres: string[];
     developer: string | null;
     publisher: string | null;
     releaseDate: string | null;
@@ -16,20 +13,60 @@ type GameHeaderProps = {
     currentChannels: number;
     peakViewers24h: number;
     avgViewers7d: number;
+    avgLiveChannels: number;
   };
 };
 
-const STATS = [
-  { label: "Live Viewers", key: "currentViewers" },
-  { label: "Live Channels", key: "currentChannels" },
-  { label: "Peak Viewers (24h)", key: "peakViewers24h" },
-  { label: "Avg Viewers (7d)", key: "avgViewers7d" },
-] as const;
+// Platform dot colors: Twitch, YouTube, Kick
+const PLATFORM_DOTS = ["#9146ff", "#ff0000", "#53fc18"];
+
+function PlatformDots() {
+  return (
+    <div className="mt-1 flex gap-1">
+      {PLATFORM_DOTS.map((color) => (
+        <span
+          key={color}
+          className="inline-block h-2 w-2 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LargeStatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col rounded-lg border border-[#3F4147] bg-[#313338] px-5 py-4">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
+        {label}
+      </span>
+      <span className="mt-1 text-2xl font-bold text-[#F2F3F5]">
+        {formatNumber(value)}
+      </span>
+      <PlatformDots />
+    </div>
+  );
+}
+
+function SmallStatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col rounded-lg border border-[#3F4147] bg-[#313338] px-4 py-3">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
+        {label}
+      </span>
+      <span className="mt-1 text-xl font-bold text-[#F2F3F5]">
+        {formatNumber(value)}
+      </span>
+      <PlatformDots />
+    </div>
+  );
+}
 
 export function GameHeader({ game }: GameHeaderProps) {
   return (
     <div>
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+      {/* Top row: cover art + metadata + 2 large KPIs */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {/* Cover Art */}
         <div className="relative h-48 w-36 flex-shrink-0 overflow-hidden rounded-lg bg-[#383A40] sm:h-52 sm:w-40">
           {game.coverImageUrl ? (
@@ -50,31 +87,21 @@ export function GameHeader({ game }: GameHeaderProps) {
           )}
         </div>
 
-        {/* Info */}
+        {/* Metadata */}
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-[#F2F3F5]">{game.name}</h1>
-
-          {/* Meta info */}
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#949BA4]">
             {game.developer && (
               <span>
-                <span className="text-[#949BA4]">Developed by:</span>{" "}
+                <span className="text-[#949BA4]">Developer:</span>{" "}
                 <span className="font-medium text-[#DBDEE1]">
                   {game.developer}
                 </span>
               </span>
             )}
-            {game.publisher && (
-              <span>
-                <span className="text-[#949BA4]">Published by:</span>{" "}
-                <span className="font-medium text-[#DBDEE1]">
-                  {game.publisher}
-                </span>
-              </span>
-            )}
             {game.releaseDate && (
               <span>
-                <span className="text-[#949BA4]">Release Date:</span>{" "}
+                <span className="text-[#949BA4]">Released:</span>{" "}
                 <span className="font-medium text-[#DBDEE1]">
                   {new Date(game.releaseDate).toLocaleDateString("en-US", {
                     month: "short",
@@ -85,36 +112,23 @@ export function GameHeader({ game }: GameHeaderProps) {
               </span>
             )}
           </div>
+        </div>
 
-          {/* Genre tags */}
-          {game.genres.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {game.genres.map((genre) => (
-                <Badge key={genre} variant="outline">
-                  {genre}
-                </Badge>
-              ))}
-            </div>
-          )}
+        {/* 2 Large KPI cards */}
+        <div className="flex gap-3 sm:flex-shrink-0">
+          <LargeStatCard label="Avg Viewers (7d)" value={game.avgViewers7d} />
+          <LargeStatCard
+            label="Peak Viewers (24h)"
+            value={game.peakViewers24h}
+          />
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {STATS.map((stat) => {
-          const value = game[stat.key];
-          return (
-            <Card
-              key={stat.key}
-              className="flex flex-col items-center justify-center py-4"
-            >
-              <span className="text-2xl font-bold text-[#F2F3F5]">
-                {formatNumber(value)}
-              </span>
-              <span className="mt-1 text-xs text-[#949BA4]">{stat.label}</span>
-            </Card>
-          );
-        })}
+      {/* Bottom row: 3 smaller KPI cards */}
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <SmallStatCard label="Live Viewers" value={game.currentViewers} />
+        <SmallStatCard label="Live Channels" value={game.currentChannels} />
+        <SmallStatCard label="Avg Live Channels" value={game.avgLiveChannels} />
       </div>
     </div>
   );

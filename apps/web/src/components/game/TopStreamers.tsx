@@ -33,7 +33,10 @@ export function TopStreamers({ creators }: TopStreamersProps) {
 
   return (
     <div className="mt-6">
-      <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">Top Streamers</h2>
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
+        <Crown size={20} weight="duotone" className="text-[#949BA4]" />
+        Top Streamers
+      </h2>
       <Card className="p-0">
         <div className="divide-y divide-[#3F4147]">
           {creators.map((creator, index) => {

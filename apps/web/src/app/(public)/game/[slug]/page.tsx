@@ -4,7 +4,14 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
-import { GameHeader, GameViewerChart, TopStreamers } from "@/components/game";
+import {
+  GameHeader,
+  GameViewerChart,
+  BroadcastLanguages,
+  ViewerChannelActivityChart,
+  GameTopChannels,
+  GameClips,
+} from "@/components/game";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -18,26 +25,20 @@ async function getGame(slug: string) {
         orderBy: { snapshotAt: "desc" },
         take: 100,
       },
+      broadcastLanguages: {
+        orderBy: { percent: "desc" },
+        take: 5,
+      },
+      topChannels: true,
+      clips: {
+        orderBy: { viewCount: "desc" },
+        take: 8,
+      },
     },
   });
 
   if (!game) return null;
   return serializeBigInt(game);
-}
-
-async function getTopCreators() {
-  const creators = await db.creatorProfile.findMany({
-    orderBy: { totalFollowers: "desc" },
-    take: 10,
-    select: {
-      displayName: true,
-      slug: true,
-      avatarUrl: true,
-      totalFollowers: true,
-      primaryPlatform: true,
-    },
-  });
-  return serializeBigInt(creators);
 }
 
 export async function generateMetadata({
@@ -82,10 +83,7 @@ export async function generateMetadata({
 
 export default async function GamePage({ params }: PageProps) {
   const { slug } = await params;
-  const [game, topCreators] = await Promise.all([
-    getGame(slug),
-    getTopCreators(),
-  ]);
+  const game = await getGame(slug);
 
   if (!game) {
     notFound();
@@ -96,7 +94,6 @@ export default async function GamePage({ params }: PageProps) {
     name: game.name,
     slug: game.slug,
     coverImageUrl: game.coverImageUrl,
-    genres: game.genres,
     developer: game.developer,
     publisher: game.publisher,
     releaseDate: game.releaseDate ? String(game.releaseDate) : null,
@@ -104,23 +101,23 @@ export default async function GamePage({ params }: PageProps) {
     currentChannels: game.currentChannels,
     peakViewers24h: game.peakViewers24h,
     avgViewers7d: game.avgViewers7d,
+    avgLiveChannels: game.avgLiveChannels,
   };
 
-  // Shape snapshot data for chart (reverse to chronological order)
-  const chartData = [...game.viewerSnapshots].reverse().map((s) => ({
+  // Shape snapshot data for charts (reverse to chronological order)
+  const snapshots = [...game.viewerSnapshots].reverse();
+
+  const chartData = snapshots.map((s) => ({
     date: String(s.snapshotAt),
     totalViewers: s.totalViewers,
     twitchViewers: s.twitchViewers,
     youtubeViewers: s.youtubeViewers,
   }));
 
-  // Shape top creators
-  const creatorsData = topCreators.map((c) => ({
-    displayName: c.displayName,
-    slug: c.slug,
-    avatarUrl: c.avatarUrl,
-    totalFollowers: String(c.totalFollowers),
-    primaryPlatform: c.primaryPlatform,
+  const activityData = snapshots.map((s) => ({
+    date: String(s.snapshotAt),
+    viewers: s.totalViewers,
+    channels: s.totalChannels,
   }));
 
   // VideoGame JSON-LD for rich results
@@ -146,12 +143,23 @@ export default async function GamePage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
       <GameHeader game={headerData} />
+
+      {/* Broadcast languages + activity chart */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
+        <BroadcastLanguages languages={game.broadcastLanguages} />
+        <ViewerChannelActivityChart
+          slug={game.slug}
+          initialData={activityData}
+        />
+      </div>
+
       <GameViewerChart slug={game.slug} initialData={chartData} />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <TopStreamers creators={creatorsData} />
-      </div>
+      <GameTopChannels channels={game.topChannels} />
+
+      <GameClips clips={game.clips} />
     </div>
   );
 }

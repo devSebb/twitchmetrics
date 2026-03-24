@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 
-const VALID_METRICS = ["viewers", "channels"] as const;
+const VALID_METRICS = ["viewers", "channels", "all"] as const;
 const VALID_PERIODS = ["24h", "7d", "30d"] as const;
 
 function getPeriodStart(period: string): Date {
@@ -32,7 +32,7 @@ export async function GET(
       {
         data: [],
         meta: {},
-        error: "Invalid metric. Use viewers or channels",
+        error: "Invalid metric. Use viewers, channels, or all",
       },
       { status: 400 },
     );
@@ -85,11 +85,20 @@ export async function GET(
     },
   });
 
-  const data = snapshots.map((snapshot) => ({
-    date: snapshot.snapshotAt.toISOString(),
-    value:
-      metric === "channels" ? snapshot.totalChannels : snapshot.totalViewers,
-  }));
+  const data =
+    metric === "all"
+      ? snapshots.map((snapshot) => ({
+          date: snapshot.snapshotAt.toISOString(),
+          viewers: snapshot.totalViewers,
+          channels: snapshot.totalChannels,
+        }))
+      : snapshots.map((snapshot) => ({
+          date: snapshot.snapshotAt.toISOString(),
+          value:
+            metric === "channels"
+              ? snapshot.totalChannels
+              : snapshot.totalViewers,
+        }));
 
   const response = {
     data,

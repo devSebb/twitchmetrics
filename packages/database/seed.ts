@@ -630,10 +630,48 @@ const DEV_DEMOGRAPHICS = {
 // MAIN SEED
 // ============================================================
 
+// ============================================================
+// GAME SEED CONSTANTS
+// ============================================================
+
+const BROADCAST_LANGUAGES = [
+  { language: "en", label: "English EN", basePercent: 56 },
+  { language: "es", label: "Spanish ES", basePercent: 17 },
+  { language: "de", label: "German DE", basePercent: 9 },
+  { language: "it", label: "Italian IT", basePercent: 7 },
+  { language: "fr", label: "French FR", basePercent: 2 },
+];
+
+const TOP_CHANNEL_NAMES = [
+  "xQcOW",
+  "shroud",
+  "Ninja",
+  "TimTheTatman",
+  "Pokimane",
+  "summit1g",
+  "DrLupo",
+  "Tfue",
+  "Nickmercs",
+  "DrDisrespect",
+  "Sodapoppin",
+  "HasanAbi",
+  "Ludwig",
+  "Mizkif",
+  "CohhCarnage",
+  "Lirik",
+  "Disguised_Toast",
+  "Asmongold",
+  "Amouranth",
+  "Sykkuno",
+];
+
 async function main() {
   console.log("Clearing existing data...");
 
   // Delete in dependency order
+  await prisma.gameBroadcastLanguage.deleteMany();
+  await prisma.gameTopChannel.deleteMany();
+  await prisma.gameClip.deleteMany();
   await prisma.creatorAnalytics.deleteMany();
   await prisma.creatorGrowthRollup.deleteMany();
   await prisma.metricSnapshot.deleteMany();
@@ -1125,37 +1163,196 @@ async function main() {
   console.log(`  Created ${games.length} games`);
 
   // ============================================================
-  // GAME VIEWER SNAPSHOTS (6 per game)
+  // GAME VIEWER SNAPSHOTS (90 per game — one every 8h over 30 days)
   // ============================================================
+
+  const GAME_SNAPSHOTS = 90;
+  const GAME_SNAPSHOT_INTERVAL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
   for (const game of games) {
     const snapshots = [];
-    for (let i = 0; i < 6; i++) {
-      const snapshotAt = new Date(now.getTime() - i * 30 * 60 * 1000);
-      const variance = () =>
-        Math.floor(Math.random() * 0.2 * game.currentViewers);
-      const twitchViewers = game.currentViewers - variance();
-      const youtubeViewers =
-        Math.floor(game.currentViewers * 0.15) + variance();
-      const kickViewers =
-        Math.floor(game.currentViewers * 0.05) + Math.floor(variance() * 0.3);
+    const baseViewers = game.currentViewers;
+    const baseChannels = game.currentChannels;
+    let totalChannelSum = 0;
+
+    for (let i = GAME_SNAPSHOTS - 1; i >= 0; i--) {
+      const snapshotAt = new Date(
+        now.getTime() - i * GAME_SNAPSHOT_INTERVAL_MS,
+      );
+
+      // Daily cycle: viewers peak in evening UTC (hour 20-22), low in morning
+      const hourOfDay = snapshotAt.getUTCHours();
+      const timeMultiplier =
+        0.6 + 0.4 * Math.sin(((hourOfDay - 6) * Math.PI) / 12);
+
+      // Slight random variance ±15%
+      const noise = 0.85 + Math.random() * 0.3;
+      const twitchViewers = Math.floor(
+        baseViewers * 0.75 * timeMultiplier * noise,
+      );
+      const youtubeViewers = Math.floor(
+        baseViewers * 0.15 * timeMultiplier * noise,
+      );
+      const kickViewers = Math.floor(
+        baseViewers * 0.05 * timeMultiplier * noise,
+      );
+      const totalViewers = twitchViewers + youtubeViewers + kickViewers;
+      const twitchChannels = Math.floor(
+        baseChannels * 0.7 * timeMultiplier * noise,
+      );
+      const youtubeChannels = Math.floor(
+        baseChannels * 0.2 * timeMultiplier * noise,
+      );
+      const kickChannels = Math.floor(
+        baseChannels * 0.1 * timeMultiplier * noise,
+      );
+      const totalChannels = twitchChannels + youtubeChannels + kickChannels;
+      totalChannelSum += totalChannels;
+
       snapshots.push({
         gameId: game.id,
         snapshotAt,
         twitchViewers,
-        twitchChannels: Math.floor(game.currentChannels * 0.7),
+        twitchChannels,
         youtubeViewers,
-        youtubeChannels: Math.floor(game.currentChannels * 0.2),
+        youtubeChannels,
         kickViewers,
-        kickChannels: Math.floor(game.currentChannels * 0.1),
-        totalViewers: twitchViewers + youtubeViewers + kickViewers,
-        totalChannels: game.currentChannels,
+        kickChannels,
+        totalViewers,
+        totalChannels,
       });
     }
+
     await prisma.gameViewerSnapshot.createMany({ data: snapshots });
+
+    // Update avgLiveChannels on Game
+    const avgLiveChannels = Math.floor(totalChannelSum / GAME_SNAPSHOTS);
+    await prisma.game.update({
+      where: { id: game.id },
+      data: { avgLiveChannels },
+    });
   }
 
-  console.log(`  Created ${games.length * 6} game viewer snapshots`);
+  console.log(
+    `  Created ${games.length * GAME_SNAPSHOTS} game viewer snapshots`,
+  );
+
+  // ============================================================
+  // GAME BROADCAST LANGUAGES
+  // ============================================================
+
+  console.log("Seeding game broadcast languages...");
+
+  for (const game of games) {
+    const langData = BROADCAST_LANGUAGES.map((lang) => ({
+      gameId: game.id,
+      language: lang.language,
+      label: lang.label,
+      // Add slight per-game variance ±3 pts
+      percent: Math.max(0.5, lang.basePercent + (Math.random() - 0.5) * 6),
+    }));
+
+    // Normalize to sum to ~100
+    const total = langData.reduce((s, l) => s + l.percent, 0);
+    const normalized = langData.map((l) => ({
+      ...l,
+      percent: Math.round((l.percent / total) * 100 * 10) / 10,
+    }));
+
+    await prisma.gameBroadcastLanguage.createMany({ data: normalized });
+  }
+
+  console.log(
+    `  Created ${games.length * BROADCAST_LANGUAGES.length} broadcast language records`,
+  );
+
+  // ============================================================
+  // GAME TOP CHANNELS
+  // ============================================================
+
+  console.log("Seeding game top channels...");
+
+  // Shuffle channel names for each game so they vary
+  let topChannelCount = 0;
+  for (const game of games) {
+    const shuffled = [...TOP_CHANNEL_NAMES].sort(() => Math.random() - 0.5);
+
+    // 5 fastest growing
+    const fastestGrowing = shuffled.slice(0, 5).map((name, idx) => ({
+      gameId: game.id,
+      channelName: name,
+      avatarUrl: `https://i.pravatar.cc/64?u=${name}`,
+      slug: null as string | null,
+      category: "fastest_growing",
+      avgViewers: Math.floor(
+        game.currentViewers * (0.05 + Math.random() * 0.15),
+      ),
+      airtime: Math.floor(20 + Math.random() * 60) * 3600, // 20-80 hrs in seconds
+      viewerHours: BigInt(
+        Math.floor(game.currentViewers * (0.05 + Math.random() * 0.1) * 50),
+      ),
+    }));
+
+    // 6 most watched
+    const mostWatched = shuffled.slice(5, 11).map((name) => ({
+      gameId: game.id,
+      channelName: name,
+      avatarUrl: `https://i.pravatar.cc/64?u=${name}`,
+      slug: null as string | null,
+      category: "most_watched",
+      avgViewers: Math.floor(
+        game.currentViewers * (0.08 + Math.random() * 0.2),
+      ),
+      airtime: Math.floor(30 + Math.random() * 80) * 3600,
+      viewerHours: BigInt(
+        Math.floor(game.currentViewers * (0.08 + Math.random() * 0.15) * 80),
+      ),
+    }));
+
+    await prisma.gameTopChannel.createMany({
+      data: [...fastestGrowing, ...mostWatched],
+    });
+    topChannelCount += fastestGrowing.length + mostWatched.length;
+  }
+
+  console.log(`  Created ${topChannelCount} game top channel records`);
+
+  // ============================================================
+  // GAME CLIPS
+  // ============================================================
+
+  console.log("Seeding game clips...");
+
+  const CLIP_TITLES = [
+    "INSANE clutch play!",
+    "World record speedrun attempt",
+    "1v5 against the odds",
+    "This shouldn't be possible...",
+    "Chat made me do this",
+    "First time trying this strategy",
+    "Perfect execution",
+    "You won't believe this moment",
+  ];
+
+  let clipCount = 0;
+  for (const game of games) {
+    const clipData = CLIP_TITLES.map((title, idx) => ({
+      gameId: game.id,
+      clipId: `clip_${game.slug}_${idx}`,
+      title: `${title} - ${game.name}`,
+      thumbnailUrl: `https://picsum.photos/seed/${game.slug}_clip${idx}/320/180`,
+      url: `https://clips.twitch.tv/${game.slug}_clip${idx}`,
+      viewCount: Math.floor(10_000 + Math.random() * 500_000),
+      createdAt: new Date(
+        now.getTime() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000,
+      ),
+    }));
+
+    await prisma.gameClip.createMany({ data: clipData });
+    clipCount += clipData.length;
+  }
+
+  console.log(`  Created ${clipCount} game clip records`);
 
   // ============================================================
   // CREATOR GROWTH ROLLUPS
@@ -1258,7 +1455,12 @@ async function main() {
   console.log(`  - ${DEV_BRAND_PARTNERS.length} brand partnerships (dev user)`);
   console.log(`  - 2 creator analytics records (dev user)`);
   console.log(`  - ${games.length} games`);
-  console.log(`  - ${games.length * 6} game viewer snapshots`);
+  console.log(`  - ${games.length * GAME_SNAPSHOTS} game viewer snapshots`);
+  console.log(
+    `  - ${games.length * BROADCAST_LANGUAGES.length} broadcast language records`,
+  );
+  console.log(`  - ${games.length * 11} game top channel records`);
+  console.log(`  - ${games.length * CLIP_TITLES.length} game clip records`);
   console.log(`\n  Login: dev@twitchmetrics.test (admin, slug: devstreamer)`);
 }
 
