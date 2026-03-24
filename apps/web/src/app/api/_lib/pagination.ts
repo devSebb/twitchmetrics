@@ -33,12 +33,14 @@ export function buildMeta(
   total: number;
   page: number;
   limit: number;
+  totalPages: number;
   hasMore: boolean;
 } {
   return {
     total,
     page,
     limit,
+    totalPages: Math.ceil(total / limit),
     hasMore: page * limit < total,
   };
 }

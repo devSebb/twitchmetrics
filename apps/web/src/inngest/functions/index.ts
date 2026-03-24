@@ -9,6 +9,7 @@ import { refreshTokens } from "./tokens/refresh-tokens";
 import { enrichClaimedProfiles } from "./enrichment/enrich-claimed-profiles";
 import { enrichOnClaim } from "./enrichment/enrich-on-claim";
 import { discoverCreators } from "./discovery/discover-creators";
+import { discoverGames } from "./discovery/discover-games";
 
 export const functions = [
   tier1Snapshot,
@@ -22,4 +23,5 @@ export const functions = [
   enrichClaimedProfiles,
   enrichOnClaim,
   discoverCreators,
+  discoverGames,
 ];
