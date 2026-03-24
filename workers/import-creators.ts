@@ -175,6 +175,7 @@ async function main() {
           bio: user.description || null,
           totalFollowers: BigInt(followers),
           state: "unclaimed",
+          searchText: `${user.display_name} ${user.login}`.toLowerCase(),
           snapshotTier:
             followers >= 1_000_000
               ? "tier1"
