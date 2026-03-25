@@ -39,11 +39,17 @@ async function getGames(sort: SortOption, genre?: string) {
         ? { hoursWatched7d: "desc" as const }
         : { currentViewers: "desc" as const };
 
-  const where = genre ? { genres: { has: genre } } : undefined;
-
   const [games, total] = await Promise.all([
-    db.game.findMany({ where, orderBy, take: 20 }),
-    db.game.count({ where }),
+    genre
+      ? db.game.findMany({
+          where: { genres: { has: genre } },
+          orderBy,
+          take: 20,
+        })
+      : db.game.findMany({ orderBy, take: 20 }),
+    genre
+      ? db.game.count({ where: { genres: { has: genre } } })
+      : db.game.count(),
   ]);
 
   return {
