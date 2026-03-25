@@ -9,9 +9,9 @@ import {
   CreatorHeader,
   GrowthSection,
   DemographicsSection,
-  PopularGames,
-  FeaturedClips,
   BrandPartnerships,
+  PopularGamesSection,
+  FeaturedClipsSection,
 } from "@/components/creator";
 
 type PageProps = {
@@ -179,8 +179,8 @@ export default async function CreatorProfilePage({ params }: PageProps) {
 
         {/* Right column: games + clips */}
         <div className="lg:col-span-2">
-          <PopularGames games={[]} />
-          <FeaturedClips clips={[]} />
+          <PopularGamesSection creatorProfileId={creator.id} />
+          <FeaturedClipsSection creatorProfileId={creator.id} />
         </div>
       </div>
     </div>

@@ -7,8 +7,10 @@ import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import { SearchBar } from "@/components/search";
 
+const RESULTS_PER_PAGE = 20;
+
 type SearchPageProps = {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; page?: string }>;
 };
 
 type SearchCreator = {
@@ -29,48 +31,72 @@ type SearchGame = {
   relevance: number;
 };
 
-async function searchDatabase(query: string, type: string) {
-  const creators: SearchCreator[] =
-    type === "games"
-      ? []
-      : serializeBigInt(
-          await db.$queryRaw<SearchCreator[]>(Prisma.sql`
-            SELECT
-              cp.id,
-              cp."displayName",
-              cp.slug,
-              cp."avatarUrl",
-              cp."totalFollowers",
-              similarity(cp."searchText", ${query}) AS relevance
+async function searchDatabase(query: string, type: string, page: number) {
+  const offset = (page - 1) * RESULTS_PER_PAGE;
+
+  const [creators, games, creatorCountResult, gameCountResult] =
+    await Promise.all([
+      type === "games"
+        ? ([] as SearchCreator[])
+        : serializeBigInt(
+            await db.$queryRaw<SearchCreator[]>(Prisma.sql`
+              SELECT
+                cp.id,
+                cp."displayName",
+                cp.slug,
+                cp."avatarUrl",
+                cp."totalFollowers",
+                similarity(cp."searchText", ${query}) AS relevance
+              FROM "CreatorProfile" cp
+              WHERE cp."searchText" % ${query}
+                 OR cp."searchText" ILIKE '%' || ${query} || '%'
+              ORDER BY relevance DESC, cp."totalFollowers" DESC
+              LIMIT ${RESULTS_PER_PAGE} OFFSET ${offset}
+            `),
+          ),
+
+      type === "creators"
+        ? ([] as SearchGame[])
+        : serializeBigInt(
+            await db.$queryRaw<SearchGame[]>(Prisma.sql`
+              SELECT
+                g.id,
+                g.name,
+                g.slug,
+                g."coverImageUrl",
+                g."currentViewers",
+                similarity(g."searchText", ${query}) AS relevance
+              FROM "Game" g
+              WHERE g."searchText" % ${query}
+                 OR g."searchText" ILIKE '%' || ${query} || '%'
+              ORDER BY relevance DESC, g."currentViewers" DESC
+              LIMIT ${RESULTS_PER_PAGE} OFFSET ${offset}
+            `),
+          ),
+
+      type === "games"
+        ? Promise.resolve([{ count: 0 }] as { count: number }[])
+        : db.$queryRaw<{ count: number }[]>(Prisma.sql`
+            SELECT COUNT(*)::int AS count
             FROM "CreatorProfile" cp
             WHERE cp."searchText" % ${query}
                OR cp."searchText" ILIKE '%' || ${query} || '%'
-            ORDER BY relevance DESC, cp."totalFollowers" DESC
-            LIMIT 20
           `),
-        );
 
-  const games: SearchGame[] =
-    type === "creators"
-      ? []
-      : serializeBigInt(
-          await db.$queryRaw<SearchGame[]>(Prisma.sql`
-            SELECT
-              g.id,
-              g.name,
-              g.slug,
-              g."coverImageUrl",
-              g."currentViewers",
-              similarity(g."searchText", ${query}) AS relevance
+      type === "creators"
+        ? Promise.resolve([{ count: 0 }] as { count: number }[])
+        : db.$queryRaw<{ count: number }[]>(Prisma.sql`
+            SELECT COUNT(*)::int AS count
             FROM "Game" g
             WHERE g."searchText" % ${query}
                OR g."searchText" ILIKE '%' || ${query} || '%'
-            ORDER BY relevance DESC, g."currentViewers" DESC
-            LIMIT 20
           `),
-        );
+    ]);
 
-  return { creators, games };
+  const creatorTotal = Number(creatorCountResult[0]?.count ?? 0);
+  const gameTotal = Number(gameCountResult[0]?.count ?? 0);
+
+  return { creators, games, creatorTotal, gameTotal };
 }
 
 const TABS = [
@@ -96,12 +122,29 @@ export async function generateMetadata({
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const { q, type: typeParam } = await searchParams;
+  const { q, type: typeParam, page: pageParam } = await searchParams;
   const type = typeParam ?? "all";
   const query = q?.trim() ?? "";
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
   const hasQuery = query.length >= 2;
-  const results = hasQuery ? await searchDatabase(query, type) : null;
+  const results = hasQuery ? await searchDatabase(query, type, page) : null;
+
+  const creatorPages = results
+    ? Math.ceil(results.creatorTotal / RESULTS_PER_PAGE)
+    : 0;
+  const gamePages = results
+    ? Math.ceil(results.gameTotal / RESULTS_PER_PAGE)
+    : 0;
+  const totalPages = Math.max(creatorPages, gamePages, 1);
+
+  function pageUrl(p: number) {
+    const params = new URLSearchParams();
+    params.set("q", query);
+    if (type !== "all") params.set("type", type);
+    if (p > 1) params.set("page", String(p));
+    return `/search?${params.toString()}`;
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
@@ -145,7 +188,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           {results.creators.length > 0 && (
             <div className="mb-8">
               <h2 className="mb-3 text-sm font-semibold uppercase text-[#949BA4]">
-                Creators ({results.creators.length})
+                Creators ({results.creatorTotal})
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {results.creators.map((c) => (
@@ -186,7 +229,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           {results.games.length > 0 && (
             <div>
               <h2 className="mb-3 text-sm font-semibold uppercase text-[#949BA4]">
-                Games ({results.games.length})
+                Games ({results.gameTotal})
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {results.games.map((g) => (
@@ -221,6 +264,39 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-8 flex items-center justify-center gap-3">
+              {page > 1 ? (
+                <Link
+                  href={pageUrl(page - 1)}
+                  className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+                >
+                  Previous
+                </Link>
+              ) : (
+                <span className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] opacity-40 pointer-events-none">
+                  Previous
+                </span>
+              )}
+              <span className="text-sm text-[#949BA4]">
+                Page {page} of {totalPages}
+              </span>
+              {page < totalPages ? (
+                <Link
+                  href={pageUrl(page + 1)}
+                  className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+                >
+                  Next
+                </Link>
+              ) : (
+                <span className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] opacity-40 pointer-events-none">
+                  Next
+                </span>
+              )}
             </div>
           )}
         </div>

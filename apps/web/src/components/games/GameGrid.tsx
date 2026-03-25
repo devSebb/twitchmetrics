@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -36,17 +36,23 @@ type GameGridProps = {
 export function GameGrid({ initialData, initialMeta }: GameGridProps) {
   const searchParams = useSearchParams();
   const sort = searchParams.get("sort") ?? "viewers";
+  const genre = searchParams.get("genre") ?? "";
   const [page, setPage] = useState(1);
 
-  const isDefaultParams = page === 1 && sort === "viewers";
+  useEffect(() => {
+    setPage(1);
+  }, [sort, genre]);
+
+  const isDefaultParams = page === 1 && sort === "viewers" && !genre;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["games", sort, page],
+    queryKey: ["games", sort, genre, page],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
       params.set("sort", sort);
       params.set("page", String(page));
       params.set("limit", "20");
+      if (genre) params.set("genre", genre);
       const res = await fetch(`/api/games?${params.toString()}`);
       return res.json() as Promise<ApiResponse>;
     },

@@ -36,25 +36,16 @@ export async function GET(
     );
   }
 
-  // Seed data does not currently store a direct game<->creator relationship.
-  // We approximate "top creators for this game" by overall top creators.
-  const topCreators = await db.creatorProfile.findMany({
-    orderBy: { totalFollowers: "desc" },
+  const topChannels = await db.gameTopChannel.findMany({
+    where: { gameId: game.id },
+    orderBy: { viewerHours: "desc" },
     take: 10,
-    select: {
-      id: true,
-      displayName: true,
-      slug: true,
-      avatarUrl: true,
-      totalFollowers: true,
-      primaryPlatform: true,
-    },
   });
 
   const serialized = serializeBigInt({
     ...game,
     latestSnapshot: game.viewerSnapshots[0] ?? null,
-    topCreators,
+    topChannels,
   });
 
   await cacheSet(cacheKey, serialized, CACHE_TTL.GAME_PROFILE);

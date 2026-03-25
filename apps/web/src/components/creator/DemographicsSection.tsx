@@ -222,7 +222,7 @@ export function DemographicsSection({
         </h2>
         <Card className="flex items-center justify-center py-10">
           <p className="text-sm text-[#949BA4]">
-            Connect YouTube or Instagram to unlock demographics
+            Audience demographics are not yet available for this creator
           </p>
         </Card>
       </div>

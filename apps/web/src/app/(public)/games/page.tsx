@@ -5,6 +5,7 @@ import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { GameSortControls } from "@/components/games/GameSortControls";
 import { GameGrid } from "@/components/games/GameGrid";
+import { GenreFilter } from "@/components/games/GenreFilter";
 import { Suspense } from "react";
 
 export const revalidate = 300; // ISR: revalidate every 5 minutes
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
 
 type SortOption = "viewers" | "channels" | "hoursWatched";
 
-async function getGames(sort: SortOption) {
+async function getGames(sort: SortOption, genre?: string) {
   const orderBy =
     sort === "channels"
       ? { currentChannels: "desc" as const }
@@ -38,9 +39,11 @@ async function getGames(sort: SortOption) {
         ? { hoursWatched7d: "desc" as const }
         : { currentViewers: "desc" as const };
 
+  const where = genre ? { genres: { has: genre } } : undefined;
+
   const [games, total] = await Promise.all([
-    db.game.findMany({ orderBy, take: 20 }),
-    db.game.count(),
+    db.game.findMany({ where, orderBy, take: 20 }),
+    db.game.count({ where }),
   ]);
 
   return {
@@ -57,19 +60,31 @@ async function getGames(sort: SortOption) {
   };
 }
 
+async function getAllGenres(): Promise<string[]> {
+  const rows = await db.game.findMany({
+    select: { genres: true },
+    where: { genres: { isEmpty: false } },
+  });
+  const all = rows.flatMap((r) => r.genres);
+  return [...new Set(all)].sort();
+}
+
 type PageProps = {
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<{ sort?: string; genre?: string }>;
 };
 
 export default async function GamesPage({ searchParams }: PageProps) {
-  const { sort: sortParam } = await searchParams;
+  const { sort: sortParam, genre } = await searchParams;
   const sort = (
     ["viewers", "channels", "hoursWatched"].includes(sortParam ?? "")
       ? sortParam
       : "viewers"
   ) as SortOption;
 
-  const { games, total } = await getGames(sort);
+  const [{ games, total }, allGenres] = await Promise.all([
+    getGames(sort, genre),
+    getAllGenres(),
+  ]);
   const totalPages = Math.ceil(total / 20);
 
   return (
@@ -82,8 +97,14 @@ export default async function GamesPage({ searchParams }: PageProps) {
       </div>
 
       <Suspense>
-        <div className="mb-6">
+        <div className="mb-4">
           <GameSortControls />
+        </div>
+      </Suspense>
+
+      <Suspense>
+        <div className="mb-6">
+          <GenreFilter genres={allGenres} />
         </div>
       </Suspense>
 
