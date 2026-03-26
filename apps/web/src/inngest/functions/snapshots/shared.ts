@@ -180,6 +180,8 @@ async function snapshotPlatformAccount(
     data: {
       followerCount: snapshotData.followerCount,
       totalViews: snapshotData.totalViews,
+      subscriberCount: snapshotData.subscriberCount,
+      postCount: snapshotData.postCount,
       lastSyncedAt: snapshotData.snapshotAt,
     },
   });

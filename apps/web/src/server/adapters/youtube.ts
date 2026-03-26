@@ -209,6 +209,7 @@ export const youtubeAdapter: PlatformAdapter = {
       platformUrl: `https://youtube.com/${snippet.customUrl ?? `channel/${channel.id}`}`,
       platformAvatarUrl:
         snippet.thumbnails.high?.url ?? snippet.thumbnails.default?.url ?? null,
+      bio: snippet.description ?? null,
       followerCount: subscriberCount,
       followingCount: null,
       totalViews: stats.viewCount ? BigInt(stats.viewCount) : null,

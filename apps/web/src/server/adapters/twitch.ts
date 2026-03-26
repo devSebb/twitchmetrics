@@ -503,6 +503,7 @@ export const twitchAdapter: PlatformAdapter = {
         platformDisplayName: user.display_name,
         platformUrl: `https://twitch.tv/${user.login}`,
         platformAvatarUrl: user.profile_image_url,
+        bio: user.description ?? null,
         followerCount: BigInt(followers.total ?? 0),
         followingCount: null, // Not available via Helix without user token
         totalViews: BigInt(user.view_count ?? 0), // Deprecated, may be 0

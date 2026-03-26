@@ -15,6 +15,8 @@ type PlatformAccountData = {
   platformUsername: string;
   platformUrl: string | null;
   followerCount: string | null;
+  totalViews: string | null;
+  postCount: number | null;
 };
 
 type GrowthRollupData = {
@@ -260,6 +262,21 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
                   height={28}
                 />
               </div>
+              {(account.totalViews != null || account.postCount != null) && (
+                <div className="mt-1.5 space-y-0.5 border-t border-[#3F4147] pt-1.5">
+                  {account.totalViews && (
+                    <div className="text-xs text-[#949BA4]">
+                      {formatNumber(Number(account.totalViews))} views
+                    </div>
+                  )}
+                  {account.postCount != null && (
+                    <div className="text-xs text-[#949BA4]">
+                      {formatNumber(account.postCount)}{" "}
+                      {account.platform === "youtube" ? "videos" : "posts"}
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
           );
         })}

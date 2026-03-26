@@ -619,4 +619,128 @@ export const adminRouter = router({
       oldestPendingClaim: oldestPendingClaim?.createdAt?.toISOString() ?? null,
     };
   }),
+
+  // ─── Platform Account Linking ────────────────────────────────
+
+  linkPlatformAccount: adminProcedure
+    .input(
+      z.object({
+        creatorProfileId: z.string().uuid(),
+        platform: z.nativeEnum(Platform),
+        platformUsername: z.string().min(1).max(100),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // 1. Verify creator exists
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { id: input.creatorProfileId },
+        select: {
+          id: true,
+          displayName: true,
+          slug: true,
+          platformAccounts: {
+            select: {
+              platform: true,
+              platformUsername: true,
+              platformDisplayName: true,
+            },
+          },
+        },
+      });
+
+      if (!profile) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Creator profile not found.",
+        });
+      }
+
+      // 2. Check no existing account for this platform
+      const existing = profile.platformAccounts.find(
+        (a) => a.platform === input.platform,
+      );
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Creator already has a ${input.platform} account (@${existing.platformUsername}).`,
+        });
+      }
+
+      // 3. Attempt adapter verification to populate real data
+      const { getAdapter } = await import("@/server/adapters");
+      const adapter = getAdapter(input.platform);
+
+      let platformUserId = input.platformUsername;
+      let followerCount: bigint | null = null;
+      let platformDisplayName: string | null = null;
+      let avatarUrl: string | null = null;
+      let platformUrl: string | null = null;
+
+      if (adapter) {
+        try {
+          const adapterProfile = await adapter.fetchProfile(
+            input.platformUsername,
+          );
+          platformUserId = adapterProfile.platformUserId;
+          followerCount = adapterProfile.followerCount ?? null;
+          platformDisplayName = adapterProfile.platformDisplayName ?? null;
+          avatarUrl = adapterProfile.platformAvatarUrl ?? null;
+          platformUrl = adapterProfile.platformUrl ?? null;
+        } catch {
+          // Adapter failed — still create the account with minimal data
+        }
+      }
+
+      // 4. Create PlatformAccount
+      const account = await ctx.prisma.platformAccount.create({
+        data: {
+          creatorProfileId: input.creatorProfileId,
+          platform: input.platform,
+          platformUserId,
+          platformUsername: input.platformUsername.toLowerCase(),
+          platformDisplayName,
+          platformUrl,
+          platformAvatarUrl: avatarUrl,
+          followerCount,
+          isOAuthConnected: false,
+        },
+      });
+
+      // 5. Update searchText to include new username
+      const allAccounts = [
+        ...profile.platformAccounts,
+        {
+          platformUsername: input.platformUsername.toLowerCase(),
+          platformDisplayName,
+        },
+      ];
+      const searchParts = [
+        profile.displayName,
+        profile.slug,
+        ...allAccounts.map((a) => a.platformUsername).filter(Boolean),
+        ...allAccounts
+          .map((a) => a.platformDisplayName)
+          .filter((v) => v != null),
+      ];
+      const searchText = [...new Set(searchParts)].join(" ").toLowerCase();
+      await ctx.prisma.creatorProfile.update({
+        where: { id: input.creatorProfileId },
+        data: { searchText },
+      });
+
+      // 6. Audit log
+      logAudit({
+        userId: ctx.user.id,
+        action: "admin.linkPlatformAccount",
+        targetType: "CreatorProfile",
+        targetId: input.creatorProfileId,
+        metadata: {
+          platform: input.platform,
+          platformUsername: input.platformUsername,
+          platformUserId,
+        },
+      });
+
+      return account;
+    }),
 });

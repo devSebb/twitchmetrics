@@ -10,6 +10,7 @@ import { enrichClaimedProfiles } from "./enrichment/enrich-claimed-profiles";
 import { enrichOnClaim } from "./enrichment/enrich-on-claim";
 import { discoverCreators } from "./discovery/discover-creators";
 import { discoverGames } from "./discovery/discover-games";
+import { discoverSocialLinks } from "./discovery/discover-social-links";
 
 export const functions = [
   tier1Snapshot,
@@ -24,4 +25,5 @@ export const functions = [
   enrichOnClaim,
   discoverCreators,
   discoverGames,
+  discoverSocialLinks,
 ];

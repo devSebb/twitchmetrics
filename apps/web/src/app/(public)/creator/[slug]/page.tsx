@@ -123,6 +123,8 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       platformUsername: a.platformUsername,
       platformUrl: a.platformUrl,
       followerCount: a.followerCount ? String(a.followerCount) : null,
+      totalViews: a.totalViews ? String(a.totalViews) : null,
+      postCount: a.postCount ?? null,
     })),
     growthRollups: creator.growthRollups.map((g) => ({
       platform: g.platform,

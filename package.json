@@ -19,6 +19,10 @@
     "worker:snapshot-scheduler": "tsx workers/snapshot-scheduler.ts",
     "worker:growth-rollup": "tsx workers/growth-rollup.ts",
     "worker:search-reindex": "tsx workers/search-reindex.ts",
+    "worker:discover-social-links": "tsx --env-file=apps/web/.env.local workers/discover-social-links.ts",
+    "worker:snapshot-youtube": "tsx --env-file=apps/web/.env.local workers/snapshot-youtube.ts",
+    "worker:cleanup-invalid-accounts": "tsx --env-file=apps/web/.env.local workers/cleanup-invalid-platform-accounts.ts",
+    "worker:purge-low-quality": "tsx --env-file=apps/web/.env.local workers/purge-low-quality-creators.ts",
     "prepare": "husky"
   },
   "lint-staged": {

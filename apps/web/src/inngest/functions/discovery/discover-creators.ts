@@ -9,6 +9,10 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("discover-creators");
 
+// Only ingest streamers with at least this many live viewers.
+// Below 50 viewers, the account has essentially no reach and clutters the DB.
+const MIN_VIEWERS_TO_INGEST = 50;
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -67,7 +71,9 @@ export const discoverCreators = inngest.createFunction(
         }
       }
 
-      return Array.from(byUserId.values());
+      return Array.from(byUserId.values()).filter(
+        (s) => s.viewerCount >= MIN_VIEWERS_TO_INGEST,
+      );
     });
 
     log.info({ count: rawStreams.length }, "Collected unique streams");

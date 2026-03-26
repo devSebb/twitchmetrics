@@ -143,8 +143,9 @@ model CreatorProfile {
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-  lastSnapshotAt DateTime?
-  claimedAt      DateTime?
+  lastSnapshotAt       DateTime?
+  lastLinkDiscoveryAt  DateTime?
+  claimedAt            DateTime?
 
   platformAccounts  PlatformAccount[]
   metricSnapshots   MetricSnapshot[]

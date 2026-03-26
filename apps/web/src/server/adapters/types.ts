@@ -12,6 +12,7 @@ export type CreatorProfileData = {
   followingCount: bigint | null;
   totalViews: bigint | null;
   postCount: number | null;
+  bio?: string | null;
   isLive: boolean | null;
   rawResponse?: unknown;
 };
