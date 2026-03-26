@@ -72,6 +72,10 @@ export const creatorRouter = router({
         bio: z.string().max(500).optional(),
         country: z.string().max(100).optional(),
         displayName: z.string().trim().min(1).max(100).optional(),
+        gender: z.string().trim().max(20).optional(),
+        language: z.string().trim().max(50).optional(),
+        age: z.number().int().min(13).max(120).optional(),
+        interests: z.array(z.string().trim().max(30)).max(10).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -98,6 +102,10 @@ export const creatorRouter = router({
       if (input.bio !== undefined) data.bio = input.bio;
       if (input.country !== undefined) data.country = input.country;
       if (input.displayName !== undefined) data.displayName = input.displayName;
+      if (input.gender !== undefined) data.gender = input.gender;
+      if (input.language !== undefined) data.language = input.language;
+      if (input.age !== undefined) data.age = input.age;
+      if (input.interests !== undefined) data.interests = input.interests;
 
       return ctx.prisma.creatorProfile.update({
         where: { id: profile.id },
@@ -107,6 +115,10 @@ export const creatorRouter = router({
           displayName: true,
           bio: true,
           country: true,
+          gender: true,
+          language: true,
+          age: true,
+          interests: true,
           updatedAt: true,
         },
       });

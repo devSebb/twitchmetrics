@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
-import { SettingsForm } from "@/components/settings";
+import { ProfileSettingsForm } from "@/components/settings/ProfileSettingsForm";
 import { getSession } from "@/server/auth-cache";
 
 export const metadata: Metadata = {
-  title: "Settings",
+  title: "Profile Settings",
   robots: { index: false, follow: false },
 };
 
@@ -21,46 +21,86 @@ export default async function SettingsPage() {
       name: true,
       email: true,
       image: true,
-      passwordHash: true,
       creatorProfile: {
         select: {
+          displayName: true,
           slug: true,
           state: true,
-          widgetConfig: true,
+          bio: true,
+          country: true,
+          gender: true,
+          language: true,
+          age: true,
+          interests: true,
+          avatarUrl: true,
           platformAccounts: {
-            where: { isOAuthConnected: true },
-            select: { platform: true },
+            select: {
+              platform: true,
+              platformUsername: true,
+              platformAvatarUrl: true,
+              isOAuthConnected: true,
+            },
+          },
+          brandPartnerships: {
+            where: { isPublic: true },
+            select: {
+              id: true,
+              brandName: true,
+              brandLogoUrl: true,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 12,
           },
         },
       },
     },
   });
 
-  const creatorSlug = user?.creatorProfile?.slug ?? null;
-  const isClaimed =
-    user?.creatorProfile?.state === "claimed" ||
-    user?.creatorProfile?.state === "premium";
+  if (!user) {
+    redirect("/login");
+  }
+
+  const profile = user.creatorProfile;
+  const interests = (profile?.interests ?? []) as string[];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
-      <div>
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">Settings</h1>
-        <p className="mt-2 text-sm text-[#949BA4]">
-          Manage your profile, password, and account preferences.
-        </p>
-      </div>
-      <SettingsForm
-        name={user?.name ?? null}
-        email={user?.email ?? null}
-        image={user?.image ?? null}
-        hasPassword={Boolean(user?.passwordHash)}
-        connectedPlatforms={
-          user?.creatorProfile?.platformAccounts.map((item) => item.platform) ??
-          []
-        }
-        creatorSlug={creatorSlug}
-        isClaimed={isClaimed}
-      />
-    </div>
+    <ProfileSettingsForm
+      user={{
+        name: user.name,
+        email: user.email,
+        image: user.image,
+      }}
+      profile={
+        profile
+          ? {
+              displayName: profile.displayName,
+              slug: profile.slug,
+              state: profile.state,
+              bio: profile.bio,
+              country: profile.country,
+              gender: profile.gender,
+              language: profile.language,
+              age: profile.age,
+              interests,
+              avatarUrl: profile.avatarUrl,
+            }
+          : null
+      }
+      platformAccounts={
+        profile?.platformAccounts.map((a) => ({
+          platform: a.platform,
+          platformUsername: a.platformUsername,
+          avatarUrl: a.platformAvatarUrl,
+          isOAuthConnected: a.isOAuthConnected,
+        })) ?? []
+      }
+      partnerships={
+        profile?.brandPartnerships.map((p) => ({
+          id: p.id,
+          brandName: p.brandName,
+          brandLogoUrl: p.brandLogoUrl,
+        })) ?? []
+      }
+    />
   );
 }

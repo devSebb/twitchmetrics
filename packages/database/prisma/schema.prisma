@@ -133,6 +133,10 @@ model CreatorProfile {
   bannerUrl      String?
   bio            String?
   country        String?
+  gender         String?
+  language       String?
+  age            Int?
+  interests      Json    @default("[]")
 
   primaryPlatform Platform
 
