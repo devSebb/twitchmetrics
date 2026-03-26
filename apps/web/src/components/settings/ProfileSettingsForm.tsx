@@ -150,9 +150,6 @@ export function ProfileSettingsForm({
     message: string;
   } | null>(null);
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
-
-  const isClaimed =
-    profile?.state === "claimed" || profile?.state === "premium";
   const avatarSrc =
     getSafeImageSrc(profile?.avatarUrl) ?? getSafeImageSrc(user.image);
 
@@ -186,8 +183,8 @@ export function ProfileSettingsForm({
         await updateName.mutateAsync({ name: trimmedName });
       }
 
-      // Update creator profile if claimed
-      if (isClaimed && profile) {
+      // Update creator profile if user has one
+      if (profile) {
         const ageNum = age ? parseInt(age, 10) : undefined;
         await updateProfile.mutateAsync({
           displayName: trimmedName || undefined,
@@ -211,7 +208,6 @@ export function ProfileSettingsForm({
       age,
       interests,
       user.name,
-      isClaimed,
       profile,
       updateName,
       updateProfile,
@@ -278,7 +274,7 @@ export function ProfileSettingsForm({
                   onChange={(e) => setCountry(e.target.value)}
                   className={INPUT_CLS}
                   placeholder="e.g. United States"
-                  disabled={!isClaimed}
+                  disabled={!profile}
                 />
               </div>
               <div>
@@ -291,7 +287,7 @@ export function ProfileSettingsForm({
                   onChange={(e) => setAge(e.target.value)}
                   className={INPUT_CLS}
                   placeholder="Your age"
-                  disabled={!isClaimed}
+                  disabled={!profile}
                 />
               </div>
             </div>
@@ -312,7 +308,7 @@ export function ProfileSettingsForm({
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
                   className={INPUT_CLS}
-                  disabled={!isClaimed}
+                  disabled={!profile}
                 >
                   <option value="">Select gender</option>
                   {GENDER_OPTIONS.map((g) => (
@@ -328,7 +324,7 @@ export function ProfileSettingsForm({
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
                   className={INPUT_CLS}
-                  disabled={!isClaimed}
+                  disabled={!profile}
                 >
                   <option value="">Select language</option>
                   {LANGUAGE_OPTIONS.map((l) => (
@@ -344,7 +340,7 @@ export function ProfileSettingsForm({
                   type="button"
                   onClick={() => setShowInterestDropdown((v) => !v)}
                   className={`${INPUT_CLS} text-left`}
-                  disabled={!isClaimed}
+                  disabled={!profile}
                 >
                   {interests.length > 0
                     ? `${interests.length} selected`
@@ -406,7 +402,7 @@ export function ProfileSettingsForm({
               rows={4}
               className={INPUT_CLS}
               placeholder="Tell brands about yourself..."
-              disabled={!isClaimed}
+              disabled={!profile}
             />
             <p className="mt-1 text-right text-xs text-[#949BA4]">
               {bio.length}/500
@@ -430,7 +426,7 @@ export function ProfileSettingsForm({
       </form>
 
       {/* Two-column cards: Interests + Partnerships */}
-      {isClaimed && (
+      {profile && (
         <div className="grid gap-6 md:grid-cols-2">
           <InterestsCard interests={interests} />
           <PastPartnershipsCard

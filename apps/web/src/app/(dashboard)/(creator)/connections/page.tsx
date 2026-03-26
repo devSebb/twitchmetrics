@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function ConnectionsPage() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
       <div>
         <h1 className="text-3xl font-bold text-[#F2F3F5]">
           Connected Platforms

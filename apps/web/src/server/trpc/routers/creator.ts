@@ -87,14 +87,7 @@ export const creatorRouter = router({
       if (!profile) {
         throw new TRPCError({
           code: "NOT_FOUND",
-          message: "You have no claimed creator profile.",
-        });
-      }
-
-      if (profile.state !== "claimed" && profile.state !== "premium") {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Profile must be claimed to edit.",
+          message: "You have no creator profile.",
         });
       }
 
