@@ -436,10 +436,16 @@ async function main() {
 
   // Build query filter
   const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS);
+  // Only discover links for creators that have a Twitch account — the canonical
+  // entry point. This prevents linking YouTube-only profiles and keeps discovery
+  // grounded in verified Twitch identities.
+  const withTwitch = {
+    platformAccounts: { some: { platform: "twitch" as Platform } },
+  };
   const whereClause = FORCE
-    ? { platformAccounts: { some: {} } }
+    ? withTwitch
     : {
-        platformAccounts: { some: {} },
+        ...withTwitch,
         OR: [
           { lastLinkDiscoveryAt: null },
           { lastLinkDiscoveryAt: { lt: thirtyDaysAgo } },

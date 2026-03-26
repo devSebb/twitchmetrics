@@ -2,13 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Sparkline } from "@/components/charts";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
-import { formatNumber, formatPercent } from "@/lib/utils/format";
+import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
-import { PlatformIcon, SyncStatus } from "@/components/shared";
+import { PlatformIcon } from "@/components/shared";
 
 type PlatformAccountData = {
   platform: Platform;
@@ -44,14 +42,9 @@ type CreatorHeaderProps = {
   };
 };
 
-function TrendArrow({ direction }: { direction: string }) {
-  if (direction === "UP") {
-    return <span className="text-[#22c55e]">&#9650;</span>;
-  }
-  if (direction === "DOWN") {
-    return <span className="text-[#ef4444]">&#9660;</span>;
-  }
-  return <span className="text-[#949BA4]">&#8211;</span>;
+function getFollowerLabel(platform: Platform): string {
+  if (platform === "youtube") return "Subscribers";
+  return "Followers";
 }
 
 function ClaimStatus({
@@ -99,187 +92,109 @@ function ClaimStatus({
 
 export function CreatorHeader({ creator }: CreatorHeaderProps) {
   const totalFollowers = Number(creator.totalFollowers);
-  const safeBannerUrl = getSafeImageSrc(creator.bannerUrl);
   const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
 
   return (
-    <div>
-      {/* Banner */}
-      <div className="relative h-36 overflow-hidden rounded-t-lg bg-gradient-to-r from-[#E32C19]/60 via-[#383A40] to-[#1E1F22] sm:h-44">
-        {safeBannerUrl && (
-          <Image
-            src={safeBannerUrl}
-            alt=""
-            fill
-            className="object-cover"
-            priority
-          />
-        )}
-      </div>
-
-      {/* Profile info section */}
-      <div className="relative border-x border-b border-[#3F4147] bg-[#313338] px-4 pb-5 sm:px-6">
+    <div className="overflow-hidden rounded-xl border border-[#3F4147] bg-[#313338]">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-5 p-5 sm:p-6">
         {/* Avatar */}
-        <div className="relative -mt-12 mb-3 flex items-end justify-between sm:-mt-14">
-          <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-[#313338] bg-[#383A40] sm:h-28 sm:w-28">
+        <div className="flex-shrink-0 self-center sm:self-start">
+          <div className="h-28 w-28 overflow-hidden rounded-full border-3 border-[#3F4147] bg-[#383A40] sm:h-32 sm:w-32">
             {safeAvatarUrl ? (
               <Image
                 src={safeAvatarUrl}
                 alt={creator.displayName}
-                width={112}
-                height={112}
+                width={128}
+                height={128}
                 className="h-full w-full object-cover"
                 priority
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-[#949BA4]">
+              <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-[#949BA4]">
                 {creator.displayName.charAt(0).toUpperCase()}
               </div>
             )}
           </div>
+        </div>
 
-          <div className="flex items-center gap-2 pb-1">
-            <ClaimStatus state={creator.state} creatorId={creator.id} />
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          {/* Top row: name + claim status */}
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-1">
+            <h1 className="font-display text-2xl font-bold text-[#F2F3F5] sm:text-3xl">
+              {creator.displayName}
+            </h1>
+            <div className="flex-shrink-0">
+              <ClaimStatus state={creator.state} creatorId={creator.id} />
+            </div>
           </div>
-        </div>
 
-        {/* Name + meta */}
-        <div className="mb-3">
-          <h1 className="font-display text-2xl font-bold text-[#F2F3F5] sm:text-3xl">
-            {creator.displayName}
-          </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#949BA4]">
-            {creator.country && <span>{creator.country}</span>}
-            <SyncStatus lastSyncedAt={creator.lastSnapshotAt} />
-          </div>
-        </div>
+          {/* Meta row: country */}
+          {creator.country && (
+            <div className="mb-2 flex items-center gap-1.5 text-sm text-[#B5BAC1]">
+              <span>{creator.country}</span>
+            </div>
+          )}
 
-        {/* Bio */}
-        {creator.bio && (
-          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-[#949BA4]">
-            {creator.bio}
-          </p>
-        )}
+          {/* Bio */}
+          {creator.bio && (
+            <p className="mb-4 max-w-2xl text-sm leading-relaxed text-[#B5BAC1]">
+              {creator.bio}
+            </p>
+          )}
 
-        {/* Total followers hero stat */}
-        <div className="mb-4">
-          <div className="text-3xl font-bold text-[#F2F3F5]">
-            {formatNumber(totalFollowers)}
-          </div>
-          <div className="text-sm text-[#949BA4]">Total Connections</div>
-        </div>
-
-        {/* Platform badges */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {creator.platformAccounts.map((account) => (
-            <a
-              key={account.platform}
-              href={account.platformUrl ?? "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-opacity hover:opacity-80"
-            >
-              <Badge variant="platform" platform={account.platform}>
-                <PlatformIcon platform={account.platform} size="sm" />
-                {account.followerCount
-                  ? formatNumber(Number(account.followerCount))
-                  : "—"}
-              </Badge>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {/* Stats row heading */}
-      <div className="mt-4 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-[#949BA4]">
-          <span className="text-[#F2F3F5]">{creator.slug}</span> stats{" "}
-          <span className="text-[#949BA4]">Last 30 Days</span>
-        </h2>
-      </div>
-
-      {/* KPI stat cards per platform */}
-      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {creator.platformAccounts.map((account) => {
-          const growth = creator.growthRollups.find(
-            (g) => g.platform === account.platform,
-          );
-          const config = PLATFORM_CONFIG[account.platform];
-          const delta = growth ? Number(growth.delta7d) : 0;
-          const pct = growth ? growth.pct7d : 0;
-          const direction = growth?.trendDirection ?? "FLAT";
-
-          return (
-            <Card key={account.platform} className="p-3">
-              <div className="mb-1 flex items-center gap-1.5">
-                <PlatformIcon platform={account.platform} size="sm" />
-                <span className="text-xs font-medium text-[#949BA4]">
-                  {config.name}
-                </span>
+          {/* Total Connections + Platform row */}
+          <div className="flex flex-col lg:flex-row lg:items-end gap-4 lg:gap-8">
+            {/* Total stat */}
+            <div className="flex-shrink-0">
+              <div className="text-3xl font-bold tracking-tight text-[#F2F3F5]">
+                {formatNumber(totalFollowers)}
               </div>
-              <div className="text-lg font-bold text-[#F2F3F5]">
-                {account.followerCount
-                  ? formatNumber(Number(account.followerCount))
-                  : "—"}
+              <div className="text-xs font-medium tracking-wide text-[#949BA4] uppercase">
+                Total Connections
               </div>
-              <div className="mt-0.5 flex items-center gap-1 text-xs">
-                <TrendArrow direction={direction} />
-                <span
-                  className={
-                    direction === "UP"
-                      ? "text-[#22c55e]"
-                      : direction === "DOWN"
-                        ? "text-[#ef4444]"
-                        : "text-[#949BA4]"
-                  }
-                >
-                  {formatPercent(pct)}
-                </span>
-              </div>
-              <div className="mt-1">
-                <Sparkline
-                  data={
-                    delta !== 0
-                      ? [
-                          0,
-                          delta * 0.3,
-                          delta * 0.5,
-                          delta * 0.7,
-                          delta * 0.85,
-                          delta * 0.95,
-                          delta,
-                        ]
-                      : []
-                  }
-                  trend={
-                    direction === "UP"
-                      ? "up"
-                      : direction === "DOWN"
-                        ? "down"
-                        : "flat"
-                  }
-                  width={80}
-                  height={28}
-                />
-              </div>
-              {(account.totalViews != null || account.postCount != null) && (
-                <div className="mt-1.5 space-y-0.5 border-t border-[#3F4147] pt-1.5">
-                  {account.totalViews && (
-                    <div className="text-xs text-[#949BA4]">
-                      {formatNumber(Number(account.totalViews))} views
+            </div>
+
+            {/* Platform breakdown */}
+            <div className="flex flex-wrap items-end gap-5 lg:gap-6">
+              {creator.platformAccounts.map((account) => {
+                const config = PLATFORM_CONFIG[account.platform];
+                return (
+                  <a
+                    key={account.platform}
+                    href={account.platformUrl ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-2.5 transition-opacity hover:opacity-80"
+                  >
+                    {/* Circular colored icon */}
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-full shadow-sm"
+                      style={{ backgroundColor: config.color }}
+                    >
+                      <PlatformIcon
+                        platform={account.platform}
+                        size="sm"
+                        className="brightness-0 invert"
+                      />
                     </div>
-                  )}
-                  {account.postCount != null && (
-                    <div className="text-xs text-[#949BA4]">
-                      {formatNumber(account.postCount)}{" "}
-                      {account.platform === "youtube" ? "videos" : "posts"}
+                    {/* Count + label */}
+                    <div className="flex flex-col">
+                      <span className="text-base font-bold leading-tight text-[#F2F3F5]">
+                        {account.followerCount
+                          ? formatNumber(Number(account.followerCount))
+                          : "—"}
+                      </span>
+                      <span className="text-[11px] font-medium text-[#949BA4]">
+                        {getFollowerLabel(account.platform)}
+                      </span>
                     </div>
-                  )}
-                </div>
-              )}
-            </Card>
-          );
-        })}
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

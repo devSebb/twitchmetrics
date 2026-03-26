@@ -339,6 +339,8 @@ async function snapshotAccount(
       data: {
         followerCount: data.subscriberCount,
         totalViews: data.totalViews,
+        subscriberCount: data.subscriberCount,
+        postCount: data.videoCount,
         lastSyncedAt: new Date(),
       },
     });
