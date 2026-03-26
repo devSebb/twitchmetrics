@@ -166,12 +166,6 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       />
       <CreatorHeader creator={headerData} />
 
-      <GrowthSection
-        slug={creator.slug}
-        platforms={platforms}
-        initialPlatform={creator.primaryPlatform}
-      />
-
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {/* Left column: demographics + partnerships */}
         <div className="lg:col-span-1">
@@ -185,6 +179,12 @@ export default async function CreatorProfilePage({ params }: PageProps) {
           <FeaturedClipsSection creatorProfileId={creator.id} />
         </div>
       </div>
+
+      <GrowthSection
+        slug={creator.slug}
+        platforms={platforms}
+        initialPlatform={creator.primaryPlatform}
+      />
     </div>
   );
 }

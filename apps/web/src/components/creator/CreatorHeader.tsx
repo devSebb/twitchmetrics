@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
@@ -158,7 +157,6 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
             {/* Platform breakdown */}
             <div className="flex flex-wrap items-end gap-5 lg:gap-6">
               {creator.platformAccounts.map((account) => {
-                const config = PLATFORM_CONFIG[account.platform];
                 return (
                   <a
                     key={account.platform}
@@ -167,17 +165,11 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
                     rel="noopener noreferrer"
                     className="group flex items-center gap-2.5 transition-opacity hover:opacity-80"
                   >
-                    {/* Circular colored icon */}
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-full shadow-sm"
-                      style={{ backgroundColor: config.color }}
-                    >
-                      <PlatformIcon
-                        platform={account.platform}
-                        size="sm"
-                        className="brightness-0 invert"
-                      />
-                    </div>
+                    <PlatformIcon
+                      platform={account.platform}
+                      size="lg"
+                      rounded="none"
+                    />
                     {/* Count + label */}
                     <div className="flex flex-col">
                       <span className="text-base font-bold leading-tight text-[#F2F3F5]">
