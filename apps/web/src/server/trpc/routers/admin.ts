@@ -267,9 +267,7 @@ export const adminRouter = router({
     .input(
       z.object({
         search: z.string().optional(),
-        role: z
-          .enum(["creator", "talent_manager", "brand", "admin"])
-          .optional(),
+        role: z.enum(["creator", "talent_manager", "admin"]).optional(),
         page: z.number().int().positive().default(1),
         limit: z.number().int().min(1).max(100).default(20),
       }),
@@ -317,7 +315,7 @@ export const adminRouter = router({
     .input(
       z.object({
         userId: z.string().uuid(),
-        role: z.enum(["creator", "talent_manager", "brand", "admin"]),
+        role: z.enum(["creator", "talent_manager", "admin"]),
       }),
     )
     .mutation(async ({ ctx, input }) => {

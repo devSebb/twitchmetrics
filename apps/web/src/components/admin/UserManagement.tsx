@@ -8,14 +8,12 @@ const ROLE_OPTIONS = [
   { value: "", label: "All Roles" },
   { value: "creator", label: "Creator" },
   { value: "talent_manager", label: "Talent Manager" },
-  { value: "brand", label: "Brand" },
   { value: "admin", label: "Admin" },
 ] as const;
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "text-[#E32C19] bg-[#E32C19]/10",
   talent_manager: "text-[#3b82f6] bg-[#3b82f6]/10",
-  brand: "text-[#f59e0b] bg-[#f59e0b]/10",
   creator: "text-[#22c55e] bg-[#22c55e]/10",
 };
 
@@ -29,9 +27,7 @@ export function UserManagement() {
 
   const { data, isLoading } = trpc.admin.listUsers.useQuery({
     search: search || undefined,
-    role:
-      (roleFilter as "creator" | "talent_manager" | "brand" | "admin") ||
-      undefined,
+    role: (roleFilter as "creator" | "talent_manager" | "admin") || undefined,
     page,
     limit,
   });
@@ -138,7 +134,6 @@ export function UserManagement() {
                           role: e.target.value as
                             | "creator"
                             | "talent_manager"
-                            | "brand"
                             | "admin",
                         });
                       }}

@@ -7,7 +7,7 @@ import { SearchBar } from "@/components/search";
 import { Button, Card } from "@/components/ui";
 import { trpc } from "@/lib/trpc";
 
-type OnboardingRole = "creator" | "talent_manager" | "brand";
+type OnboardingRole = "creator" | "talent_manager";
 
 type OnboardingWizardProps = {
   initialName: string | null;
@@ -66,16 +66,13 @@ export function OnboardingWizard({
         <h2 className="text-2xl font-bold text-[#F2F3F5]">
           What brings you here?
         </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Button onClick={() => submitRole("creator")}>Creator</Button>
           <Button
             variant="secondary"
             onClick={() => submitRole("talent_manager")}
           >
             Talent Manager
-          </Button>
-          <Button variant="secondary" onClick={() => submitRole("brand")}>
-            Brand / Agency
           </Button>
         </div>
         {error ? <p className="text-sm text-[#f87171]">{error}</p> : null}

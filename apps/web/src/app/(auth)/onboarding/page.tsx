@@ -25,11 +25,9 @@ export default async function OnboardingPage() {
       <OnboardingWizard
         initialName={session.user.name ?? null}
         initialRole={
-          (["creator", "talent_manager", "brand"].includes(
-            session.user.role ?? "",
-          )
+          (["creator", "talent_manager"].includes(session.user.role ?? "")
             ? session.user.role
-            : "creator") as "creator" | "talent_manager" | "brand"
+            : "creator") as "creator" | "talent_manager"
         }
       />
     </div>

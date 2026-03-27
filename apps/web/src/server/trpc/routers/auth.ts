@@ -119,7 +119,7 @@ export const authRouter = router({
   }),
 
   updateRole: protectedProcedure
-    .input(z.object({ role: z.enum(["creator", "talent_manager", "brand"]) }))
+    .input(z.object({ role: z.enum(["creator", "talent_manager"]) }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUnique({
         where: { id: ctx.user.id },
