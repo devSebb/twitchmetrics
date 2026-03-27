@@ -62,6 +62,9 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_DESCRIPTION,
+  icons: {
+    icon: "/icon.svg",
+  },
   openGraph: {
     title: `${SITE_NAME} | Creator Analytics Platform`,
     description: DEFAULT_DESCRIPTION,
