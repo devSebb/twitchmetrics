@@ -84,7 +84,7 @@ export const discoverGames = inngest.createFunction(
               name: gameData.gameName,
               slug,
               twitchGameId: gameData.platformGameId,
-              coverImageUrl: `https://static-cdn.jtvnw.net/ttv-boxart/${encodeURIComponent(gameData.gameName)}-272x380.jpg`,
+              coverImageUrl: gameData.boxArtUrl,
               currentViewers: gameData.viewerCount,
               currentChannels: gameData.channelCount,
               searchText: gameData.gameName.toLowerCase(),

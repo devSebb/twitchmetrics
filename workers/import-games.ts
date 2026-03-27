@@ -286,7 +286,7 @@ async function importFromTwitchTopGames(): Promise<void> {
     }
 
     const coverUrl = tg.box_art_url
-      ? tg.box_art_url.replace("{width}", "285").replace("{height}", "380")
+      ? tg.box_art_url.replace("{width}", "272").replace("{height}", "380")
       : null;
 
     await prisma.game.create({

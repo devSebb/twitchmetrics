@@ -36,6 +36,8 @@ export type GameSnapshotData = {
   snapshotAt: Date;
   viewerCount: number;
   channelCount: number;
+  /** Resolved box art URL from the platform API (e.g. Twitch CDN with game ID) */
+  boxArtUrl: string | null;
 };
 
 export type SearchResult = {

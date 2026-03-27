@@ -27,7 +27,7 @@ export const gameSnapshot = inngest.createFunction(
         // Match to existing Game record by Twitch game ID
         const game = await prisma.game.findUnique({
           where: { twitchGameId: gameData.platformGameId },
-          select: { id: true, slug: true },
+          select: { id: true, slug: true, coverImageUrl: true },
         });
 
         if (!game) {
@@ -49,6 +49,12 @@ export const gameSnapshot = inngest.createFunction(
           },
         });
 
+        // Heal coverImageUrl if the API provides a real ID-based URL
+        // Name-based URLs (ttv-boxart/GameName-...) often resolve to a placeholder
+        const shouldHealImage =
+          gameData.boxArtUrl &&
+          (!game.coverImageUrl || game.coverImageUrl !== gameData.boxArtUrl);
+
         // Update cached fields on Game
         await prisma.game.update({
           where: { id: game.id },
@@ -59,6 +65,7 @@ export const gameSnapshot = inngest.createFunction(
               // Only update if new value is higher
               set: Math.max(gameData.viewerCount, 0),
             },
+            ...(shouldHealImage ? { coverImageUrl: gameData.boxArtUrl } : {}),
           },
         });
 

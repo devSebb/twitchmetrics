@@ -621,6 +621,13 @@ export const twitchAdapter: PlatformAdapter = {
           PaginatedResponse<TwitchStream> & { pagination?: { cursor?: string } }
         >("/streams", { game_id: game.id, first: "1" });
 
+        // Resolve the box_art_url template from the API (uses game ID, not name)
+        const boxArtUrl = game.box_art_url
+          ? game.box_art_url
+              .replace("{width}", "272")
+              .replace("{height}", "380")
+          : null;
+
         // The total isn't available directly; we get viewer_count from first stream
         // For accurate counts, we'd need to paginate — approximate with first page
         snapshots.push({
@@ -630,6 +637,7 @@ export const twitchAdapter: PlatformAdapter = {
           snapshotAt: now,
           viewerCount: streams.data[0]?.viewer_count ?? 0,
           channelCount: streams.data.length, // Approximation from first page
+          boxArtUrl,
         });
       }
 
