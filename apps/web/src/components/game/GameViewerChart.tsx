@@ -9,8 +9,6 @@ import { cn } from "@/lib/utils";
 type SnapshotPoint = {
   date: string;
   totalViewers: number;
-  twitchViewers: number;
-  youtubeViewers: number;
 };
 
 type GameViewerChartProps = {

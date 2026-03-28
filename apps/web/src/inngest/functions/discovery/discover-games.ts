@@ -28,7 +28,7 @@ export const discoverGames = inngest.createFunction(
     // Step 1: Fetch top 100 games from Twitch
     // --------------------------------------------------------
     const topGames = await step.run("fetch-top-games", async () => {
-      return twitchAdapter.fetchTopGames!(100);
+      return twitchAdapter.fetchTopGamesCatalog!(100);
     });
 
     log.info({ count: topGames.length }, "Fetched top games from Twitch");
@@ -84,9 +84,8 @@ export const discoverGames = inngest.createFunction(
               name: gameData.gameName,
               slug,
               twitchGameId: gameData.platformGameId,
+              igdbId: gameData.igdbId,
               coverImageUrl: gameData.boxArtUrl,
-              currentViewers: gameData.viewerCount,
-              currentChannels: gameData.channelCount,
               searchText: gameData.gameName.toLowerCase(),
             },
           });

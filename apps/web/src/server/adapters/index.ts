@@ -38,4 +38,7 @@ export type {
   CreatorSnapshotData,
   SearchResult,
   GameSnapshotData,
+  GameCatalogData,
+  GameLiveStatsData,
+  GameLiveStreamData,
 } from "./types";

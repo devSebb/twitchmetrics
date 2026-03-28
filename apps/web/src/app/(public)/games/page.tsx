@@ -13,11 +13,11 @@ export const revalidate = 300; // ISR: revalidate every 5 minutes
 export const metadata: Metadata = {
   title: "Top Games",
   description:
-    "Browse the most-watched games on Twitch, YouTube, and Kick with live viewership data and channel counts.",
+    "Browse the most-watched games on Twitch with live viewership data and channel counts.",
   openGraph: {
     title: `Top Games | ${SITE_NAME}`,
     description:
-      "Browse the most-watched games with live viewership data across all streaming platforms.",
+      "Browse the most-watched games on Twitch with live viewership data and channel counts.",
     type: "website",
     url: `${SITE_URL}/games`,
   },

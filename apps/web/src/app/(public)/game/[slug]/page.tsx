@@ -110,8 +110,6 @@ export default async function GamePage({ params }: PageProps) {
   const chartData = snapshots.map((s) => ({
     date: String(s.snapshotAt),
     totalViewers: s.totalViewers,
-    twitchViewers: s.twitchViewers,
-    youtubeViewers: s.youtubeViewers,
   }));
 
   const activityData = snapshots.map((s) => ({

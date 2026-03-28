@@ -120,7 +120,7 @@ export function SystemHealth() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#949BA4]">
           Snapshot Pipeline
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <FreshnessCard
             tier="tier1"
             lastAt={data?.snapshotFreshness.tier1.lastAt ?? null}
@@ -136,11 +136,16 @@ export function SystemHealth() {
             lastAt={data?.snapshotFreshness.tier3.lastAt ?? null}
             stale={data?.snapshotFreshness.tier3.stale ?? true}
           />
+          <FreshnessCard
+            tier="games"
+            lastAt={data?.gameFreshness.lastSnapshotAt ?? null}
+            stale={data?.gameFreshness.stale ?? true}
+          />
         </div>
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-4">
           <p className="text-xs text-[#949BA4]">Stale Creators (&gt;24h)</p>
           <p
@@ -155,6 +160,28 @@ export function SystemHealth() {
             {data?.oldestPendingClaim
               ? formatRelativeTime(new Date(data.oldestPendingClaim))
               : "None"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-4">
+          <p className="text-xs text-[#949BA4]">Games Snapshotted (24h)</p>
+          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
+            {data?.gameFreshness.gamesSnapshotted24h ?? 0}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-4">
+          <p className="text-xs text-[#949BA4]">Games Missing Snapshots</p>
+          <p
+            className={`mt-1 text-2xl font-bold ${(data?.gameFreshness.gamesMissingSnapshots ?? 0) > 0 ? "text-[#f59e0b]" : "text-[#22c55e]"}`}
+          >
+            {data?.gameFreshness.gamesMissingSnapshots ?? 0}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-4">
+          <p className="text-xs text-[#949BA4]">Games Missing Enrichment</p>
+          <p
+            className={`mt-1 text-2xl font-bold ${(data?.gameFreshness.gamesMissingEnrichment ?? 0) > 0 ? "text-[#f59e0b]" : "text-[#22c55e]"}`}
+          >
+            {data?.gameFreshness.gamesMissingEnrichment ?? 0}
           </p>
         </div>
       </div>

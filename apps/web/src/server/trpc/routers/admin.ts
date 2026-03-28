@@ -560,34 +560,72 @@ export const adminRouter = router({
     const tier2Interval = 60 * 60 * 1000;
     const tier3Interval = 6 * 60 * 60 * 1000;
 
-    const [tier1Last, tier2Last, tier3Last, staleCreators, oldestPendingClaim] =
-      await Promise.all([
-        ctx.prisma.creatorProfile.findFirst({
-          where: { snapshotTier: "tier1" },
-          orderBy: { lastSnapshotAt: "desc" },
-          select: { lastSnapshotAt: true },
-        }),
-        ctx.prisma.creatorProfile.findFirst({
-          where: { snapshotTier: "tier2" },
-          orderBy: { lastSnapshotAt: "desc" },
-          select: { lastSnapshotAt: true },
-        }),
-        ctx.prisma.creatorProfile.findFirst({
-          where: { snapshotTier: "tier3" },
-          orderBy: { lastSnapshotAt: "desc" },
-          select: { lastSnapshotAt: true },
-        }),
-        ctx.prisma.creatorProfile.count({
-          where: {
-            lastSnapshotAt: { lt: new Date(now - 24 * 60 * 60 * 1000) },
-          },
-        }),
-        ctx.prisma.claimRequest.findFirst({
-          where: { status: "pending" },
-          orderBy: { createdAt: "asc" },
-          select: { createdAt: true },
-        }),
-      ]);
+    const [
+      tier1Last,
+      tier2Last,
+      tier3Last,
+      staleCreators,
+      oldestPendingClaim,
+      latestGameSnapshot,
+      latestGameUpdate,
+      gamesSnapshotted24h,
+      gamesMissingSnapshots,
+      gamesMissingEnrichment,
+    ] = await Promise.all([
+      ctx.prisma.creatorProfile.findFirst({
+        where: { snapshotTier: "tier1" },
+        orderBy: { lastSnapshotAt: "desc" },
+        select: { lastSnapshotAt: true },
+      }),
+      ctx.prisma.creatorProfile.findFirst({
+        where: { snapshotTier: "tier2" },
+        orderBy: { lastSnapshotAt: "desc" },
+        select: { lastSnapshotAt: true },
+      }),
+      ctx.prisma.creatorProfile.findFirst({
+        where: { snapshotTier: "tier3" },
+        orderBy: { lastSnapshotAt: "desc" },
+        select: { lastSnapshotAt: true },
+      }),
+      ctx.prisma.creatorProfile.count({
+        where: {
+          lastSnapshotAt: { lt: new Date(now - 24 * 60 * 60 * 1000) },
+        },
+      }),
+      ctx.prisma.claimRequest.findFirst({
+        where: { status: "pending" },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+      ctx.prisma.gameViewerSnapshot.findFirst({
+        orderBy: { snapshotAt: "desc" },
+        select: { snapshotAt: true },
+      }),
+      ctx.prisma.game.findFirst({
+        orderBy: { updatedAt: "desc" },
+        select: { updatedAt: true },
+      }),
+      ctx.prisma.gameViewerSnapshot
+        .groupBy({
+          by: ["gameId"],
+          where: { snapshotAt: { gte: new Date(now - 24 * 60 * 60 * 1000) } },
+        })
+        .then((rows) => rows.length),
+      ctx.prisma.game.count({
+        where: { viewerSnapshots: { none: {} } },
+      }),
+      ctx.prisma.game.count({
+        where: {
+          OR: [
+            { summary: null },
+            { genres: { isEmpty: true } },
+            { developer: null },
+            { publisher: null },
+            { releaseDate: null },
+          ],
+        },
+      }),
+    ]);
 
     const snapshotFreshness = {
       tier1: {
@@ -610,9 +648,21 @@ export const adminRouter = router({
       },
     };
 
+    const gameFreshness = {
+      lastSnapshotAt: latestGameSnapshot?.snapshotAt?.toISOString() ?? null,
+      lastUpdatedAt: latestGameUpdate?.updatedAt?.toISOString() ?? null,
+      stale: latestGameSnapshot?.snapshotAt
+        ? now - latestGameSnapshot.snapshotAt.getTime() > 2 * 60 * 60 * 1000
+        : true,
+      gamesSnapshotted24h,
+      gamesMissingSnapshots,
+      gamesMissingEnrichment,
+    };
+
     return {
       db: { ok: dbOk },
       snapshotFreshness,
+      gameFreshness,
       staleCreators,
       oldestPendingClaim: oldestPendingClaim?.createdAt?.toISOString() ?? null,
     };

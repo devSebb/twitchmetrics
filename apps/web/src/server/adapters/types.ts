@@ -40,6 +40,34 @@ export type GameSnapshotData = {
   boxArtUrl: string | null;
 };
 
+export type GameCatalogData = {
+  platform: Platform;
+  platformGameId: string;
+  gameName: string;
+  boxArtUrl: string | null;
+  igdbId: number | null;
+};
+
+export type GameLiveStreamData = {
+  userId: string;
+  userName: string;
+  userLogin: string;
+  viewerCount: number;
+  language: string;
+  startedAt: string;
+  thumbnailUrl: string;
+};
+
+export type GameLiveStatsData = {
+  platform: Platform;
+  platformGameId: string;
+  snapshotAt: Date;
+  viewerCount: number;
+  channelCount: number;
+  streams: GameLiveStreamData[];
+  truncated: boolean;
+};
+
 export type SearchResult = {
   platform: Platform;
   platformUserId: string;
@@ -59,6 +87,11 @@ export interface PlatformAdapter {
   ): Promise<CreatorSnapshotData>;
   search(query: string, limit?: number): Promise<SearchResult[]>;
   fetchTopGames?(limit?: number): Promise<GameSnapshotData[]>;
+  fetchTopGamesCatalog?(limit?: number): Promise<GameCatalogData[]>;
+  fetchGameLiveStats?(
+    platformGameId: string,
+    options?: { maxPages?: number },
+  ): Promise<GameLiveStatsData>;
 }
 
 export type AdapterErrorCode =

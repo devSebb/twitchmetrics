@@ -17,19 +17,13 @@ type GameHeaderProps = {
   };
 };
 
-// Platform dot colors: Twitch, YouTube, Kick
-const PLATFORM_DOTS = ["#9146ff", "#ff0000", "#53fc18"];
-
-function PlatformDots() {
+function TwitchDot() {
   return (
     <div className="mt-1 flex gap-1">
-      {PLATFORM_DOTS.map((color) => (
-        <span
-          key={color}
-          className="inline-block h-2 w-2 rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      ))}
+      <span
+        className="inline-block h-2 w-2 rounded-full"
+        style={{ backgroundColor: "#9146ff" }}
+      />
     </div>
   );
 }
@@ -43,7 +37,7 @@ function LargeStatCard({ label, value }: { label: string; value: number }) {
       <span className="mt-1 text-2xl font-bold text-[#F2F3F5]">
         {formatNumber(value)}
       </span>
-      <PlatformDots />
+      <TwitchDot />
     </div>
   );
 }
@@ -57,7 +51,7 @@ function SmallStatCard({ label, value }: { label: string; value: number }) {
       <span className="mt-1 text-xl font-bold text-[#F2F3F5]">
         {formatNumber(value)}
       </span>
-      <PlatformDots />
+      <TwitchDot />
     </div>
   );
 }

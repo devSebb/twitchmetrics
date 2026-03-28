@@ -62,12 +62,12 @@ function ChannelRow({
         </p>
         {showViewerHours ? (
           <p className="text-xs text-[#949BA4]">
-            {formatNumber(Number(channel.viewerHours))} viewer hours
+            {formatNumber(Number(channel.viewerHours))} live viewer hours
           </p>
         ) : (
           <p className="text-xs text-[#949BA4]">
-            {formatNumber(channel.avgViewers)} avg viewers &middot;{" "}
-            {Math.round(channel.airtime / 3600)}h airtime
+            {formatNumber(channel.avgViewers)} current viewers &middot;{" "}
+            {Math.max(1, Math.round(channel.airtime / 3600))}h live
           </p>
         )}
       </div>
@@ -85,8 +85,8 @@ function ChannelRow({
 }
 
 export function GameTopChannels({ channels }: GameTopChannelsProps) {
-  const fastestGrowing = channels.filter(
-    (c) => c.category === "fastest_growing",
+  const emerging = channels.filter(
+    (c) => c.category === "emerging" || c.category === "fastest_growing",
   );
   const mostWatched = channels.filter((c) => c.category === "most_watched");
 
@@ -97,15 +97,15 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#F2F3F5]">
             <TrendUp size={16} weight="duotone" className="text-[#53fc18]" />
-            Fastest Growing Channels
+            Emerging Channels
           </h2>
-          <span className="text-xs text-[#949BA4]">Last 30 Days</span>
+          <span className="text-xs text-[#949BA4]">Live right now</span>
         </div>
         <div className="space-y-0.5">
-          {fastestGrowing.length === 0 ? (
+          {emerging.length === 0 ? (
             <p className="text-sm text-[#949BA4]">No data available</p>
           ) : (
-            fastestGrowing.map((ch) => (
+            emerging.map((ch) => (
               <ChannelRow key={ch.id} channel={ch} showViewerHours={false} />
             ))
           )}
@@ -123,7 +123,7 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
             />
             Most Watched Channels
           </h2>
-          <span className="text-xs text-[#949BA4]">Last 30 Days</span>
+          <span className="text-xs text-[#949BA4]">Current live sessions</span>
         </div>
         <div className="space-y-0.5">
           {mostWatched.length === 0 ? (

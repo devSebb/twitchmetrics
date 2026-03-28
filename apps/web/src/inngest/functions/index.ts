@@ -8,6 +8,7 @@ import { verifyChallenge } from "./claims/verify-challenge";
 import { refreshTokens } from "./tokens/refresh-tokens";
 import { enrichClaimedProfiles } from "./enrichment/enrich-claimed-profiles";
 import { enrichOnClaim } from "./enrichment/enrich-on-claim";
+import { enrichGames } from "./enrichment/enrich-games";
 import { discoverCreators } from "./discovery/discover-creators";
 import { discoverGames } from "./discovery/discover-games";
 import { discoverSocialLinks } from "./discovery/discover-social-links";
@@ -23,6 +24,7 @@ export const functions = [
   refreshTokens,
   enrichClaimedProfiles,
   enrichOnClaim,
+  enrichGames,
   discoverCreators,
   discoverGames,
   discoverSocialLinks,

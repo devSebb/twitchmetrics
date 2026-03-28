@@ -4,6 +4,8 @@ import {
   type PlatformAdapter,
   type CreatorProfileData,
   type CreatorSnapshotData,
+  type GameCatalogData,
+  type GameLiveStatsData,
   type GameSnapshotData,
   type SearchResult,
   AdapterError,
@@ -518,6 +520,16 @@ export type GameStreamData = {
   thumbnailUrl: string;
 };
 
+export type GameStreamCollection = {
+  streams: GameStreamData[];
+  truncated: boolean;
+};
+
+function resolveBoxArtUrl(boxArtUrl: string | null | undefined): string | null {
+  if (!boxArtUrl) return null;
+  return boxArtUrl.replace("{width}", "272").replace("{height}", "380");
+}
+
 /**
  * Fetch live streams for a game, paginating up to maxPages.
  * Uses GET /streams?game_id={id}&first=100
@@ -526,9 +538,18 @@ export async function fetchStreamsByGame(
   twitchGameId: string,
   maxPages: number = 5,
 ): Promise<GameStreamData[]> {
+  const result = await fetchStreamsByGameWithMeta(twitchGameId, maxPages);
+  return result.streams;
+}
+
+export async function fetchStreamsByGameWithMeta(
+  twitchGameId: string,
+  maxPages: number = 5,
+): Promise<GameStreamCollection> {
   return withRetry(async () => {
     const all: GameStreamData[] = [];
     let cursor: string | undefined;
+    let truncated = false;
 
     for (let page = 0; page < maxPages; page++) {
       const params: Record<string, string> = {
@@ -556,9 +577,12 @@ export async function fetchStreamsByGame(
 
       cursor = res.pagination?.cursor;
       if (!cursor || res.data.length === 0) break;
+      if (page === maxPages - 1) {
+        truncated = true;
+      }
     }
 
-    return all;
+    return { streams: all, truncated };
   });
 }
 
@@ -699,39 +723,85 @@ export const twitchAdapter: PlatformAdapter = {
     });
   },
 
-  async fetchTopGames(limit: number = 20): Promise<GameSnapshotData[]> {
+  async fetchTopGamesCatalog(limit: number = 20): Promise<GameCatalogData[]> {
     return withRetry(async () => {
-      const games = await helixFetch<PaginatedResponse<TwitchGame>>(
-        "/games/top",
-        { first: String(Math.min(limit, 100)) },
+      const all: GameCatalogData[] = [];
+      let cursor: string | undefined;
+
+      while (all.length < limit) {
+        const batchSize = Math.min(limit - all.length, 100);
+        const params: Record<string, string> = {
+          first: String(batchSize),
+        };
+        if (cursor) params.after = cursor;
+
+        const games = await helixFetch<PaginatedResponse<TwitchGame>>(
+          "/games/top",
+          params,
+        );
+
+        all.push(
+          ...games.data.map((game) => ({
+            platform: "twitch" as Platform,
+            platformGameId: game.id,
+            gameName: game.name,
+            boxArtUrl: resolveBoxArtUrl(game.box_art_url),
+            igdbId: game.igdb_id ? parseInt(game.igdb_id, 10) : null,
+          })),
+        );
+
+        cursor = games.pagination?.cursor;
+        if (!cursor || games.data.length === 0) break;
+      }
+
+      return all.slice(0, limit);
+    });
+  },
+
+  async fetchGameLiveStats(
+    platformGameId: string,
+    options?: { maxPages?: number },
+  ): Promise<GameLiveStatsData> {
+    return withRetry(async () => {
+      const snapshotAt = new Date();
+      const { streams, truncated } = await fetchStreamsByGameWithMeta(
+        platformGameId,
+        options?.maxPages ?? 5,
       );
 
+      return {
+        platform: "twitch" as Platform,
+        platformGameId,
+        snapshotAt,
+        viewerCount: streams.reduce(
+          (sum, stream) => sum + stream.viewerCount,
+          0,
+        ),
+        channelCount: streams.length,
+        streams,
+        truncated,
+      };
+    });
+  },
+
+  async fetchTopGames(limit: number = 20): Promise<GameSnapshotData[]> {
+    return withRetry(async () => {
+      const catalog = await twitchAdapter.fetchTopGamesCatalog!(limit);
+
       const snapshots: GameSnapshotData[] = [];
-      const now = new Date();
 
-      for (const game of games.data) {
-        // Fetch stream count for this game
-        const streams = await helixFetch<
-          PaginatedResponse<TwitchStream> & { pagination?: { cursor?: string } }
-        >("/streams", { game_id: game.id, first: "1" });
-
-        // Resolve the box_art_url template from the API (uses game ID, not name)
-        const boxArtUrl = game.box_art_url
-          ? game.box_art_url
-              .replace("{width}", "272")
-              .replace("{height}", "380")
-          : null;
-
-        // The total isn't available directly; we get viewer_count from first stream
-        // For accurate counts, we'd need to paginate — approximate with first page
+      for (const game of catalog) {
+        const liveStats = await twitchAdapter.fetchGameLiveStats!(
+          game.platformGameId,
+        );
         snapshots.push({
           platform: "twitch" as Platform,
-          platformGameId: game.id,
-          gameName: game.name,
-          snapshotAt: now,
-          viewerCount: streams.data[0]?.viewer_count ?? 0,
-          channelCount: streams.data.length, // Approximation from first page
-          boxArtUrl,
+          platformGameId: game.platformGameId,
+          gameName: game.gameName,
+          snapshotAt: liveStats.snapshotAt,
+          viewerCount: liveStats.viewerCount,
+          channelCount: liveStats.channelCount,
+          boxArtUrl: game.boxArtUrl,
         });
       }
 
