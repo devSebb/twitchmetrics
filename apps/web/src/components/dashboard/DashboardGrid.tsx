@@ -235,15 +235,8 @@ export function DashboardGrid({
           <StatsRow profile={profile} />,
         )}
 
-        {/* Row 2: Brand Partners (2/3) | Channel Audience (1/3) */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {renderGated(
-            "brand_partners",
-            enabledSet,
-            isClaimed,
-            <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
-            "lg:col-span-2",
-          )}
+        {/* Top widget cluster: dense packing prevents holes when cards are hidden */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-flow-dense lg:grid-cols-3">
           {renderGated(
             "demographics",
             enabledSet,
@@ -253,11 +246,14 @@ export function DashboardGrid({
               isClaimed={isClaimed}
               isOwner={isOwner}
             />,
+            "lg:col-span-2",
           )}
-        </div>
-
-        {/* Row 3: Popular Games (1/3) | Categories (1/3) | Last Streams (1/3) */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {renderGated(
+            "brand_partners",
+            enabledSet,
+            isClaimed,
+            <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
+          )}
           {renderGated(
             "popular_games",
             enabledSet,
@@ -265,13 +261,15 @@ export function DashboardGrid({
             <PopularGamesWidget profile={profile} />,
           )}
           <CategoriesSection />
-          {renderGated(
-            "recent_streams",
-            enabledSet,
-            isClaimed,
-            <RecentStreamsWidget profile={profile} />,
-          )}
         </div>
+
+        {/* Row 3: Recent Streams — full width */}
+        {renderGated(
+          "recent_streams",
+          enabledSet,
+          isClaimed,
+          <RecentStreamsWidget profile={profile} />,
+        )}
 
         {/* Row 4: Featured Clips — full width */}
         {renderGated(
@@ -309,7 +307,7 @@ export function DashboardGrid({
 
         {/* Row 8: Rates (1/2) | Brand Safety (1/2) */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <RatesSection />
+          {renderGated("rates", enabledSet, isClaimed, <RatesSection />)}
           {renderGated(
             "brand_safety",
             enabledSet,

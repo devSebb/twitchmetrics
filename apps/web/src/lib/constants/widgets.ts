@@ -15,6 +15,7 @@ import {
   ShareNetwork,
   Handshake,
   ShieldCheck,
+  CurrencyCircleDollar,
 } from "@phosphor-icons/react/dist/ssr";
 
 export type WidgetId =
@@ -27,7 +28,8 @@ export type WidgetId =
   | "recent_streams"
   | "featured_clips"
   | "brand_partners"
-  | "brand_safety";
+  | "brand_safety"
+  | "rates";
 
 export type WidgetAccess = "public" | "claimed" | "connected";
 
@@ -71,7 +73,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "connected",
-    colSpan: 1,
+    colSpan: 2,
     icon: UsersThree,
   },
   popular_games: {
@@ -132,7 +134,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P1",
     access: "claimed",
-    colSpan: 2,
+    colSpan: 1,
     icon: Handshake,
   },
   brand_safety: {
@@ -145,6 +147,16 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     colSpan: 1,
     icon: ShieldCheck,
   },
+  rates: {
+    id: "rates",
+    label: "Rates",
+    description: "Coming soon rates card for sponsorship pricing and packages",
+    defaultEnabled: false,
+    priority: "P2",
+    access: "claimed",
+    colSpan: 1,
+    icon: CurrencyCircleDollar,
+  },
 };
 
 /**
@@ -153,13 +165,14 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
  */
 export const WIDGET_ORDER: WidgetId[] = [
   "stats_row",
-  "brand_partners",
   "demographics",
+  "brand_partners",
   "popular_games",
   "recent_streams",
   "featured_clips",
   "follower_growth",
   "viewer_count",
+  "rates",
   "brand_safety",
   "platform_breakdown",
 ];
