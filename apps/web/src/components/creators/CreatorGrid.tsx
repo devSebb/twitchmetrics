@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CreatorCard } from "@/components/shared";
+import { cn } from "@/lib/utils";
 import type { Platform } from "@/lib/constants/platforms";
 
 type CreatorData = {
@@ -39,9 +40,21 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   const searchParams = useSearchParams();
   const platform = searchParams.get("platform") ?? "";
   const sort = searchParams.get("sort") ?? "followers";
-  const [page, setPage] = useState(1);
+  const pageParam = Number(searchParams.get("page") ?? "1");
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
   const isDefaultParams = page === 1 && !platform && sort === "followers";
+
+  function buildCreatorsUrl(nextPage: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextPage > 1) {
+      params.set("page", String(nextPage));
+    } else {
+      params.delete("page");
+    }
+    const next = params.toString();
+    return next ? `/creators?${next}` : "/creators";
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["creators", platform, sort, page],
@@ -93,23 +106,33 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
           {/* Pagination */}
           {meta.totalPages > 1 && (
             <div className="mt-8 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058] disabled:opacity-40 disabled:pointer-events-none"
+              <Link
+                href={buildCreatorsUrl(Math.max(1, page - 1))}
+                aria-disabled={page === 1}
+                className={cn(
+                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  page === 1
+                    ? "pointer-events-none bg-[#383A40] text-[#949BA4] opacity-40"
+                    : "bg-[#383A40] text-[#DBDEE1] hover:bg-[#4E5058]",
+                )}
               >
                 Previous
-              </button>
+              </Link>
               <span className="text-sm text-[#949BA4]">
                 Page {page} of {meta.totalPages}
               </span>
-              <button
-                onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))}
-                disabled={page === meta.totalPages}
-                className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058] disabled:opacity-40 disabled:pointer-events-none"
+              <Link
+                href={buildCreatorsUrl(Math.min(meta.totalPages, page + 1))}
+                aria-disabled={page === meta.totalPages}
+                className={cn(
+                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  page === meta.totalPages
+                    ? "pointer-events-none bg-[#383A40] text-[#949BA4] opacity-40"
+                    : "bg-[#383A40] text-[#DBDEE1] hover:bg-[#4E5058]",
+                )}
               >
                 Next
-              </button>
+              </Link>
             </div>
           )}
         </>
