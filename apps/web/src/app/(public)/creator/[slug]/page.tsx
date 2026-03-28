@@ -5,14 +5,8 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
-import {
-  CreatorHeader,
-  GrowthSection,
-  DemographicsSection,
-  BrandPartnerships,
-  PopularGamesSection,
-  FeaturedClipsSection,
-} from "@/components/creator";
+import { CreatorHeader } from "@/components/creator";
+import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -22,19 +16,52 @@ const getCreator = cache(async (slug: string) => {
   const creator = await db.creatorProfile.findUnique({
     where: { slug },
     include: {
-      platformAccounts: true,
+      platformAccounts: {
+        select: {
+          platform: true,
+          platformUsername: true,
+          platformUrl: true,
+          followerCount: true,
+          totalViews: true,
+          postCount: true,
+          lastSyncedAt: true,
+          isOAuthConnected: true,
+        },
+      },
       growthRollups: {
+        select: {
+          platform: true,
+          followerCount: true,
+          delta1d: true,
+          delta7d: true,
+          delta30d: true,
+          pct1d: true,
+          pct7d: true,
+          pct30d: true,
+          trendDirection: true,
+          acceleration: true,
+          computedAt: true,
+        },
         orderBy: { computedAt: "desc" },
       },
       brandPartnerships: {
         where: { isPublic: true },
+        select: {
+          id: true,
+          brandName: true,
+          brandLogoUrl: true,
+          campaignName: true,
+          startDate: true,
+          endDate: true,
+        },
         orderBy: { createdAt: "desc" },
+        take: 12,
       },
     },
   });
 
   if (!creator) return null;
-  return serializeBigInt(creator);
+  return creator;
 });
 
 export async function generateMetadata({
@@ -101,9 +128,9 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     notFound();
   }
 
-  const platforms = creator.platformAccounts.map((a) => a.platform);
+  const isClaimed = creator.state === "claimed" || creator.state === "premium";
 
-  // Serialize data for child components
+  // Data for CreatorHeader (card-style profile)
   const headerData = {
     id: creator.id,
     displayName: creator.displayName,
@@ -134,11 +161,8 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     })),
   };
 
-  const partnershipsData = creator.brandPartnerships.map((p) => ({
-    id: p.id,
-    brandName: p.brandName,
-    brandLogoUrl: p.brandLogoUrl,
-  }));
+  // Data for DashboardGrid (same shape as dashboard page)
+  const serialized = serializeBigInt(creator) as unknown as SerializedProfile;
 
   // Person JSON-LD for rich results
   const jsonLd = {
@@ -159,32 +183,22 @@ export default async function CreatorProfilePage({ params }: PageProps) {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <CreatorHeader creator={headerData} />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {/* Left column: demographics + partnerships */}
-        <div className="lg:col-span-1">
-          <BrandPartnerships partnerships={partnershipsData} />
-          <DemographicsSection state={creator.state} demographics={null} />
-        </div>
-
-        {/* Right column: games + clips */}
-        <div className="lg:col-span-2">
-          <PopularGamesSection creatorProfileId={creator.id} />
-          <FeaturedClipsSection creatorProfileId={creator.id} />
-        </div>
+      <div className="mt-6">
+        <DashboardGrid
+          profile={serialized}
+          widgetConfig={creator.widgetConfig}
+          isClaimed={isClaimed}
+          isOwner={false}
+          showProfileHeader={false}
+        />
       </div>
-
-      <GrowthSection
-        slug={creator.slug}
-        platforms={platforms}
-        initialPlatform={creator.primaryPlatform}
-      />
     </div>
   );
 }

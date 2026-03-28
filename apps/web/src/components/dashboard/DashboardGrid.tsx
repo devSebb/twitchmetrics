@@ -85,6 +85,7 @@ type DashboardGridProps = {
   widgetConfig: unknown;
   isClaimed: boolean;
   isOwner: boolean;
+  showProfileHeader?: boolean;
 };
 
 // ----------------------------------------------------------------
@@ -178,6 +179,7 @@ export function DashboardGrid({
   widgetConfig,
   isClaimed,
   isOwner,
+  showProfileHeader = true,
 }: DashboardGridProps) {
   const [enabledWidgets, setEnabledWidgets] = useState<WidgetId[]>(() =>
     getEnabledWidgets(widgetConfig),
@@ -192,8 +194,10 @@ export function DashboardGrid({
 
   return (
     <div>
-      {/* Profile Header — full bleed */}
-      <DashboardProfileHeader profile={profile} isOwner={isOwner} />
+      {/* Profile Header — full bleed (hidden when public page supplies its own) */}
+      {showProfileHeader && (
+        <DashboardProfileHeader profile={profile} isOwner={isOwner} />
+      )}
 
       {/* Content area */}
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
@@ -244,7 +248,11 @@ export function DashboardGrid({
             "demographics",
             enabledSet,
             isClaimed,
-            <DemographicsWidget profile={profile} isClaimed={isClaimed} />,
+            <DemographicsWidget
+              profile={profile}
+              isClaimed={isClaimed}
+              isOwner={isOwner}
+            />,
           )}
         </div>
 

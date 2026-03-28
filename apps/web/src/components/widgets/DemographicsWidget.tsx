@@ -204,11 +204,13 @@ function buildCountryChart(
 type DemographicsWidgetProps = {
   profile: SerializedProfile;
   isClaimed: boolean;
+  isOwner?: boolean;
 };
 
 export function DemographicsWidget({
   profile,
   isClaimed,
+  isOwner = true,
 }: DemographicsWidgetProps) {
   // Check if any connected account has OAuth
   const hasOAuth = profile.platformAccounts.some((a) => a.isOAuthConnected);
@@ -221,6 +223,18 @@ export function DemographicsWidget({
         message="Claim your profile to unlock audience insights."
         actionLabel="Claim Profile"
         actionHref="/dashboard/claim"
+        compact
+      />
+    );
+  }
+
+  // Non-owners can't access the demographics tRPC call (it's auth-gated)
+  if (!isOwner) {
+    return (
+      <EmptyState
+        variant="no_data"
+        title="Audience Demographics"
+        message="Audience demographics are managed by the creator."
         compact
       />
     );
