@@ -60,8 +60,23 @@ export default async function DashboardPage() {
   });
 
   if (!profile) {
-    console.log("[dashboard] No profile found for userId:", session.user.id);
-    redirect("/dashboard/claim");
+    // Talent managers and users without profiles should go to home
+    if (session.user.role !== "creator") {
+      redirect("/dashboard/home");
+    }
+    // Safety net: shouldn't happen after onboarding, but create on-the-fly
+    const created = await prisma.creatorProfile.create({
+      data: {
+        userId: session.user.id,
+        slug: `user-${session.user.id}`,
+        displayName: session.user.name ?? "Creator",
+        primaryPlatform: "twitch",
+        state: "claimed",
+        claimedAt: new Date(),
+      },
+    });
+    // Redirect to self to re-render with the new profile
+    redirect(`/dashboard?_created=${created.id}`);
   }
 
   const isClaimed = profile.state === "claimed" || profile.state === "premium";

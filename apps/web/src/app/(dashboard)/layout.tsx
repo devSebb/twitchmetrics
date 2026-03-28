@@ -12,7 +12,7 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  if (!session.user.name) {
+  if (!session.user.hasCompletedOnboarding) {
     redirect("/onboarding");
   }
 

@@ -174,8 +174,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = (user as { role: string }).role;
         token.suspended = (user as { suspended?: boolean }).suspended ?? false;
+        token.hasCompletedOnboarding =
+          (user as { hasCompletedOnboarding?: boolean })
+            .hasCompletedOnboarding ?? false;
         token.roleRefreshedAt = Date.now();
       }
+
+      // Fast-path: when onboarding is not yet completed, check DB every request
+      // so the redirect stops immediately after onboarding completes
+      if (token.hasCompletedOnboarding === false && token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, suspended: true, hasCompletedOnboarding: true },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.suspended = dbUser.suspended;
+          token.hasCompletedOnboarding = dbUser.hasCompletedOnboarding;
+          token.roleRefreshedAt = Date.now();
+        }
+        return token;
+      }
+
       const ROLE_REFRESH_INTERVAL = 5 * 60 * 1000;
       if (
         Date.now() - ((token.roleRefreshedAt as number) ?? 0) >
@@ -184,11 +204,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       ) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true, suspended: true },
+          select: { role: true, suspended: true, hasCompletedOnboarding: true },
         });
         if (dbUser) {
           token.role = dbUser.role;
           token.suspended = dbUser.suspended;
+          token.hasCompletedOnboarding = dbUser.hasCompletedOnboarding;
           token.roleRefreshedAt = Date.now();
         }
       }
@@ -200,13 +221,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = (token.role as string) ?? "creator";
         (session.user as { suspended?: boolean }).suspended =
           (token.suspended as boolean) ?? false;
+        session.user.hasCompletedOnboarding =
+          (token.hasCompletedOnboarding as boolean) ?? false;
       }
       return session;
     },
     signIn: async ({ user, account, profile }) => {
       if (!account || !user.id) {
-        if (!user.name || user.name.trim().length === 0) {
-          return "/onboarding";
+        // Credentials login — check DB for onboarding status
+        if (user.id) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { hasCompletedOnboarding: true },
+          });
+          if (!dbUser?.hasCompletedOnboarding) {
+            return "/onboarding";
+          }
         }
         return true;
       }
@@ -229,7 +259,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
       }
 
-      if (!user.name || user.name.trim().length === 0) {
+      // OAuth login — check DB for onboarding status
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { hasCompletedOnboarding: true },
+      });
+      if (!dbUser?.hasCompletedOnboarding) {
         return "/onboarding";
       }
       return true;

@@ -69,8 +69,9 @@ model User {
   name          String?
   image         String?
   role          UserRole  @default(creator)
-  suspended     Boolean   @default(false)
-  createdAt     DateTime  @default(now())
+  suspended              Boolean   @default(false)
+  hasCompletedOnboarding Boolean   @default(false)
+  createdAt              DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   accounts        Account[]

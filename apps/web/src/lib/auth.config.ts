@@ -19,6 +19,9 @@ export const authConfig = {
       if (token.suspended !== undefined)
         (session.user as unknown as Record<string, unknown>).suspended =
           token.suspended;
+      (
+        session.user as unknown as Record<string, unknown>
+      ).hasCompletedOnboarding = token.hasCompletedOnboarding ?? false;
       return session;
     },
   },

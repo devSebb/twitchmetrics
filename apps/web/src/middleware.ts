@@ -18,6 +18,24 @@ export default auth((request) => {
     return NextResponse.redirect(loginUrl);
   }
 
+  const hasCompletedOnboarding =
+    (request.auth.user as { hasCompletedOnboarding?: boolean } | undefined)
+      ?.hasCompletedOnboarding ?? false;
+
+  // Onboarding guard: redirect to /onboarding if not completed
+  if (pathname.startsWith("/dashboard") && !hasCompletedOnboarding) {
+    return NextResponse.redirect(
+      new URL("/onboarding", request.nextUrl.origin),
+    );
+  }
+
+  // If already onboarded and hitting /onboarding, redirect to dashboard
+  if (pathname === "/onboarding" && hasCompletedOnboarding) {
+    return NextResponse.redirect(
+      new URL("/dashboard/home", request.nextUrl.origin),
+    );
+  }
+
   // Admin route protection at Edge level
   if (pathname.startsWith("/dashboard/admin")) {
     const role = (request.auth.user as { role?: string } | undefined)?.role;
@@ -34,6 +52,7 @@ export default auth((request) => {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/onboarding",
     "/home",
     "/analytics",
     "/claim",

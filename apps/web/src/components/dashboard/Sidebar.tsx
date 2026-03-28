@@ -62,23 +62,13 @@ function getNavItems(
     ];
   }
 
-  const creatorItems: NavItem[] = [
+  return [
     { label: "Dashboard", href: "/dashboard" },
     { label: "Home", href: "/dashboard/home" },
     { label: "Analytics", href: "/dashboard/analytics" },
     { label: "Connected Platforms", href: "/dashboard/connections" },
     { label: "Settings", href: "/dashboard/settings" },
   ];
-  if (
-    !creatorProfile ||
-    (creatorProfile.state !== "claimed" && creatorProfile.state !== "premium")
-  ) {
-    creatorItems.splice(3, 0, {
-      label: "Claim Profile",
-      href: "/dashboard/claim",
-    });
-  }
-  return creatorItems;
 }
 
 export function Sidebar({ user, creatorProfile }: SidebarProps) {

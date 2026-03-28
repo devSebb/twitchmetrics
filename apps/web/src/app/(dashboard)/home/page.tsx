@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
-import { ClaimCTA, CreatorQuickStats } from "@/components/dashboard";
+import { CreatorQuickStats } from "@/components/dashboard";
 import { Card } from "@/components/ui";
 import { getSession } from "@/server/auth-cache";
 
@@ -191,19 +191,48 @@ export default async function DashboardHomePage() {
   const isClaimed =
     creatorProfile?.state === "claimed" || creatorProfile?.state === "premium";
 
-  if (!creatorProfile || !isClaimed) {
+  if (
+    !creatorProfile ||
+    !isClaimed ||
+    creatorProfile.platformAccounts.length === 0
+  ) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-3xl font-bold text-[#F2F3F5]">
-            Welcome back, {user?.name ?? "Creator"}
+            Welcome, {user?.name ?? "Creator"}
           </h1>
           <p className="mt-1 text-sm text-[#949BA4]">
-            Get started by claiming your creator profile to unlock analytics and
-            tools.
+            Connect your streaming platforms to start tracking your growth.
           </p>
         </div>
-        <ClaimCTA />
+        <Card>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-[#F2F3F5]">
+                Get started
+              </h2>
+              <p className="mt-1 text-sm text-[#949BA4]">
+                Link your Twitch, YouTube, or other accounts to begin importing
+                your channel data and analytics.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Link
+                href="/dashboard/connections"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#E32C19] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
+              >
+                Connect platforms
+              </Link>
+              <Link
+                href="/dashboard/claim"
+                className="inline-flex items-center gap-2 rounded-lg border border-[#3F4147] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
+              >
+                Claim existing profile
+              </Link>
+            </div>
+          </div>
+        </Card>
       </div>
     );
   }

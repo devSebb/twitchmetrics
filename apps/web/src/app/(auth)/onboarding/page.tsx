@@ -8,7 +8,7 @@ export default async function OnboardingPage() {
     redirect("/login");
   }
 
-  if (session.user.name && session.user.name.trim().length > 0) {
+  if (session.user.hasCompletedOnboarding) {
     redirect("/dashboard/home");
   }
 

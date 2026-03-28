@@ -137,6 +137,8 @@ export async function connectPlatform(
         displayName: "My Creator Profile",
         slug: `user-${input.userId}`,
         primaryPlatform: platform,
+        state: "claimed",
+        claimedAt: new Date(),
       },
     }));
 

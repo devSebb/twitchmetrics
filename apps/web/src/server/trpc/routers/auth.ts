@@ -15,6 +15,7 @@ export const authRouter = router({
         name: true,
         role: true,
         image: true,
+        hasCompletedOnboarding: true,
         createdAt: true,
       },
     });
@@ -123,13 +124,13 @@ export const authRouter = router({
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.prisma.user.findUnique({
         where: { id: ctx.user.id },
-        select: { id: true, name: true },
+        select: { id: true, hasCompletedOnboarding: true },
       });
       if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
       }
 
-      if (user.name && user.name.trim().length > 0) {
+      if (user.hasCompletedOnboarding) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Role can only be changed during onboarding.",
@@ -152,12 +153,70 @@ export const authRouter = router({
     }),
 
   completeOnboarding: protectedProcedure
-    .input(z.object({ name: z.string().trim().min(1).max(50) }))
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(50),
+        role: z.enum(["creator", "talent_manager"]),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      return ctx.prisma.user.update({
-        where: { id: ctx.user.id },
-        data: { name: input.name },
-        select: { id: true, name: true, role: true },
+      const result = await ctx.prisma.$transaction(async (tx) => {
+        const updatedUser = await tx.user.update({
+          where: { id: ctx.user.id },
+          data: {
+            name: input.name,
+            role: input.role,
+            hasCompletedOnboarding: true,
+          },
+          select: { id: true, name: true, role: true },
+        });
+
+        const existingProfile = await tx.creatorProfile.findUnique({
+          where: { userId: ctx.user.id },
+          select: { id: true },
+        });
+
+        if (input.role === "creator") {
+          if (existingProfile) {
+            await tx.creatorProfile.update({
+              where: { id: existingProfile.id },
+              data: {
+                state: "claimed",
+                displayName: input.name,
+                claimedAt: new Date(),
+              },
+            });
+          } else {
+            await tx.creatorProfile.create({
+              data: {
+                userId: ctx.user.id,
+                slug: `user-${ctx.user.id}`,
+                displayName: input.name,
+                primaryPlatform: "twitch",
+                state: "claimed",
+                claimedAt: new Date(),
+              },
+            });
+          }
+        } else if (existingProfile) {
+          // Clean up auto-created profile from OAuth signIn (e.g. talent managers)
+          await tx.platformAccount.deleteMany({
+            where: { creatorProfileId: existingProfile.id },
+          });
+          await tx.creatorProfile.delete({
+            where: { id: existingProfile.id },
+          });
+        }
+
+        return updatedUser;
       });
+
+      logAudit({
+        userId: ctx.user.id,
+        action: "auth.completeOnboarding",
+        metadata: { role: input.role },
+      });
+
+      return result;
     }),
 });
