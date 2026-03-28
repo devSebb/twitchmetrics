@@ -342,6 +342,160 @@ export const snapshotRouter = router({
       }
     }),
 
+  getStreamingStats: publicProcedure
+    .input(
+      z.object({
+        creatorProfileId: z.string().uuid(),
+        period: z.enum(["30d", "3m", "6m", "1y"]).default("30d"),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const periodDays: Record<string, number> = {
+        "30d": 30,
+        "3m": 90,
+        "6m": 180,
+        "1y": 365,
+      };
+      const days = periodDays[input.period] ?? 30;
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const now = new Date();
+
+      // Fetch snapshots with extendedMetrics for viewer stats
+      const snapshots = await ctx.prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          snapshotAt: { gte: since },
+        },
+        select: {
+          platform: true,
+          snapshotAt: true,
+          followerCount: true,
+          extendedMetrics: true,
+        },
+        orderBy: { snapshotAt: "asc" },
+      });
+
+      // Extract viewer stats from extendedMetrics
+      let peakViewers: number | null = null;
+      const viewerValues: number[] = [];
+      const platformsWithViewerData = new Set<Platform>();
+
+      for (const snap of snapshots) {
+        const ext = snap.extendedMetrics as Record<string, unknown> | null;
+        if (!ext) continue;
+
+        const peak =
+          typeof ext.PEAK_VIEWERS === "number"
+            ? ext.PEAK_VIEWERS
+            : typeof ext.LIVE_VIEWER_COUNT === "number"
+              ? ext.LIVE_VIEWER_COUNT
+              : null;
+
+        if (peak !== null) {
+          if (peakViewers === null || peak > peakViewers) peakViewers = peak;
+          platformsWithViewerData.add(snap.platform);
+        }
+
+        const avg =
+          typeof ext.AVG_VIEWERS === "number"
+            ? ext.AVG_VIEWERS
+            : typeof ext.LIVE_VIEWER_COUNT === "number"
+              ? ext.LIVE_VIEWER_COUNT
+              : null;
+
+        if (avg !== null && avg > 0) {
+          viewerValues.push(avg);
+        }
+      }
+
+      const avgViewers =
+        viewerValues.length > 0
+          ? Math.round(
+              viewerValues.reduce((a, b) => a + b, 0) / viewerValues.length,
+            )
+          : null;
+
+      // Followers gain: per-platform first/last followerCount diff
+      const platformFirstLast = new Map<
+        Platform,
+        { first: bigint | null; last: bigint | null }
+      >();
+
+      for (const snap of snapshots) {
+        if (snap.followerCount === null) continue;
+        const existing = platformFirstLast.get(snap.platform);
+        if (!existing) {
+          platformFirstLast.set(snap.platform, {
+            first: snap.followerCount,
+            last: snap.followerCount,
+          });
+        } else {
+          existing.last = snap.followerCount;
+        }
+      }
+
+      let followersGain = 0;
+      const platformsWithFollowerData: Platform[] = [];
+      for (const [platform, { first, last }] of platformFirstLast) {
+        if (first !== null && last !== null) {
+          followersGain += Number(last - first);
+          platformsWithFollowerData.push(platform);
+        }
+      }
+
+      // Airtime from Twitch Videos API
+      let airTimeSeconds: number | null = null;
+      let avgAirTimeSeconds: number | null = null;
+      let streamCount = 0;
+
+      try {
+        const twitchAccount = await ctx.prisma.platformAccount.findFirst({
+          where: {
+            creatorProfileId: input.creatorProfileId,
+            platform: "twitch",
+          },
+          select: { platformUserId: true },
+        });
+
+        if (twitchAccount) {
+          const { fetchVideos } = await import("@/server/adapters/twitch");
+          const videos = await fetchVideos(twitchAccount.platformUserId, {
+            startedAfter: since,
+            limit: 200,
+          });
+
+          if (videos.length > 0) {
+            streamCount = videos.length;
+            airTimeSeconds = videos.reduce(
+              (sum, v) => sum + v.durationSeconds,
+              0,
+            );
+            avgAirTimeSeconds = Math.round(airTimeSeconds / streamCount);
+          }
+        }
+      } catch {
+        // Twitch API unavailable — airtime fields stay null
+      }
+
+      // Determine which platforms are represented
+      const allPlatforms = new Set<Platform>([
+        ...platformsWithViewerData,
+        ...platformsWithFollowerData,
+      ]);
+
+      return {
+        airTimeSeconds,
+        avgAirTimeSeconds,
+        streamCount,
+        peakViewers,
+        avgViewers,
+        followersGain,
+        periodStart: since.toISOString(),
+        periodEnd: now.toISOString(),
+        platforms: [...allPlatforms] as Platform[],
+      };
+    }),
+
   triggerManualSnapshot: adminProcedure
     .input(
       z.object({

@@ -134,3 +134,18 @@ export function formatDelta(
 
   return { value, percent, direction };
 }
+
+/**
+ * Parse a Twitch duration string into total seconds.
+ * "3h21m10s" → 12070, "45m" → 2700, "10s" → 10
+ */
+export function parseTwitchDuration(duration: string): number {
+  let total = 0;
+  const h = duration.match(/(\d+)h/);
+  const m = duration.match(/(\d+)m/);
+  const s = duration.match(/(\d+)s/);
+  if (h?.[1]) total += parseInt(h[1], 10) * 3600;
+  if (m?.[1]) total += parseInt(m[1], 10) * 60;
+  if (s?.[1]) total += parseInt(s[1], 10);
+  return total;
+}

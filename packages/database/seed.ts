@@ -505,9 +505,9 @@ const DEV_BRAND_PARTNERS = [
 ];
 
 const DEV_EXTENDED_METRICS = {
-  avg_viewers: 12450,
-  peak_viewers: 89200,
-  live_viewer_count: 15300,
+  AVG_VIEWERS: 12450,
+  PEAK_VIEWERS: 89200,
+  LIVE_VIEWER_COUNT: 15300,
   hours_streamed: 186,
   avg_stream_duration_hours: 6.2,
   subscriber_count: 24500,
@@ -849,15 +849,15 @@ async function main() {
           ? {
               ...DEV_EXTENDED_METRICS,
               // Vary viewer counts slightly per day
-              avg_viewers: Math.floor(
-                DEV_EXTENDED_METRICS.avg_viewers * (0.8 + Math.random() * 0.4),
+              AVG_VIEWERS: Math.floor(
+                DEV_EXTENDED_METRICS.AVG_VIEWERS * (0.8 + Math.random() * 0.4),
               ),
-              peak_viewers: Math.floor(
-                DEV_EXTENDED_METRICS.peak_viewers * (0.7 + Math.random() * 0.6),
+              PEAK_VIEWERS: Math.floor(
+                DEV_EXTENDED_METRICS.PEAK_VIEWERS * (0.7 + Math.random() * 0.6),
               ),
-              live_viewer_count:
+              LIVE_VIEWER_COUNT:
                 dayIdx === DAYS - 1
-                  ? DEV_EXTENDED_METRICS.live_viewer_count
+                  ? DEV_EXTENDED_METRICS.LIVE_VIEWER_COUNT
                   : 0,
             }
           : undefined;

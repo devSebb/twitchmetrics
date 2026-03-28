@@ -247,6 +247,25 @@ type TwitchClip = {
   duration: number;
 };
 
+type TwitchVideo = {
+  id: string;
+  stream_id: string;
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  title: string;
+  description: string;
+  created_at: string;
+  published_at: string;
+  url: string;
+  thumbnail_url: string;
+  viewable: string;
+  view_count: number;
+  language: string;
+  type: string;
+  duration: string;
+};
+
 type TwitchSearchChannel = {
   id: string;
   broadcaster_login: string;
@@ -411,6 +430,81 @@ export async function fetchClipsByGame(
       url: clip.url,
       duration: clip.duration,
     }));
+  });
+}
+
+export type VideoData = {
+  id: string;
+  title: string;
+  createdAt: string;
+  durationSeconds: number;
+  viewCount: number;
+  url: string;
+  thumbnailUrl: string;
+};
+
+function parseTwitchDuration(duration: string): number {
+  let total = 0;
+  const h = duration.match(/(\d+)h/);
+  const m = duration.match(/(\d+)m/);
+  const s = duration.match(/(\d+)s/);
+  if (h?.[1]) total += parseInt(h[1], 10) * 3600;
+  if (m?.[1]) total += parseInt(m[1], 10) * 60;
+  if (s?.[1]) total += parseInt(s[1], 10);
+  return total;
+}
+
+/**
+ * Fetch VODs (archive videos) for a broadcaster.
+ * Uses GET /videos?user_id={id}&type=archive
+ */
+export async function fetchVideos(
+  broadcasterId: string,
+  options?: { startedAfter?: Date; limit?: number },
+): Promise<VideoData[]> {
+  const limit = options?.limit ?? 100;
+  return withRetry(async () => {
+    const all: VideoData[] = [];
+    let cursor: string | undefined;
+    const maxPages = Math.ceil(limit / 100);
+
+    for (let page = 0; page < maxPages; page++) {
+      const params: Record<string, string> = {
+        user_id: broadcasterId,
+        type: "archive",
+        first: String(Math.min(limit - all.length, 100)),
+      };
+      if (cursor) params.after = cursor;
+
+      const res = await helixFetch<PaginatedResponse<TwitchVideo>>(
+        "/videos",
+        params,
+      );
+
+      for (const v of res.data) {
+        const createdAt = v.created_at;
+        if (
+          options?.startedAfter &&
+          new Date(createdAt) < options.startedAfter
+        ) {
+          continue;
+        }
+        all.push({
+          id: v.id,
+          title: v.title,
+          createdAt,
+          durationSeconds: parseTwitchDuration(v.duration),
+          viewCount: v.view_count,
+          url: v.url,
+          thumbnailUrl: v.thumbnail_url,
+        });
+      }
+
+      cursor = res.pagination?.cursor;
+      if (!cursor || res.data.length === 0 || all.length >= limit) break;
+    }
+
+    return all.slice(0, limit);
   });
 }
 
