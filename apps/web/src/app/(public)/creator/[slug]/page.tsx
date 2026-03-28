@@ -188,7 +188,9 @@ export default async function CreatorProfilePage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <CreatorHeader creator={headerData} />
+      <div className="px-4 sm:px-6">
+        <CreatorHeader creator={headerData} />
+      </div>
 
       <div className="mt-6">
         <DashboardGrid
