@@ -9,21 +9,27 @@ type SocialLoginButtonsProps = {
   mode?: "login" | "register";
 };
 
+/** Login/register only — order matches brand row (X → YouTube → Twitch). */
 const PROVIDERS = [
   {
-    provider: "twitch",
-    label: "Twitch",
-    iconSrc: "/platform-icons/twitch.png",
+    provider: "twitter",
+    label: "X",
+    iconSrc: "/platform-icons/x.png",
+    ringClass: "border-[#E8EAED] hover:border-white hover:bg-white/[0.04]",
   },
   {
     provider: "google",
     label: "YouTube",
     iconSrc: "/platform-icons/youtube.png",
+    ringClass:
+      "border-[#FF0000] hover:border-[#ff3333] hover:bg-[#FF0000]/[0.06]",
   },
   {
-    provider: "twitter",
-    label: "X",
-    iconSrc: "/platform-icons/x.png",
+    provider: "twitch",
+    label: "Twitch",
+    iconSrc: "/platform-icons/twitch.png",
+    ringClass:
+      "border-[#9146FF] hover:border-[#a970ff] hover:bg-[#9146FF]/[0.08]",
   },
 ] as const;
 
@@ -34,11 +40,14 @@ export function SocialLoginButtons({
   const heading = mode === "register" ? "Sign up with" : "Sign in with";
 
   return (
-    <div className="space-y-3 text-left">
+    <div className="space-y-4">
       <p className="text-center text-xs uppercase tracking-[0.16em] text-[#949BA4]">
         {heading}
       </p>
-      <ul className="space-y-2" role="list">
+      <ul
+        className="m-0 flex list-none flex-wrap items-start justify-center gap-x-8 gap-y-5 p-0 sm:gap-x-10"
+        role="list"
+      >
         {PROVIDERS.map((item) => (
           <li key={item.provider}>
             <button
@@ -46,21 +55,27 @@ export function SocialLoginButtons({
               onClick={() => signIn(item.provider, { callbackUrl })}
               aria-label={`${heading} ${item.label}`}
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg border border-[#3F4147] bg-[#2B2D31] px-4 py-3 text-left transition-colors",
-                "hover:border-[#4E5058] hover:bg-[#383A40]",
+                "flex flex-col items-center gap-2 rounded-xl px-1 pt-1 pb-0.5 transition-transform",
+                "hover:scale-[1.03] active:scale-[0.98]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#313338]",
-                "active:bg-[#3F4147]",
               )}
             >
-              <Image
-                src={item.iconSrc}
-                alt=""
-                width={24}
-                height={24}
-                className="h-6 w-6 flex-shrink-0 object-contain"
-                aria-hidden
-              />
-              <span className="text-sm font-semibold text-[#F2F3F5]">
+              <span
+                className={cn(
+                  "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-2 bg-transparent transition-colors",
+                  item.ringClass,
+                )}
+              >
+                <Image
+                  src={item.iconSrc}
+                  alt=""
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 object-contain"
+                  aria-hidden
+                />
+              </span>
+              <span className="text-center text-sm font-bold tracking-tight text-[#F2F3F5]">
                 {item.label}
               </span>
             </button>
