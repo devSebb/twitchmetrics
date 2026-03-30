@@ -22,7 +22,7 @@
 
 > **Note:** The old plan referenced AWS (ECS Fargate, ECR, ALB, Route 53) and Supabase PostgreSQL. These are no longer the deployment targets. AWS and Supabase PostgreSQL are **not needed**. Supabase Realtime remains a future option if realtime push is added.
 
----
+`---
 
 ## Priority Order — Register These First
 

@@ -496,6 +496,31 @@ model CreatorGrowthRollup {
   @@index([delta7d(sort: Desc)])
 }
 
+model IngestionRun {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain         String
+  scope          String
+  jobType        String
+  platform       String?
+  status         String
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  recordsScanned Int      @default(0)
+  recordsWritten Int      @default(0)
+  recordsSkipped Int      @default(0)
+  recordsFailed  Int      @default(0)
+  partialCount   Int      @default(0)
+  quotaUsed      Int?
+  errorSummary   String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([jobType, startedAt(sort: Desc)])
+  @@index([domain, scope, startedAt(sort: Desc)])
+  @@index([platform, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+}
+
 // ============================================================
 // AUDIT LOG
 // ============================================================

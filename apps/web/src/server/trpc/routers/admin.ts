@@ -4,6 +4,10 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure } from "../middleware";
 import { router } from "../root";
 import { logAudit } from "@/server/services/audit";
+import {
+  CREATOR_SNAPSHOT_INTERVAL_MS,
+  GAME_SNAPSHOT_STALE_MS,
+} from "@/server/services/ingestion/constants";
 
 export const adminRouter = router({
   getClaimQueue: adminProcedure
@@ -556,40 +560,48 @@ export const adminRouter = router({
       dbOk = false;
     }
 
-    const tier1Interval = 15 * 60 * 1000;
-    const tier2Interval = 60 * 60 * 1000;
-    const tier3Interval = 6 * 60 * 60 * 1000;
-
     const [
-      tier1Last,
-      tier2Last,
-      tier3Last,
+      tier1LastRun,
+      tier2LastRun,
+      tier3LastRun,
       staleCreators,
       oldestPendingClaim,
-      latestGameSnapshot,
+      latestGameSnapshotRun,
       latestGameUpdate,
       gamesSnapshotted24h,
       gamesMissingSnapshots,
       gamesMissingEnrichment,
     ] = await Promise.all([
-      ctx.prisma.creatorProfile.findFirst({
-        where: { snapshotTier: "tier1" },
-        orderBy: { lastSnapshotAt: "desc" },
-        select: { lastSnapshotAt: true },
+      ctx.prisma.ingestionRun.findFirst({
+        where: {
+          jobType: "tier1-snapshot",
+          status: "completed",
+        },
+        orderBy: { startedAt: "desc" },
+        select: { startedAt: true, finishedAt: true },
       }),
-      ctx.prisma.creatorProfile.findFirst({
-        where: { snapshotTier: "tier2" },
-        orderBy: { lastSnapshotAt: "desc" },
-        select: { lastSnapshotAt: true },
+      ctx.prisma.ingestionRun.findFirst({
+        where: {
+          jobType: "tier2-snapshot",
+          status: "completed",
+        },
+        orderBy: { startedAt: "desc" },
+        select: { startedAt: true, finishedAt: true },
       }),
-      ctx.prisma.creatorProfile.findFirst({
-        where: { snapshotTier: "tier3" },
-        orderBy: { lastSnapshotAt: "desc" },
-        select: { lastSnapshotAt: true },
+      ctx.prisma.ingestionRun.findFirst({
+        where: {
+          jobType: "tier3-snapshot",
+          status: "completed",
+        },
+        orderBy: { startedAt: "desc" },
+        select: { startedAt: true, finishedAt: true },
       }),
       ctx.prisma.creatorProfile.count({
         where: {
-          lastSnapshotAt: { lt: new Date(now - 24 * 60 * 60 * 1000) },
+          OR: [
+            { lastSnapshotAt: null },
+            { lastSnapshotAt: { lt: new Date(now - 24 * 60 * 60 * 1000) } },
+          ],
         },
       }),
       ctx.prisma.claimRequest.findFirst({
@@ -597,9 +609,13 @@ export const adminRouter = router({
         orderBy: { createdAt: "asc" },
         select: { createdAt: true },
       }),
-      ctx.prisma.gameViewerSnapshot.findFirst({
-        orderBy: { snapshotAt: "desc" },
-        select: { snapshotAt: true },
+      ctx.prisma.ingestionRun.findFirst({
+        where: {
+          jobType: "game-snapshot",
+          status: "completed",
+        },
+        orderBy: { startedAt: "desc" },
+        select: { startedAt: true, finishedAt: true },
       }),
       ctx.prisma.game.findFirst({
         orderBy: { updatedAt: "desc" },
@@ -629,30 +645,46 @@ export const adminRouter = router({
 
     const snapshotFreshness = {
       tier1: {
-        lastAt: tier1Last?.lastSnapshotAt?.toISOString() ?? null,
-        stale: tier1Last?.lastSnapshotAt
-          ? now - tier1Last.lastSnapshotAt.getTime() > tier1Interval * 2
+        lastAt:
+          tier1LastRun?.finishedAt?.toISOString() ??
+          tier1LastRun?.startedAt?.toISOString() ??
+          null,
+        stale: tier1LastRun?.startedAt
+          ? now - tier1LastRun.startedAt.getTime() >
+            CREATOR_SNAPSHOT_INTERVAL_MS.tier1 * 2
           : true,
       },
       tier2: {
-        lastAt: tier2Last?.lastSnapshotAt?.toISOString() ?? null,
-        stale: tier2Last?.lastSnapshotAt
-          ? now - tier2Last.lastSnapshotAt.getTime() > tier2Interval * 2
+        lastAt:
+          tier2LastRun?.finishedAt?.toISOString() ??
+          tier2LastRun?.startedAt?.toISOString() ??
+          null,
+        stale: tier2LastRun?.startedAt
+          ? now - tier2LastRun.startedAt.getTime() >
+            CREATOR_SNAPSHOT_INTERVAL_MS.tier2 * 2
           : true,
       },
       tier3: {
-        lastAt: tier3Last?.lastSnapshotAt?.toISOString() ?? null,
-        stale: tier3Last?.lastSnapshotAt
-          ? now - tier3Last.lastSnapshotAt.getTime() > tier3Interval * 2
+        lastAt:
+          tier3LastRun?.finishedAt?.toISOString() ??
+          tier3LastRun?.startedAt?.toISOString() ??
+          null,
+        stale: tier3LastRun?.startedAt
+          ? now - tier3LastRun.startedAt.getTime() >
+            CREATOR_SNAPSHOT_INTERVAL_MS.tier3 * 2
           : true,
       },
     };
 
     const gameFreshness = {
-      lastSnapshotAt: latestGameSnapshot?.snapshotAt?.toISOString() ?? null,
+      lastSnapshotAt:
+        latestGameSnapshotRun?.finishedAt?.toISOString() ??
+        latestGameSnapshotRun?.startedAt?.toISOString() ??
+        null,
       lastUpdatedAt: latestGameUpdate?.updatedAt?.toISOString() ?? null,
-      stale: latestGameSnapshot?.snapshotAt
-        ? now - latestGameSnapshot.snapshotAt.getTime() > 2 * 60 * 60 * 1000
+      stale: latestGameSnapshotRun?.startedAt
+        ? now - latestGameSnapshotRun.startedAt.getTime() >
+          GAME_SNAPSHOT_STALE_MS
         : true,
       gamesSnapshotted24h,
       gamesMissingSnapshots,

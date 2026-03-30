@@ -4,6 +4,7 @@ import { fetchClipsByGame, twitchAdapter } from "@/server/adapters/twitch";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
 import { deriveGameMetrics } from "@/server/services/game-metrics";
+import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 const log = createLogger("game-snapshot");
 
@@ -259,74 +260,98 @@ export const gameSnapshot = inngest.createFunction(
   { id: "game-snapshot", concurrency: { limit: 1 } },
   { cron: "*/30 * * * *" },
   async ({ step }) => {
-    const topCatalog = await step.run("fetch-top-game-catalog", async () => {
-      return twitchAdapter.fetchTopGamesCatalog!(100);
-    });
-
-    const trackedGames = await step.run("load-tracked-games", async () => {
-      return prisma.game.findMany({
-        where: { twitchGameId: { not: null } },
-        select: {
-          id: true,
-          slug: true,
-          twitchGameId: true,
-          coverImageUrl: true,
-          igdbId: true,
-        },
-      });
-    });
-
-    const catalogById = new Map(
-      topCatalog.map((entry) => [entry.platformGameId, entry] as const),
-    );
-
-    const snapshotResults = await step.run(
-      "snapshot-tracked-games",
+    return executeIngestionRun(
+      {
+        domain: "game",
+        scope: "snapshot",
+        jobType: "game-snapshot",
+        platform: "twitch",
+      },
       async () => {
-        let processed = 0;
-        let failed = 0;
-        let truncated = 0;
+        const topCatalog = await step.run(
+          "fetch-top-game-catalog",
+          async () => {
+            return twitchAdapter.fetchTopGamesCatalog!(100);
+          },
+        );
 
-        for (const batch of chunk(trackedGames, SNAPSHOT_BATCH_SIZE)) {
-          const results = await Promise.all(
-            batch.map(async (game) => {
-              try {
-                const result = await snapshotTrackedGame(game, catalogById);
-                return { ok: true as const, result };
-              } catch (error) {
-                log.warn(
-                  {
-                    gameId: game.id,
-                    slug: game.slug,
-                    error: (error as Error).message,
-                  },
-                  "Game snapshot failed",
-                );
-                return { ok: false as const };
+        const trackedGames = await step.run("load-tracked-games", async () => {
+          return prisma.game.findMany({
+            where: { twitchGameId: { not: null } },
+            select: {
+              id: true,
+              slug: true,
+              twitchGameId: true,
+              coverImageUrl: true,
+              igdbId: true,
+            },
+          });
+        });
+
+        const catalogById = new Map(
+          topCatalog.map((entry) => [entry.platformGameId, entry] as const),
+        );
+
+        const snapshotResults = await step.run(
+          "snapshot-tracked-games",
+          async () => {
+            let processed = 0;
+            let failed = 0;
+            let truncated = 0;
+
+            for (const batch of chunk(trackedGames, SNAPSHOT_BATCH_SIZE)) {
+              const results = await Promise.all(
+                batch.map(async (game) => {
+                  try {
+                    const result = await snapshotTrackedGame(game, catalogById);
+                    return { ok: true as const, result };
+                  } catch (error) {
+                    log.warn(
+                      {
+                        gameId: game.id,
+                        slug: game.slug,
+                        error: (error as Error).message,
+                      },
+                      "Game snapshot failed",
+                    );
+                    return { ok: false as const };
+                  }
+                }),
+              );
+
+              for (const result of results) {
+                if (result.ok) {
+                  processed++;
+                  if (result.result.truncated) truncated++;
+                } else {
+                  failed++;
+                }
               }
-            }),
-          );
-
-          for (const result of results) {
-            if (result.ok) {
-              processed++;
-              if (result.result.truncated) truncated++;
-            } else {
-              failed++;
             }
-          }
-        }
 
+            return {
+              totalTracked: trackedGames.length,
+              processed,
+              failed,
+              truncated,
+            };
+          },
+        );
+
+        log.info(snapshotResults, "Game snapshot completed");
         return {
-          totalTracked: trackedGames.length,
-          processed,
-          failed,
-          truncated,
+          result: snapshotResults,
+          summary: {
+            recordsScanned: snapshotResults.totalTracked,
+            recordsWritten: snapshotResults.processed,
+            recordsFailed: snapshotResults.failed,
+            partialCount: snapshotResults.truncated,
+            metadata: {
+              totalTracked: snapshotResults.totalTracked,
+            },
+          },
         };
       },
     );
-
-    log.info(snapshotResults, "Game snapshot completed");
-    return snapshotResults;
   },
 );

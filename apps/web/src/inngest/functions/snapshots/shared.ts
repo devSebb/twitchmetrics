@@ -1,17 +1,26 @@
 import {
-  Prisma,
   prisma,
   type SnapshotTier,
   type Platform,
 } from "@twitchmetrics/database";
 import { createLogger } from "@/lib/logger";
-import { getTierForCreator } from "@/lib/constants/tiers";
 import { getAdapter } from "@/server/adapters";
 import { cacheInvalidate } from "@/server/services/cache";
+import { recomputeCreatorAggregates } from "@/server/services/creator-aggregates";
+import { recomputeCreatorGrowthRollups } from "@/server/services/creator-growth";
+import { supportsCreatorSnapshots } from "@/server/services/ingestion/constants";
 
 const log = createLogger("snapshot-worker");
 
 const BATCH_SIZE = 50;
+
+function toJsonValue(value: unknown) {
+  return JSON.parse(
+    JSON.stringify(value, (_key, nestedValue: unknown) =>
+      typeof nestedValue === "bigint" ? nestedValue.toString() : nestedValue,
+    ),
+  );
+}
 
 type SnapshotableProfile = {
   id: string;
@@ -87,7 +96,11 @@ export async function runTierSnapshot(
 
         // Update aggregate totals and evaluate tier changes
         try {
-          await updateProfileAggregates(profile.id);
+          await recomputeCreatorAggregates(profile.id);
+          await recomputeCreatorGrowthRollups(
+            profile.id,
+            profile.platformAccounts.map((account) => account.platform),
+          );
         } catch (err) {
           log.error(
             { err, creatorProfileId: profile.id },
@@ -142,6 +155,10 @@ async function snapshotPlatformAccount(
     accessToken: string | null;
   },
 ): Promise<void> {
+  if (!supportsCreatorSnapshots(account.platform)) {
+    return;
+  }
+
   const adapter = getAdapter(account.platform);
   if (!adapter) {
     // Platform adapter not yet implemented — skip silently
@@ -170,7 +187,7 @@ async function snapshotPlatformAccount(
       totalViews: snapshotData.totalViews,
       subscriberCount: snapshotData.subscriberCount,
       postCount: snapshotData.postCount,
-      extendedMetrics: snapshotData.extendedMetrics as Prisma.InputJsonValue,
+      extendedMetrics: toJsonValue(snapshotData.extendedMetrics),
     },
   });
 
@@ -179,6 +196,7 @@ async function snapshotPlatformAccount(
     where: { id: account.id },
     data: {
       followerCount: snapshotData.followerCount,
+      followingCount: snapshotData.followingCount,
       totalViews: snapshotData.totalViews,
       subscriberCount: snapshotData.subscriberCount,
       postCount: snapshotData.postCount,
@@ -195,34 +213,4 @@ async function getCreatorSlug(
     select: { slug: true },
   });
   return profile?.slug ?? null;
-}
-
-async function updateProfileAggregates(
-  creatorProfileId: string,
-): Promise<void> {
-  const accounts = await prisma.platformAccount.findMany({
-    where: { creatorProfileId },
-    select: { followerCount: true, totalViews: true },
-  });
-
-  const totalFollowers = accounts.reduce(
-    (sum, a) => sum + (a.followerCount ?? 0n),
-    0n,
-  );
-  const totalViews = accounts.reduce(
-    (sum, a) => sum + (a.totalViews ?? 0n),
-    0n,
-  );
-
-  const newTier = getTierForCreator(totalFollowers);
-
-  await prisma.creatorProfile.update({
-    where: { id: creatorProfileId },
-    data: {
-      totalFollowers,
-      totalViews,
-      lastSnapshotAt: new Date(),
-      snapshotTier: newTier,
-    },
-  });
 }

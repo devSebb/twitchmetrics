@@ -1,6 +1,7 @@
 import { prisma } from "@twitchmetrics/database";
 import { inngest } from "../../client";
 import { createLogger } from "@/lib/logger";
+import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 const log = createLogger("demote-inactive");
 
@@ -17,63 +18,85 @@ export const demoteInactiveCreators = inngest.createFunction(
   { id: "demote-inactive-creators", name: "Demote Inactive Creators" },
   { cron: "0 4 * * *" }, // Daily at 4am UTC (after snapshot jobs)
   async ({ step }) => {
-    const tier1Claimed = (await step.run("fetch-tier1-claimed", async () => {
-      return prisma.creatorProfile.findMany({
-        where: {
-          snapshotTier: "tier1",
-          state: "claimed",
-        },
-        select: {
-          id: true,
-          slug: true,
-          displayName: true,
-        },
-      });
-    })) as Array<{ id: string; slug: string; displayName: string }>;
-
-    if (tier1Claimed.length === 0) {
-      log.info("No claimed tier1 creators to check");
-      return { demoted: 0, checked: 0 };
-    }
-
-    const cutoffDate = new Date(Date.now() - THIRTY_DAYS_MS);
-
-    let demoted = 0;
-
-    await step.run("check-and-demote", async () => {
-      for (const creator of tier1Claimed) {
-        // Check if any snapshot in last 30 days has isLive=true
-        const liveSnapshot = await prisma.metricSnapshot.findFirst({
-          where: {
-            creatorProfileId: creator.id,
-            snapshotAt: { gte: cutoffDate },
-            extendedMetrics: {
-              path: ["isLive"],
-              equals: true,
-            },
+    return executeIngestionRun(
+      {
+        domain: "creator",
+        scope: "maintenance",
+        jobType: "demote-inactive-creators",
+      },
+      async () => {
+        const tier1Claimed = (await step.run(
+          "fetch-tier1-claimed",
+          async () => {
+            return prisma.creatorProfile.findMany({
+              where: {
+                snapshotTier: "tier1",
+                state: "claimed",
+              },
+              select: {
+                id: true,
+                slug: true,
+                displayName: true,
+              },
+            });
           },
-          select: { id: true },
+        )) as Array<{ id: string; slug: string; displayName: string }>;
+
+        if (tier1Claimed.length === 0) {
+          log.info("No claimed tier1 creators to check");
+          return {
+            result: { demoted: 0, checked: 0 },
+            summary: {},
+          };
+        }
+
+        const cutoffDate = new Date(Date.now() - THIRTY_DAYS_MS);
+
+        let demoted = 0;
+
+        await step.run("check-and-demote", async () => {
+          for (const creator of tier1Claimed) {
+            // Check if any snapshot in last 30 days has isLive=true
+            const liveSnapshot = await prisma.metricSnapshot.findFirst({
+              where: {
+                creatorProfileId: creator.id,
+                snapshotAt: { gte: cutoffDate },
+                extendedMetrics: {
+                  path: ["isLive"],
+                  equals: true,
+                },
+              },
+              select: { id: true },
+            });
+
+            if (!liveSnapshot) {
+              await prisma.creatorProfile.update({
+                where: { id: creator.id },
+                data: { snapshotTier: "tier2" },
+              });
+              demoted++;
+              log.info(
+                { slug: creator.slug, displayName: creator.displayName },
+                "Demoted from tier1 to tier2 — no live activity in 30 days",
+              );
+            }
+          }
         });
 
-        if (!liveSnapshot) {
-          await prisma.creatorProfile.update({
-            where: { id: creator.id },
-            data: { snapshotTier: "tier2" },
-          });
-          demoted++;
-          log.info(
-            { slug: creator.slug, displayName: creator.displayName },
-            "Demoted from tier1 to tier2 — no live activity in 30 days",
-          );
-        }
-      }
-    });
+        log.info(
+          { checked: tier1Claimed.length, demoted },
+          "Inactive creator demotion complete",
+        );
 
-    log.info(
-      { checked: tier1Claimed.length, demoted },
-      "Inactive creator demotion complete",
+        return {
+          result: { demoted, checked: tier1Claimed.length },
+          summary: {
+            recordsScanned: tier1Claimed.length,
+            recordsWritten: demoted,
+            recordsSkipped: Math.max(tier1Claimed.length - demoted, 0),
+          },
+        };
+      },
     );
-
-    return { demoted, checked: tier1Claimed.length };
   },
 );
