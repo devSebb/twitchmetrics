@@ -95,8 +95,14 @@ export default async function GamesPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <div className="mb-6 flex items-baseline justify-between">
-        <h1 className="text-2xl font-bold text-[#F2F3F5]">Top Games</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-bold text-[#F2F3F5]">Top Games</h1>
+          <p className="mt-2 text-sm text-[#949BA4]">
+            Track the most-watched games on Twitch with live audience data,
+            channel counts, and quick genre filtering.
+          </p>
+        </div>
         <span className="text-sm text-[#949BA4]">
           {formatNumber(total)} games
         </span>

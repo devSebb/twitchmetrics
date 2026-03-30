@@ -42,67 +42,53 @@ export function CreatorFilters() {
   }
 
   return (
-    <div className="rounded-2xl border border-[#3F4147] bg-[#232428] p-4 sm:p-5">
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-1">
-          <div className="text-sm font-semibold text-[#F2F3F5]">
-            Refine the channel list
-          </div>
-          <p className="text-sm text-[#949BA4]">
-            Filter by primary platform and reorder the directory by scale,
-            momentum, or recency.
-          </p>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#949BA4]">
+          Sort By
         </div>
-
-        <div className="flex flex-col gap-4">
-          <div>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#949BA4]">
-              Platform
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {PLATFORMS.map((p) => (
-                <button
-                  key={p.value || "all"}
-                  type="button"
-                  onClick={() => updateParams("platform", p.value)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors",
-                    currentPlatform === p.value
-                      ? "border-[#E32C19]/45 bg-[#E32C19]/12 text-[#F2F3F5]"
-                      : "border-[#3F4147] bg-[#1E1F22] text-[#949BA4] hover:border-[#4E5058] hover:text-[#DBDEE1]",
-                  )}
-                >
-                  {p.value ? (
-                    <PlatformIcon platform={p.value} size="xs" />
-                  ) : null}
-                  {p.label}
-                </button>
-              ))}
-            </div>
+        <div className="w-fit rounded-md bg-[#1E1F22] p-0.5">
+          <div className="flex gap-1">
+            {SORTS.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => updateParams("sort", s.value)}
+                className={cn(
+                  "rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                  currentSort === s.value
+                    ? "bg-[#383A40] text-[#F2F3F5]"
+                    : "text-[#949BA4] hover:text-[#DBDEE1]",
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
+        </div>
+      </div>
 
-          <div>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#949BA4]">
-              Sort By
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {SORTS.map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => updateParams("sort", s.value)}
-                  className={cn(
-                    "rounded-full border px-3.5 py-2 text-xs font-medium transition-colors",
-                    currentSort === s.value
-                      ? "border-[#E32C19]/45 bg-[#E32C19]/12 text-[#F2F3F5]"
-                      : "border-[#3F4147] bg-[#1E1F22] text-[#949BA4] hover:border-[#4E5058] hover:text-[#DBDEE1]",
-                  )}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-col gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#949BA4]">
+          Platform
+        </div>
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+          {PLATFORMS.map((p) => (
+            <button
+              key={p.value || "all"}
+              type="button"
+              onClick={() => updateParams("platform", p.value)}
+              className={cn(
+                "flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                currentPlatform === p.value
+                  ? "bg-[#E32C19] text-white"
+                  : "bg-[#383A40] text-[#949BA4] hover:text-[#DBDEE1]",
+              )}
+            >
+              {p.value ? <PlatformIcon platform={p.value} size="xs" /> : null}
+              {p.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
