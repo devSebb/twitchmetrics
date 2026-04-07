@@ -699,6 +699,11 @@ export const twitchAdapter: PlatformAdapter = {
                 AVG_VIEWERS: isLive ? (stream?.viewer_count ?? null) : null,
               }
             : {}),
+          // Stash profile metadata so the snapshot worker can refresh
+          // the CreatorProfile bio & avatar without an extra API call.
+          _bio: user.description || null,
+          _avatarUrl: user.profile_image_url || null,
+          _displayName: user.display_name || null,
         },
       };
     });

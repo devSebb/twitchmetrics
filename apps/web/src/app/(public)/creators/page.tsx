@@ -74,7 +74,7 @@ async function getCreators({
   const take = 20;
   const skip = (page - 1) * take;
   const whereClause = platform
-    ? Prisma.sql`WHERE cp."primaryPlatform" = ${platform}`
+    ? Prisma.sql`WHERE cp."primaryPlatform" = ${platform}::"Platform"`
     : Prisma.sql``;
   const orderClause =
     sort === "trending"

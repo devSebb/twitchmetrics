@@ -177,6 +177,13 @@ async function snapshotPlatformAccount(
     fetchOptions,
   );
 
+  // Strip internal transport fields (prefixed with _) before persisting metrics
+  const persistableMetrics = Object.fromEntries(
+    Object.entries(snapshotData.extendedMetrics).filter(
+      ([key]) => !key.startsWith("_"),
+    ),
+  );
+
   await prisma.metricSnapshot.create({
     data: {
       creatorProfileId,
@@ -187,7 +194,7 @@ async function snapshotPlatformAccount(
       totalViews: snapshotData.totalViews,
       subscriberCount: snapshotData.subscriberCount,
       postCount: snapshotData.postCount,
-      extendedMetrics: toJsonValue(snapshotData.extendedMetrics),
+      extendedMetrics: toJsonValue(persistableMetrics),
     },
   });
 
@@ -203,6 +210,27 @@ async function snapshotPlatformAccount(
       lastSyncedAt: snapshotData.snapshotAt,
     },
   });
+
+  // Refresh CreatorProfile bio & avatar from Twitch API data so that the
+  // social-link-discovery cron picks up newly added YouTube / social links.
+  // The Twitch adapter stashes these in extendedMetrics to avoid extra API calls.
+  if (account.platform === "twitch") {
+    const ext = snapshotData.extendedMetrics as Record<string, unknown>;
+    const freshBio = typeof ext._bio === "string" ? ext._bio : null;
+    const freshAvatar =
+      typeof ext._avatarUrl === "string" ? ext._avatarUrl : null;
+
+    if (freshBio !== null || freshAvatar !== null) {
+      const profileUpdate: Record<string, string> = {};
+      if (freshBio !== null) profileUpdate.bio = freshBio;
+      if (freshAvatar !== null) profileUpdate.avatarUrl = freshAvatar;
+
+      await prisma.creatorProfile.update({
+        where: { id: creatorProfileId },
+        data: profileUpdate,
+      });
+    }
+  }
 }
 
 async function getCreatorSlug(

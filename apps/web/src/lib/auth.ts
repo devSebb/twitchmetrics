@@ -85,10 +85,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
 
     // X / Twitter
-    TwitterProvider({
-      clientId: process.env.TWITTER_CLIENT_ID!,
-      clientSecret: process.env.TWITTER_CLIENT_SECRET!,
-    }),
+    ...(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET
+      ? [
+          TwitterProvider({
+            clientId: process.env.TWITTER_CLIENT_ID,
+            clientSecret: process.env.TWITTER_CLIENT_SECRET,
+          }),
+        ]
+      : []),
 
     CredentialsProvider({
       name: "Email and Password",

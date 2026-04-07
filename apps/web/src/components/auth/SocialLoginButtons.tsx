@@ -9,13 +9,8 @@ type SocialLoginButtonsProps = {
   mode?: "login" | "register";
 };
 
-/** Login/register only — order: X → YouTube → Twitch. */
+/** Login/register only — order: YouTube → Twitch (X added when credentials are configured). */
 const PROVIDERS = [
-  {
-    provider: "twitter",
-    label: "X",
-    iconSrc: "/platform-icons/x_white.png",
-  },
   {
     provider: "google",
     label: "YouTube",

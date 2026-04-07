@@ -28,7 +28,7 @@ function buildWhereClause(platform: Platform | null, query: string | null) {
   const conditions: Prisma.Sql[] = [];
 
   if (platform) {
-    conditions.push(Prisma.sql`cp."primaryPlatform" = ${platform}`);
+    conditions.push(Prisma.sql`cp."primaryPlatform" = ${platform}::"Platform"`);
   }
 
   if (query) {
