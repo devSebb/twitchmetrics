@@ -145,7 +145,7 @@ export async function runTierSnapshot(
   return { processed, errors, tier };
 }
 
-async function snapshotPlatformAccount(
+export async function snapshotPlatformAccount(
   creatorProfileId: string,
   account: {
     id: string;
@@ -211,23 +211,41 @@ async function snapshotPlatformAccount(
     },
   });
 
-  // Refresh CreatorProfile bio & avatar from Twitch API data so that the
-  // social-link-discovery cron picks up newly added YouTube / social links.
+  // Refresh CreatorProfile metadata from Twitch API data so that the
+  // social-link-discovery cron picks up newly added YouTube / social links,
+  // and so that displayName stays in sync with Twitch (handles renames).
   // The Twitch adapter stashes these in extendedMetrics to avoid extra API calls.
   if (account.platform === "twitch") {
     const ext = snapshotData.extendedMetrics as Record<string, unknown>;
     const freshBio = typeof ext._bio === "string" ? ext._bio : null;
     const freshAvatar =
       typeof ext._avatarUrl === "string" ? ext._avatarUrl : null;
+    const freshDisplayName =
+      typeof ext._displayName === "string" ? ext._displayName : null;
+    const freshLogin = typeof ext._login === "string" ? ext._login : null;
 
-    if (freshBio !== null || freshAvatar !== null) {
+    if (
+      freshBio !== null ||
+      freshAvatar !== null ||
+      freshDisplayName !== null
+    ) {
       const profileUpdate: Record<string, string> = {};
       if (freshBio !== null) profileUpdate.bio = freshBio;
       if (freshAvatar !== null) profileUpdate.avatarUrl = freshAvatar;
+      if (freshDisplayName !== null)
+        profileUpdate.displayName = freshDisplayName;
 
       await prisma.creatorProfile.update({
         where: { id: creatorProfileId },
         data: profileUpdate,
+      });
+    }
+
+    // Keep PlatformAccount.platformUsername in sync with the Twitch login
+    if (freshLogin !== null) {
+      await prisma.platformAccount.update({
+        where: { id: account.id },
+        data: { platformUsername: freshLogin },
       });
     }
   }

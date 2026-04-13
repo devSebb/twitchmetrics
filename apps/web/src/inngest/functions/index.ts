@@ -3,6 +3,7 @@ import { tier2Snapshot } from "./snapshots/tier2-snapshot";
 import { tier3Snapshot } from "./snapshots/tier3-snapshot";
 import { gameSnapshot } from "./snapshots/game-snapshot";
 import { demoteInactiveCreators } from "./snapshots/demote-inactive";
+import { onConnectSnapshot } from "./snapshots/on-connect-snapshot";
 import { processClaim } from "./claims/process-claim";
 import { verifyChallenge } from "./claims/verify-challenge";
 import { refreshTokens } from "./tokens/refresh-tokens";
@@ -19,6 +20,7 @@ export const functions = [
   tier3Snapshot,
   gameSnapshot,
   demoteInactiveCreators,
+  onConnectSnapshot,
   processClaim,
   verifyChallenge,
   refreshTokens,

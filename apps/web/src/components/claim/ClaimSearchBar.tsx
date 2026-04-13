@@ -7,6 +7,7 @@ import Image from "next/image";
 import { formatNumber } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { trpc } from "@/lib/trpc";
 
 type CreatorResult = {
   id: string;
@@ -32,6 +33,94 @@ function useDebounce(value: string, delay: number) {
     return () => clearTimeout(timer);
   }, [value, delay]);
   return debounced;
+}
+
+function RegisterChannelForm({
+  onRedirect,
+}: {
+  onRedirect: (profileId: string) => void;
+}) {
+  const router = useRouter();
+  const [twitchLogin, setTwitchLogin] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const { mutate, isPending } = trpc.claim.selfRegister.useMutation({
+    onSuccess: (result) => {
+      if (result.redirect) {
+        onRedirect(result.redirect);
+        return;
+      }
+      router.push("/dashboard");
+    },
+    onError: (err) => {
+      setError(err.message);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const trimmed = twitchLogin.trim();
+    if (!trimmed) return;
+    mutate({ twitchLogin: trimmed });
+  };
+
+  return (
+    <div className="mt-6 rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31] px-5 py-5">
+      <p className="text-sm font-medium text-[#DBDEE1]">
+        Don&apos;t see your channel?
+      </p>
+      <p className="mt-0.5 text-xs text-[#949BA4]">
+        Enter your Twitch username to register your channel and get it tracked.
+      </p>
+      <form onSubmit={handleSubmit} className="mt-3 flex items-center gap-2">
+        <div className="flex h-9 flex-1 items-center gap-2 rounded-md border border-[#3F4147] bg-[#1E1F22] px-3 focus-within:border-[#9146ff]/60">
+          <span className="text-xs text-[#949BA4]">twitch.tv/</span>
+          <input
+            type="text"
+            value={twitchLogin}
+            onChange={(e) => {
+              setTwitchLogin(e.target.value);
+              setError(null);
+            }}
+            placeholder="yourusername"
+            maxLength={25}
+            pattern="[a-zA-Z0-9_]+"
+            className="flex-1 bg-transparent text-sm text-[#DBDEE1] placeholder-[#5C5F66] outline-none"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={isPending || !twitchLogin.trim()}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-[#9146ff] px-3 text-sm font-medium text-white transition-colors hover:bg-[#7c2ff7] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isPending ? (
+            <svg
+              className="h-3.5 w-3.5 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+          ) : null}
+          {isPending ? "Registering..." : "Register"}
+        </button>
+      </form>
+      {error && <p className="mt-2 text-xs text-[#fca5a5]">{error}</p>}
+    </div>
+  );
 }
 
 export function ClaimSearchBar() {
@@ -147,13 +236,20 @@ export function ClaimSearchBar() {
           )}
 
           {!isLoading && creators.length === 0 && (
-            <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-8 text-center">
-              <p className="text-sm font-medium text-[#DBDEE1]">
-                No creators found for &ldquo;{debouncedQuery}&rdquo;
-              </p>
-              <p className="mt-1 text-xs text-[#949BA4]">
-                Try a different name or username
-              </p>
+            <div>
+              <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-6 text-center">
+                <p className="text-sm font-medium text-[#DBDEE1]">
+                  No creators found for &ldquo;{debouncedQuery}&rdquo;
+                </p>
+                <p className="mt-1 text-xs text-[#949BA4]">
+                  Try a different name or username
+                </p>
+              </div>
+              <RegisterChannelForm
+                onRedirect={(profileId) =>
+                  router.push(`/dashboard/claim?profile=${profileId}`)
+                }
+              />
             </div>
           )}
 

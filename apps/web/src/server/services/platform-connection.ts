@@ -117,6 +117,22 @@ export async function connectPlatform(
       },
     });
 
+    // Fire snapshot event on reconnect (user explicitly triggered OAuth)
+    try {
+      const { inngest } = await import("@/inngest/client");
+      void inngest.send({
+        name: "creator/platform.connected",
+        data: {
+          creatorProfileId: existingPlatformAccount.creatorProfileId,
+          platform,
+          platformUserId,
+          platformAccountId: existingPlatformAccount.id,
+        },
+      });
+    } catch {
+      // Non-blocking — never fail auth for a background job
+    }
+
     return {
       platformAccount: updated,
       isNewConnection: false,
@@ -156,6 +172,23 @@ export async function connectPlatform(
       lastOAuthRefresh: new Date(),
     },
   });
+
+  // Fire snapshot event so the dashboard is populated immediately rather than
+  // waiting for the next scheduled tier cron (which could be up to a week away).
+  try {
+    const { inngest } = await import("@/inngest/client");
+    void inngest.send({
+      name: "creator/platform.connected",
+      data: {
+        creatorProfileId: ensuredCreatorProfile.id,
+        platform,
+        platformUserId,
+        platformAccountId: created.id,
+      },
+    });
+  } catch {
+    // Non-blocking — never fail auth for a background job
+  }
 
   return {
     platformAccount: created,
