@@ -63,7 +63,7 @@ export async function Header() {
                 Log In
               </Link>
               <Link
-                href="/login"
+                href="/register"
                 className="rounded-md bg-[#E32C19] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
               >
                 Sign Up
