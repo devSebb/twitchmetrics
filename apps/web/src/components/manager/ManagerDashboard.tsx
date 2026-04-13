@@ -51,10 +51,6 @@ export function ManagerDashboard({ userId }: ManagerDashboardProps) {
   }, [roster]);
 
   const handleRemove = (creatorProfileId: string) => {
-    const confirmed = window.confirm(
-      "Remove this creator from your roster? This action can be undone by re-adding them later.",
-    );
-    if (!confirmed) return;
     removeMutation.mutate({ creatorProfileId });
   };
 
@@ -127,7 +123,6 @@ export function ManagerDashboard({ userId }: ManagerDashboardProps) {
             <CreatorRosterCard
               key={item.accessId}
               creator={item.creator}
-              permissions={item.permissions}
               grantedAt={item.grantedAt}
               onRemove={() => handleRemove(item.creator.id)}
               isRemoving={removeMutation.isPending}

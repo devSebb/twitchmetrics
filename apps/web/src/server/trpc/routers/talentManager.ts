@@ -5,6 +5,44 @@ import { talentManagerProcedure } from "../middleware";
 import { router } from "../root";
 
 export const talentManagerRouter = router({
+  searchCreators: talentManagerProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ ctx, input }) => {
+      const q = input.query.trim();
+      const profiles = await ctx.prisma.creatorProfile.findMany({
+        where: {
+          state: { in: ["claimed", "premium"] },
+          OR: [
+            { displayName: { contains: q, mode: "insensitive" } },
+            { slug: { contains: q, mode: "insensitive" } },
+            {
+              platformAccounts: {
+                some: {
+                  platformUsername: { contains: q, mode: "insensitive" },
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          displayName: true,
+          slug: true,
+          avatarUrl: true,
+          state: true,
+          totalFollowers: true,
+          primaryPlatform: true,
+        },
+        take: 8,
+        orderBy: { totalFollowers: "desc" },
+      });
+
+      return profiles.map((p) => ({
+        ...p,
+        totalFollowers: p.totalFollowers ? String(p.totalFollowers) : "0",
+      }));
+    }),
+
   getRoster: talentManagerProcedure.query(async ({ ctx }) => {
     const access = await ctx.prisma.talentManagerAccess.findMany({
       where: {

@@ -335,9 +335,9 @@ export function CreatorDetailView({
                     {growth && growth.pct7d !== null && (
                       <span
                         className={`text-xs font-medium ${
-                          growth.trendDirection === "UP"
+                          growth.trendDirection === "up"
                             ? "text-[#22c55e]"
-                            : growth.trendDirection === "DOWN"
+                            : growth.trendDirection === "down"
                               ? "text-[#ef4444]"
                               : "text-[#949BA4]"
                         }`}

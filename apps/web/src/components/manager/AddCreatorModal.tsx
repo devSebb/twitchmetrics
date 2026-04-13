@@ -3,13 +3,25 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { trpc } from "@/lib/trpc";
-import { Button, Card } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import type { Platform } from "@twitchmetrics/database";
+import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 
 type AddCreatorModalProps = {
   open: boolean;
   onClose: () => void;
+};
+
+type SearchResult = {
+  id: string;
+  displayName: string;
+  slug: string;
+  avatarUrl: string | null;
+  state: string;
+  totalFollowers: string;
+  primaryPlatform: Platform | null;
 };
 
 export function AddCreatorModal({ open, onClose }: AddCreatorModalProps) {
@@ -21,12 +33,9 @@ export function AddCreatorModal({ open, onClose }: AddCreatorModalProps) {
 
   const utils = trpc.useUtils();
 
-  const searchQuery = trpc.creator.getProfile.useQuery(
-    { slug: debouncedSearch },
-    {
-      enabled: debouncedSearch.length >= 2,
-      retry: false,
-    },
+  const searchQuery = trpc.talentManager.searchCreators.useQuery(
+    { query: debouncedSearch },
+    { enabled: debouncedSearch.length >= 2, retry: false },
   );
 
   const addMutation = trpc.talentManager.addCreator.useMutation({
@@ -49,8 +58,8 @@ export function AddCreatorModal({ open, onClose }: AddCreatorModalProps) {
     setSelectedId(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(value.trim().toLowerCase());
-    }, 400);
+      setDebouncedSearch(value.trim());
+    }, 350);
   }, []);
 
   const handleAdd = () => {
@@ -78,9 +87,7 @@ export function AddCreatorModal({ open, onClose }: AddCreatorModalProps) {
 
   if (!open) return null;
 
-  const profile = searchQuery.data;
-  const isClaimed =
-    profile?.state === "claimed" || profile?.state === "premium";
+  const results: SearchResult[] = searchQuery.data ?? [];
 
   return (
     <>
@@ -122,94 +129,106 @@ export function AddCreatorModal({ open, onClose }: AddCreatorModalProps) {
 
           {/* Body */}
           <div className="p-5">
-            <p className="mb-3 text-xs text-[#949BA4]">
-              Search for a creator by their profile slug. Only claimed profiles
-              can be managed.
-            </p>
-
             <input
               type="text"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Enter creator slug (e.g. ninja)"
+              placeholder="Search by name or username…"
               className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-sm text-[#F2F3F5] placeholder-[#949BA4] focus:border-[#E32C19] focus:outline-none"
               autoFocus
             />
 
-            {/* Search results */}
-            <div className="mt-3 min-h-[80px]">
+            {/* Results */}
+            <div className="mt-3 max-h-64 overflow-y-auto">
               {searchQuery.isLoading && debouncedSearch.length >= 2 && (
-                <div className="flex items-center justify-center py-6">
+                <div className="flex items-center justify-center py-8">
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#949BA4] border-t-transparent" />
                 </div>
               )}
 
-              {searchQuery.isError && debouncedSearch.length >= 2 && (
-                <p className="py-4 text-center text-xs text-[#949BA4]">
-                  No creator found with that slug.
+              {!searchQuery.isLoading &&
+                debouncedSearch.length >= 2 &&
+                results.length === 0 && (
+                  <p className="py-6 text-center text-sm text-[#949BA4]">
+                    No claimed creators found for &ldquo;{debouncedSearch}
+                    &rdquo;
+                  </p>
+                )}
+
+              {debouncedSearch.length < 2 && (
+                <p className="py-6 text-center text-sm text-[#949BA4]">
+                  Type a name or username to search
                 </p>
               )}
 
-              {profile && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isClaimed) setSelectedId(profile.id);
-                  }}
-                  disabled={!isClaimed}
-                  className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                    selectedId === profile.id
-                      ? "border-[#E32C19] bg-[#E32C19]/10"
-                      : isClaimed
-                        ? "border-[#3F4147] hover:border-[#4E5058] hover:bg-[#313338]"
-                        : "cursor-not-allowed border-[#3F4147] opacity-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {(() => {
-                      const src = getSafeImageSrc(profile.avatarUrl);
-                      return src ? (
-                        <Image
-                          src={src}
-                          alt={profile.displayName}
-                          width={40}
-                          height={40}
-                          className="rounded-full"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#383A40] text-sm font-bold text-[#F2F3F5]">
-                          {profile.displayName.charAt(0)}
-                        </div>
-                      );
-                    })()}
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium text-[#F2F3F5]">
-                        {profile.displayName}
-                      </p>
-                      <p className="text-xs text-[#949BA4]">
-                        {formatNumber(Number(profile.totalFollowers ?? 0))}{" "}
-                        followers
-                      </p>
-                    </div>
-                    {!isClaimed && (
-                      <span className="shrink-0 rounded bg-[#383A40] px-2 py-0.5 text-[10px] text-[#949BA4]">
-                        Unclaimed
-                      </span>
-                    )}
-                  </div>
-                </button>
-              )}
+              {results.length > 0 && (
+                <div className="space-y-1">
+                  {results.map((profile) => {
+                    const isSelected = selectedId === profile.id;
+                    const avatarSrc = getSafeImageSrc(profile.avatarUrl);
+                    const platformName = profile.primaryPlatform
+                      ? PLATFORM_CONFIG[profile.primaryPlatform]?.name
+                      : null;
 
-              {!searchQuery.isLoading &&
-                !profile &&
-                debouncedSearch.length < 2 && (
-                  <p className="py-4 text-center text-xs text-[#949BA4]">
-                    Type a creator slug to search.
-                  </p>
-                )}
+                    return (
+                      <button
+                        key={profile.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedId(isSelected ? null : profile.id)
+                        }
+                        className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                          isSelected
+                            ? "border-[#E32C19] bg-[#E32C19]/10"
+                            : "border-[#3F4147] hover:border-[#4E5058] hover:bg-[#313338]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {avatarSrc ? (
+                            <Image
+                              src={avatarSrc}
+                              alt={profile.displayName}
+                              width={36}
+                              height={36}
+                              className="rounded-full"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#383A40] text-sm font-bold text-[#F2F3F5]">
+                              {profile.displayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-sm font-medium text-[#F2F3F5]">
+                              {profile.displayName}
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs text-[#949BA4]">
+                                /{profile.slug}
+                              </p>
+                              {platformName && (
+                                <span className="text-[10px] text-[#4E5058]">
+                                  ·
+                                </span>
+                              )}
+                              {platformName && (
+                                <p className="text-xs text-[#949BA4]">
+                                  {platformName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <p className="shrink-0 text-xs text-[#949BA4]">
+                            {formatNumber(Number(profile.totalFollowers))}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {error && <p className="mt-2 text-xs text-[#ef4444]">{error}</p>}
+            {error && <p className="mt-3 text-xs text-[#ef4444]">{error}</p>}
           </div>
 
           {/* Footer */}
@@ -222,7 +241,7 @@ export function AddCreatorModal({ open, onClose }: AddCreatorModalProps) {
               disabled={!selectedId || addMutation.isPending}
               onClick={handleAdd}
             >
-              {addMutation.isPending ? "Adding..." : "Add to Roster"}
+              {addMutation.isPending ? "Adding…" : "Add to Roster"}
             </Button>
           </div>
         </div>
