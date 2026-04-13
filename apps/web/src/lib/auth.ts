@@ -108,6 +108,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            suspended: true,
+            hasCompletedOnboarding: true,
+            passwordHash: true,
+          },
         });
         if (!user?.passwordHash) {
           return null;
@@ -121,11 +130,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        if (user.suspended) {
+          return null;
+        }
+
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           role: user.role,
+          suspended: user.suspended,
+          hasCompletedOnboarding: user.hasCompletedOnboarding,
         };
       },
     }),
@@ -231,23 +246,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
     signIn: async ({ user, account, profile }) => {
-      if (!account || !user.id) {
-        // Credentials login — check DB for onboarding status
-        if (user.id) {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { hasCompletedOnboarding: true },
-          });
-          if (!dbUser?.hasCompletedOnboarding) {
-            return "/onboarding";
-          }
-        }
+      // Credentials sign-in: authorize() already validated the user.
+      // Onboarding redirect is handled by middleware — just allow the sign-in.
+      if (!account) {
         return true;
       }
 
+      // OAuth sign-in: link the provider account to the creator profile.
+      // This is fire-and-forget for the sign-in flow — errors are logged but
+      // never block the user from getting a session.
       try {
         await connectPlatform({
-          userId: user.id,
+          userId: user.id!,
           provider: account.provider,
           providerAccountId: account.providerAccountId,
           accessToken: account.access_token ?? null,
@@ -263,14 +273,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
       }
 
-      // OAuth login — check DB for onboarding status
-      const dbUser = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { hasCompletedOnboarding: true },
-      });
-      if (!dbUser?.hasCompletedOnboarding) {
-        return "/onboarding";
-      }
+      // Middleware handles /onboarding redirect for incomplete onboarding.
       return true;
     },
     redirect: async ({ url, baseUrl }) => {
