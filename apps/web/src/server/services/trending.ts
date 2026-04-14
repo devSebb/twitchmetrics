@@ -34,10 +34,18 @@ export async function getTrendingCreators(
   const cached = await cacheGet<TrendingCreator[]>(CACHE_KEY);
   if (cached) return cached;
 
-  // Query rollups with positive growth, deduplicated by creator
+  // Query rollups with meaningful positive growth, deduplicated by creator.
+  // Guards:
+  //   delta7d > 100  — must have gained at least 100 absolute followers (filters near-zero base explosion)
+  //   pct7d   > 0    — positive trend only
+  //   creatorProfile.totalFollowers > 500 — must be a real creator with some audience
   const rollups = await db.creatorGrowthRollup.findMany({
     where: {
       pct7d: { gt: 0 },
+      delta7d: { gt: 100 },
+      creatorProfile: {
+        totalFollowers: { gt: 500 },
+      },
     },
     include: {
       creatorProfile: {
@@ -63,8 +71,10 @@ export async function getTrendingCreators(
     if (seenIds.has(r.creatorProfile.id)) continue;
     seenIds.add(r.creatorProfile.id);
 
+    // Cap pct7d at 200% so no single outlier dominates via a near-zero base
+    const cappedPct = Math.min(r.pct7d ?? 0, 200);
     const trendScore =
-      (r.pct7d ?? 0) * 0.7 + Math.log10(Math.max(Number(r.delta7d), 1)) * 0.3;
+      cappedPct * 0.7 + Math.log10(Math.max(Number(r.delta7d), 1)) * 0.3;
 
     trending.push({
       id: r.creatorProfile.id,
