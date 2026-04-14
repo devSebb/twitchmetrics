@@ -22,11 +22,13 @@ export async function POST(request: Request) {
       name?: string;
       email?: string;
       company?: string;
+      details?: Record<string, unknown>;
     };
 
     const name = body.name?.trim();
     const email = body.email?.trim().toLowerCase();
     const company = body.company?.trim();
+    const details = body.details ?? null;
 
     if (!name || !email || !company) {
       return NextResponse.json(
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     await prisma.reportLead.create({
-      data: { name, email, company },
+      data: { name, email, company, ...(details ? { details } : {}) },
     });
 
     log.info(

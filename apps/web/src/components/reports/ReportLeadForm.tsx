@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-type FormState = "idle" | "submitting" | "success" | "error";
+type FormState = "idle" | "submitting" | "error";
 
 export function ReportLeadForm() {
+  const router = useRouter();
   const [state, setState] = useState<FormState>("idle");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -15,30 +17,11 @@ export function ReportLeadForm() {
     setState("submitting");
 
     try {
-      const res = await fetch("/api/reports/lead", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, company }),
-      });
-
-      if (!res.ok) throw new Error("Failed to submit");
-      setState("success");
+      const params = new URLSearchParams({ name, email, company });
+      router.push(`/reports/request?${params.toString()}`);
     } catch {
       setState("error");
     }
-  }
-
-  if (state === "success") {
-    return (
-      <div className="rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/10 px-6 py-8 text-center">
-        <p className="text-lg font-semibold text-[#22c55e]">
-          Thank you for your interest!
-        </p>
-        <p className="mt-2 text-sm text-[#949BA4]">
-          We&apos;ll be in touch shortly with your report details.
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -106,7 +89,7 @@ export function ReportLeadForm() {
         disabled={state === "submitting"}
         className="w-full rounded-lg bg-[#E32C19] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
       >
-        {state === "submitting" ? "Submitting..." : "Get Your Report"}
+        {state === "submitting" ? "Loading…" : "Continue to Details →"}
       </button>
     </form>
   );

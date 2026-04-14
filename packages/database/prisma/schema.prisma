@@ -455,10 +455,11 @@ model GameViewerSnapshot {
 // ============================================================
 
 model ReportLead {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  email     String
-  company   String
+  id      String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name    String
+  email   String
+  company String
+  details Json?
 
   createdAt DateTime @default(now())
 
