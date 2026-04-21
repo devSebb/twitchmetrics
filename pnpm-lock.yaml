@@ -125,6 +125,9 @@ importers:
       resend:
         specifier: ^6.9.3
         version: 6.9.3(@react-email/render@2.0.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4))
+      stripe:
+        specifier: ^22.0.2
+        version: 22.0.2(@types/node@22.19.15)
       superjson:
         specifier: ^2.2.0
         version: 2.2.6
@@ -7076,6 +7079,18 @@ packages:
       }
     engines: { node: ">=14.16" }
 
+  stripe@22.0.2:
+    resolution:
+      {
+        integrity: sha512-2/BLrQ3oB1zlNfeL/LfHFjTGx6EQn0j+ztrrTJHuDjV5VVIpk92oSDaxyKLUr3pG3dnee2LZqhFUv2Bf0G1/3g==,
+      }
+    engines: { node: ">=18" }
+    peerDependencies:
+      "@types/node": ">=18"
+    peerDependenciesMeta:
+      "@types/node":
+        optional: true
+
   styled-jsx@5.1.6:
     resolution:
       {
@@ -12384,6 +12399,10 @@ snapshots:
   strip-json-comments@3.1.1: {}
 
   strip-json-comments@5.0.3: {}
+
+  stripe@22.0.2(@types/node@22.19.15):
+    optionalDependencies:
+      "@types/node": 22.19.15
 
   styled-jsx@5.1.6(@babel/core@7.29.0)(react@19.2.4):
     dependencies:

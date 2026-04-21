@@ -451,6 +451,47 @@ model GameViewerSnapshot {
 }
 
 // ============================================================
+// REPORT TEMPLATES & PURCHASES
+// ============================================================
+
+enum ReportPurchaseStatus {
+  pending
+  paid
+  failed
+}
+
+model ReportTemplate {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  description  String
+  slug         String   @unique
+  config       Json
+  priceInCents Int      @default(25000)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  purchases ReportPurchase[]
+}
+
+model ReportPurchase {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String
+  name            String
+  company         String?
+  templateId      String               @db.Uuid
+  template        ReportTemplate       @relation(fields: [templateId], references: [id])
+  stripeSessionId String?              @unique
+  status          ReportPurchaseStatus @default(pending)
+  formData        Json
+
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([stripeSessionId])
+  @@index([status])
+}
+
+// ============================================================
 // REPORT LEADS
 // ============================================================
 

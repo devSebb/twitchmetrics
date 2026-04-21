@@ -39,6 +39,7 @@ PLAN-*.md
 
 # design reference images
 docs/design-reference/
+docs/*.xlsx
 
 # ai-generated docs
 STAGE*.md
