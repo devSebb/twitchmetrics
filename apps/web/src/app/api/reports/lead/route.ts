@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@twitchmetrics/database";
+import { prisma, type Prisma } from "@twitchmetrics/database";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { createLogger } from "@/lib/logger";
 
@@ -68,7 +68,12 @@ export async function POST(request: Request) {
     }
 
     await prisma.reportLead.create({
-      data: { name, email, company, ...(details ? { details } : {}) },
+      data: {
+        name,
+        email,
+        company,
+        ...(details ? { details: details as Prisma.InputJsonValue } : {}),
+      },
     });
 
     log.info(

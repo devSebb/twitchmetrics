@@ -5,32 +5,19 @@ import { useState } from "react";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type TimePeriod = "30d" | "90d" | "6m" | "12m" | "custom";
-type TopCount = 10 | 50 | 100;
-type DataDepth = "level1" | "level2";
+type TopCount = 50 | 100 | 250 | "500+";
 
 type Metrics = {
+  hoursWatched: boolean;
+  avgViewers: boolean;
+  peakViewers: boolean;
+  topCreators: boolean;
+  airtime: boolean;
+  subscribers: boolean;
   // Audience
-  avgPeakViewers: boolean;
-  uniqueViewers: boolean;
-  followersGrowth: boolean;
-  viewerRetention: boolean;
-  geoDistribution: boolean;
-  // Engagement
-  chatMessages: boolean;
-  watchTime: boolean;
-  streamFrequency: boolean;
-  likesCommentsShares: boolean;
-  engagementRate: boolean;
-  // Content
-  topPerformingStreams: boolean;
-  contentCategories: boolean;
-  streamDurationAnalysis: boolean;
-  scheduleConsistency: boolean;
-  // Monetization
-  subscriptions: boolean;
-  adsImpact: boolean;
-  sponsorshipVisibility: boolean;
-  estimatedMediaValue: boolean;
+  gender: boolean;
+  country: boolean;
+  topCategories: boolean;
 };
 
 type ReportRequestFormProps = {
@@ -97,36 +84,6 @@ function CheckboxItem({
   );
 }
 
-function MetricGroup({
-  title,
-  items,
-  metrics,
-  toggle,
-}: {
-  title: string;
-  items: { key: keyof Metrics; label: string }[];
-  metrics: Metrics;
-  toggle: (key: keyof Metrics) => void;
-}) {
-  return (
-    <div className="mb-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
-        {title}
-      </p>
-      <div className="space-y-2">
-        {items.map(({ key, label }) => (
-          <CheckboxItem
-            key={key}
-            checked={metrics[key]}
-            onChange={() => toggle(key)}
-            label={label}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function ReportRequestForm({
@@ -137,6 +94,7 @@ export function ReportRequestForm({
   // Q1
   const [includesGames, setIncludesGames] = useState(false);
   const [includesChannels, setIncludesChannels] = useState(false);
+  const [includesCreatorList, setIncludesCreatorList] = useState(false);
 
   // Q2
   const [topCount, setTopCount] = useState<TopCount | null>(null);
@@ -152,33 +110,25 @@ export function ReportRequestForm({
     youtube: false,
     instagram: false,
     x: false,
-    tiktok: false,
+    kick: false,
+    otherStreaming: false,
   });
 
   // Q5
   const [metrics, setMetrics] = useState<Metrics>({
-    avgPeakViewers: false,
-    uniqueViewers: false,
-    followersGrowth: false,
-    viewerRetention: false,
-    geoDistribution: false,
-    chatMessages: false,
-    watchTime: false,
-    streamFrequency: false,
-    likesCommentsShares: false,
-    engagementRate: false,
-    topPerformingStreams: false,
-    contentCategories: false,
-    streamDurationAnalysis: false,
-    scheduleConsistency: false,
-    subscriptions: false,
-    adsImpact: false,
-    sponsorshipVisibility: false,
-    estimatedMediaValue: false,
+    hoursWatched: false,
+    avgViewers: false,
+    peakViewers: false,
+    topCreators: false,
+    airtime: false,
+    subscribers: false,
+    gender: false,
+    country: false,
+    topCategories: false,
   });
 
-  // Q6
-  const [dataDepth, setDataDepth] = useState<DataDepth | null>(null);
+  // T&C
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Submission
   const [submitState, setSubmitState] = useState<
@@ -200,6 +150,7 @@ export function ReportRequestForm({
       includes: [
         ...(includesGames ? ["games"] : []),
         ...(includesChannels ? ["channels"] : []),
+        ...(includesCreatorList ? ["creator_list"] : []),
       ],
       topCount,
       channelGameSearch: channelGameSearch.trim() || null,
@@ -211,7 +162,6 @@ export function ReportRequestForm({
       metrics: Object.entries(metrics)
         .filter(([, v]) => v)
         .map(([k]) => k),
-      dataDepth,
     };
 
     try {
@@ -236,36 +186,21 @@ export function ReportRequestForm({
     { value: "custom", label: "Custom range" },
   ];
 
-  const TOP_COUNTS: TopCount[] = [10, 50, 100];
+  const TOP_COUNTS: TopCount[] = [50, 100, 250, "500+"];
+
+  const MAIN_METRICS: { key: keyof Metrics; label: string }[] = [
+    { key: "hoursWatched", label: "Hours Watched" },
+    { key: "avgViewers", label: "Average Viewers" },
+    { key: "peakViewers", label: "Peak Viewers" },
+    { key: "topCreators", label: "Top Creators" },
+    { key: "airtime", label: "Airtime" },
+    { key: "subscribers", label: "Subscribers" },
+  ];
 
   const AUDIENCE_METRICS: { key: keyof Metrics; label: string }[] = [
-    { key: "avgPeakViewers", label: "Avg/peak viewers" },
-    { key: "uniqueViewers", label: "Unique viewers" },
-    { key: "followersGrowth", label: "Followers growth" },
-    { key: "viewerRetention", label: "Viewer retention" },
-    { key: "geoDistribution", label: "Geo distribution" },
-  ];
-
-  const ENGAGEMENT_METRICS: { key: keyof Metrics; label: string }[] = [
-    { key: "chatMessages", label: "Chat messages" },
-    { key: "watchTime", label: "Watch time" },
-    { key: "streamFrequency", label: "Stream frequency" },
-    { key: "likesCommentsShares", label: "Likes / comments / shares" },
-    { key: "engagementRate", label: "Engagement rate" },
-  ];
-
-  const CONTENT_METRICS: { key: keyof Metrics; label: string }[] = [
-    { key: "topPerformingStreams", label: "Top performing streams/videos" },
-    { key: "contentCategories", label: "Content categories" },
-    { key: "streamDurationAnalysis", label: "Stream duration analysis" },
-    { key: "scheduleConsistency", label: "Schedule consistency" },
-  ];
-
-  const MONETIZATION_METRICS: { key: keyof Metrics; label: string }[] = [
-    { key: "subscriptions", label: "Subscriptions" },
-    { key: "adsImpact", label: "Ads impact" },
-    { key: "sponsorshipVisibility", label: "Sponsorship visibility" },
-    { key: "estimatedMediaValue", label: "Estimated media value (EMV)" },
+    { key: "gender", label: "Gender" },
+    { key: "country", label: "Country" },
+    { key: "topCategories", label: "Top Categories" },
   ];
 
   // ── Success state ──────────────────────────────────────────────────────────
@@ -336,7 +271,7 @@ export function ReportRequestForm({
             <SectionLabel number={1}>
               What should the report include?
             </SectionLabel>
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-6">
               <CheckboxItem
                 checked={includesGames}
                 onChange={() => setIncludesGames((v) => !v)}
@@ -347,6 +282,11 @@ export function ReportRequestForm({
                 onChange={() => setIncludesChannels((v) => !v)}
                 label="Channels"
               />
+              <CheckboxItem
+                checked={includesCreatorList}
+                onChange={() => setIncludesCreatorList((v) => !v)}
+                label="Creator List"
+              />
             </div>
           </div>
 
@@ -355,7 +295,7 @@ export function ReportRequestForm({
             <SectionLabel number={2}>
               Who should the report include?
             </SectionLabel>
-            <div className="mb-3 flex gap-2">
+            <div className="mb-3 flex flex-wrap gap-2">
               {TOP_COUNTS.map((n) => (
                 <button
                   key={n}
@@ -433,14 +373,18 @@ export function ReportRequestForm({
             <SectionLabel number={4}>
               Which platforms do you want data from?
             </SectionLabel>
-            <div className="space-y-2.5">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
               {(
                 [
                   { key: "twitch", label: "Twitch" },
-                  { key: "youtube", label: "Youtube" },
-                  { key: "instagram", label: "Instagram" },
                   { key: "x", label: "X" },
-                  { key: "tiktok", label: "TikTok" },
+                  { key: "youtube", label: "Youtube" },
+                  { key: "kick", label: "Kick" },
+                  { key: "instagram", label: "Instagram" },
+                  {
+                    key: "otherStreaming",
+                    label: "Other live-streaming services",
+                  },
                 ] as { key: keyof typeof platforms; label: string }[]
               ).map(({ key, label }) => (
                 <CheckboxItem
@@ -461,173 +405,87 @@ export function ReportRequestForm({
             Which metrics do you want included?
           </SectionLabel>
           <div className="grid grid-cols-2 gap-x-6">
-            {/* Left sub-column: Audience + Engagement */}
-            <div>
-              <MetricGroup
-                title="Audience"
-                items={AUDIENCE_METRICS}
-                metrics={metrics}
-                toggle={toggleMetric}
-              />
-              <MetricGroup
-                title="Engagement"
-                items={ENGAGEMENT_METRICS}
-                metrics={metrics}
-                toggle={toggleMetric}
-              />
+            {/* Left sub-column: main metrics */}
+            <div className="space-y-2">
+              {MAIN_METRICS.map(({ key, label }) => (
+                <CheckboxItem
+                  key={key}
+                  checked={metrics[key]}
+                  onChange={() => toggleMetric(key)}
+                  label={label}
+                />
+              ))}
             </div>
-            {/* Right sub-column: Content + Monetization */}
+            {/* Right sub-column: Audience */}
             <div>
-              <MetricGroup
-                title="Content"
-                items={CONTENT_METRICS}
-                metrics={metrics}
-                toggle={toggleMetric}
-              />
-              <MetricGroup
-                title="Monetization"
-                items={MONETIZATION_METRICS}
-                metrics={metrics}
-                toggle={toggleMetric}
-              />
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
+                Audience
+              </p>
+              <div className="space-y-2">
+                {AUDIENCE_METRICS.map(({ key, label }) => (
+                  <CheckboxItem
+                    key={key}
+                    checked={metrics[key]}
+                    onChange={() => toggleMetric(key)}
+                    label={label}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Section 6: Data Depth (full width) ── */}
-      <div className="border-t border-[#3F4147] px-6 py-6">
-        <SectionLabel number={6}>Data Depth</SectionLabel>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:max-w-lg">
-          {/* Level 1 */}
+      {/* ── Footer: T&C + submit ── */}
+      <div className="border-t border-[#3F4147] px-6 py-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
-            onClick={() =>
-              setDataDepth(dataDepth === "level1" ? null : "level1")
-            }
-            className={`rounded-lg border p-4 text-left transition-colors ${
-              dataDepth === "level1"
-                ? "border-[#E32C19] bg-[#E32C19]/5"
-                : "border-[#3F4147] bg-[#313338] hover:border-[#4E5058]"
-            }`}
+            onClick={() => setAcceptedTerms((v) => !v)}
+            className="flex items-center gap-2 text-left"
           >
-            <div className="mb-2 flex items-center gap-2">
-              <div
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                  dataDepth === "level1"
-                    ? "border-[#E32C19] bg-[#E32C19]"
-                    : "border-[#4E5058] bg-[#2B2D31]"
-                }`}
-              >
-                {dataDepth === "level1" && (
-                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                    <path
-                      d="M1 4L3.5 6.5L9 1"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </div>
-              <span className="text-sm font-semibold text-[#F2F3F5]">
-                Level 1
-              </span>
-            </div>
-            <ul className="space-y-1 pl-1">
-              {["High-level metrics", "Summary insights", "Clean charts"].map(
-                (item) => (
-                  <li
-                    key={item}
-                    className="flex items-start gap-1.5 text-xs text-[#949BA4]"
-                  >
-                    <span className="mt-0.5 text-[#4E5058]">•</span>
-                    {item}
-                  </li>
-                ),
+            <div
+              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                acceptedTerms
+                  ? "border-[#E32C19] bg-[#E32C19]"
+                  : "border-[#4E5058] bg-[#2B2D31]"
+              }`}
+            >
+              {acceptedTerms && (
+                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                  <path
+                    d="M1 4L3.5 6.5L9 1"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               )}
-            </ul>
-          </button>
-
-          {/* Level 2 */}
-          <button
-            type="button"
-            onClick={() =>
-              setDataDepth(dataDepth === "level2" ? null : "level2")
-            }
-            className={`rounded-lg border p-4 text-left transition-colors ${
-              dataDepth === "level2"
-                ? "border-[#E32C19] bg-[#E32C19]/5"
-                : "border-[#3F4147] bg-[#313338] hover:border-[#4E5058]"
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <div
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                  dataDepth === "level2"
-                    ? "border-[#E32C19] bg-[#E32C19]"
-                    : "border-[#4E5058] bg-[#2B2D31]"
-                }`}
-              >
-                {dataDepth === "level2" && (
-                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                    <path
-                      d="M1 4L3.5 6.5L9 1"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </div>
-              <span className="text-sm font-semibold text-[#F2F3F5]">
-                Level 2
-              </span>
             </div>
-            <ul className="space-y-1 pl-1">
-              {[
-                "Time-series data",
-                "Viewer behavior",
-                "Engagement patterns",
-                "Content performance",
-              ].map((item) => (
-                <li
-                  key={item}
-                  className="flex items-start gap-1.5 text-xs text-[#949BA4]"
-                >
-                  <span className="mt-0.5 text-[#4E5058]">•</span>
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <span className="text-sm text-[#DBDEE1]">
+              I accept the{" "}
+              <span className="text-[#E32C19] underline underline-offset-2">
+                Terms &amp; Conditions
+              </span>
+            </span>
           </button>
-        </div>
-      </div>
 
-      {/* ── Footer: submit ── */}
-      <div className="flex items-center justify-between border-t border-[#3F4147] px-6 py-5">
-        <p className="text-xs text-[#949BA4]">
-          Submitting as{" "}
-          <span className="font-medium text-[#DBDEE1]">{name}</span>
-          {" · "}
-          <span className="font-medium text-[#DBDEE1]">{email}</span>
-        </p>
-        <div className="flex items-center gap-3">
-          {submitState === "error" && (
-            <p className="text-xs text-[#ef4444]">
-              Something went wrong — please try again.
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitState === "submitting"}
-            className="rounded-lg bg-[#E32C19] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
-          >
-            {submitState === "submitting" ? "Submitting…" : "Submit Request"}
-          </button>
+          <div className="flex items-center gap-3">
+            {submitState === "error" && (
+              <p className="text-xs text-[#ef4444]">
+                Something went wrong — please try again.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitState === "submitting" || !acceptedTerms}
+              className="w-full rounded-lg bg-[#E32C19] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {submitState === "submitting" ? "Submitting…" : "Submit"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
