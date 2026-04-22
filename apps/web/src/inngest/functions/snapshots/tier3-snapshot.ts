@@ -5,9 +5,10 @@ import { executeIngestionRun } from "@/server/services/ingestion/runs";
 // Cron: daily at 3am UTC — Tier 3 creators (under 10K followers).
 // Was weekly, which left small creators with barely any data points;
 // daily snapshots give growth rollups enough signal to work.
+// Also accepts `snapshots/tier3` event for manual admin triggers.
 export const tier3Snapshot = inngest.createFunction(
   { id: "tier3-snapshot", concurrency: { limit: 1 } },
-  { cron: "0 3 * * *" },
+  [{ cron: "0 3 * * *" }, { event: "snapshots/tier3" }],
   async ({ step }) => {
     return executeIngestionRun(
       {

@@ -2,10 +2,11 @@ import { inngest } from "../../client";
 import { runTierSnapshot } from "./shared";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
-// Cron: every 6 hours — Tier 1 creators (100K+ followers)
+// Cron: every 6 hours — Tier 1 creators (100K+ followers).
+// Also accepts `snapshots/tier1` event for manual admin triggers.
 export const tier1Snapshot = inngest.createFunction(
   { id: "tier1-snapshot", concurrency: { limit: 1 } },
-  { cron: "0 */6 * * *" },
+  [{ cron: "0 */6 * * *" }, { event: "snapshots/tier1" }],
   async ({ step }) => {
     return executeIngestionRun(
       {
