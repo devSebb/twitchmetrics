@@ -177,6 +177,22 @@ export function CreatorManagement() {
     },
   });
 
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const triggerSnapshot = trpc.snapshot.triggerManualSnapshot.useMutation({
+    onSettled: () => {
+      setRefreshingId(null);
+    },
+    onSuccess: async () => {
+      await utils.admin.getCreatorList.invalidate();
+    },
+    onError: (err) => {
+      setRefreshError(err.message);
+      setTimeout(() => setRefreshError(null), 5000);
+    },
+  });
+
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / limit));
@@ -266,8 +282,13 @@ export function CreatorManagement() {
       </div>
 
       {/* Stats */}
-      <div className="text-xs text-[#949BA4]">
-        {total} creator{total !== 1 ? "s" : ""} found
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-[#949BA4]">
+          {total} creator{total !== 1 ? "s" : ""} found
+        </div>
+        {refreshError && (
+          <div className="text-xs text-[#ef4444]">{refreshError}</div>
+        )}
       </div>
 
       {/* Table */}
@@ -381,11 +402,30 @@ export function CreatorManagement() {
                         : "Never"}
                     </td>
                     <td className="px-4 py-3">
-                      <Link href={`/creator/${creator.slug}`}>
-                        <Button variant="secondary" size="sm">
-                          View
+                      <div className="flex items-center gap-2">
+                        <Link href={`/creator/${creator.slug}`}>
+                          <Button variant="secondary" size="sm">
+                            View
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={refreshingId === creator.id}
+                          onClick={() => {
+                            if (!creator.primaryPlatform) return;
+                            setRefreshingId(creator.id);
+                            triggerSnapshot.mutate({
+                              creatorProfileId: creator.id,
+                              platform: creator.primaryPlatform,
+                            });
+                          }}
+                        >
+                          {refreshingId === creator.id
+                            ? "Refreshing..."
+                            : "Refresh"}
                         </Button>
-                      </Link>
+                      </div>
                     </td>
                   </tr>
                 );

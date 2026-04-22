@@ -27,6 +27,7 @@ import { InterestsSection } from "./sections/InterestsSection";
 import { StreamerQualitiesSection } from "./sections/StreamerQualitiesSection";
 import { RatesSection } from "./sections/RatesSection";
 import { WidgetToggle } from "./WidgetToggle";
+import { WidgetCard } from "./WidgetCard";
 
 // ----------------------------------------------------------------
 // Types for serialized profile data passed from the server page
@@ -89,36 +90,14 @@ type DashboardGridProps = {
 };
 
 // ----------------------------------------------------------------
-// Widget card wrapper
-// ----------------------------------------------------------------
-
-function WidgetCard({
-  widgetId,
-  children,
-  className,
-}: {
-  widgetId: WidgetId;
-  children: React.ReactNode;
-  className?: string | undefined;
-}) {
-  const def = WIDGET_REGISTRY[widgetId];
-  return (
-    <div
-      className={`rounded-xl border border-[#3F4147] bg-[#313338] p-5 ${className ?? ""}`}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F2F3F5]">
-          <def.icon size={16} weight="duotone" className="text-[#949BA4]" />
-          {def.label}
-        </h3>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
 // Access-gated widget renderer
+//
+// Locked widgets (claim/connect required) always render a card so the
+// viewer knows they can unlock it. Unlocked widgets render a regular card
+// whose body includes the widget; widgets that have no data render an
+// `<EmptyWidgetSentinel />` which the card's CSS uses via `:has()` to
+// hide the entire card. The widget stays enabled in config, so it
+// reappears automatically once data arrives.
 // ----------------------------------------------------------------
 
 function renderGated(

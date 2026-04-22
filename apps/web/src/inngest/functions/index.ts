@@ -10,6 +10,7 @@ import { refreshTokens } from "./tokens/refresh-tokens";
 import { enrichClaimedProfiles } from "./enrichment/enrich-claimed-profiles";
 import { enrichOnClaim } from "./enrichment/enrich-on-claim";
 import { enrichGames } from "./enrichment/enrich-games";
+import { enrichCreators } from "./enrichment/enrich-creators";
 import { discoverCreators } from "./discovery/discover-creators";
 import { discoverGames } from "./discovery/discover-games";
 import { discoverSocialLinks } from "./discovery/discover-social-links";
@@ -27,6 +28,7 @@ export const functions = [
   enrichClaimedProfiles,
   enrichOnClaim,
   enrichGames,
+  enrichCreators,
   discoverCreators,
   discoverGames,
   discoverSocialLinks,

@@ -4,7 +4,7 @@ import type { EChartsOption } from "echarts";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber } from "@/lib/utils/format";
 import { BaseChart } from "@/components/charts/BaseChart";
-import { EmptyState } from "./EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type Props = {
@@ -23,14 +23,7 @@ export function PlatformBreakdownWidget({ profile }: Props) {
     .sort((a, b) => b.followerCount - a.followerCount);
 
   if (bars.length === 0) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No Data"
-        message="No follower data available yet."
-        compact
-      />
-    );
+    return <EmptyWidgetSentinel />;
   }
 
   const option: EChartsOption = {

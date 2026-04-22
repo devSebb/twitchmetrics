@@ -140,6 +140,14 @@ model CreatorProfile {
 
   primaryPlatform Platform
 
+  // Derived from recent stream snapshots (updated by enrichCreators)
+  derivedLanguage    String?
+  primaryGameName    String?
+  primaryGameSlug    String?
+  lastStreamAt       DateTime?
+  isActiveLast30d    Boolean    @default(false)
+  lastEnrichedAt     DateTime?
+
   totalFollowers BigInt @default(0)
   totalViews     BigInt @default(0)
   searchText     String? @default("")
@@ -158,11 +166,15 @@ model CreatorProfile {
   talentAccess      TalentManagerAccess[]
   brandPartnerships BrandPartnership[]
   growthRollups     CreatorGrowthRollup[]
+  clips             CreatorClip[]
 
   @@index([state])
   @@index([snapshotTier])
   @@index([primaryPlatform])
   @@index([totalFollowers(sort: Desc)])
+  @@index([derivedLanguage])
+  @@index([primaryGameSlug])
+  @@index([isActiveLast30d, totalFollowers(sort: Desc)])
 }
 
 model CreatorAnalytics {
@@ -428,6 +440,26 @@ model GameClip {
 
   @@unique([gameId, clipId])
   @@index([gameId])
+}
+
+model CreatorClip {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creatorProfileId String         @db.Uuid
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  clipId           String
+  title            String
+  thumbnailUrl     String
+  url              String
+  viewCount        Int            @default(0)
+  duration         Float?
+  gameName         String?
+  language         String?
+  createdAt        DateTime
+  syncedAt         DateTime       @default(now()) @updatedAt
+
+  @@unique([creatorProfileId, clipId])
+  @@index([creatorProfileId, createdAt(sort: Desc)])
+  @@index([creatorProfileId, viewCount(sort: Desc)])
 }
 
 model GameViewerSnapshot {

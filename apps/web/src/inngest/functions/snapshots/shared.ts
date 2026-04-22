@@ -9,6 +9,7 @@ import { cacheInvalidate } from "@/server/services/cache";
 import { recomputeCreatorAggregates } from "@/server/services/creator-aggregates";
 import { recomputeCreatorGrowthRollups } from "@/server/services/creator-growth";
 import { supportsCreatorSnapshots } from "@/server/services/ingestion/constants";
+import { refreshCreatorClips } from "@/server/services/clip-sync";
 
 const log = createLogger("snapshot-worker");
 
@@ -247,6 +248,16 @@ export async function snapshotPlatformAccount(
         where: { id: account.id },
         data: { platformUsername: freshLogin },
       });
+    }
+
+    // Refresh top clips (throttled internally to once per 20h per creator)
+    try {
+      await refreshCreatorClips(creatorProfileId, account.platformUserId);
+    } catch (err) {
+      log.warn(
+        { err, creatorProfileId, platformUserId: account.platformUserId },
+        "Clip sync failed — continuing",
+      );
     }
   }
 }

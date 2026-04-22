@@ -302,6 +302,8 @@ export type ClipData = {
   createdAt: string;
   url: string;
   duration: number;
+  language: string | null;
+  gameId: string | null;
 };
 
 export type TwitchUserDetail = {
@@ -405,6 +407,8 @@ export async function fetchClips(
       createdAt: clip.created_at,
       url: clip.url,
       duration: clip.duration,
+      language: clip.language || null,
+      gameId: clip.game_id || null,
     }));
   });
 }
@@ -431,6 +435,8 @@ export async function fetchClipsByGame(
       createdAt: clip.created_at,
       url: clip.url,
       duration: clip.duration,
+      language: clip.language || null,
+      gameId: clip.game_id || null,
     }));
   });
 }
@@ -443,6 +449,8 @@ export type VideoData = {
   viewCount: number;
   url: string;
   thumbnailUrl: string;
+  language: string | null;
+  streamId: string | null;
 };
 
 function parseTwitchDuration(duration: string): number {
@@ -499,6 +507,8 @@ export async function fetchVideos(
           viewCount: v.view_count,
           url: v.url,
           thumbnailUrl: v.thumbnail_url,
+          language: v.language || null,
+          streamId: v.stream_id || null,
         });
       }
 
@@ -682,6 +692,19 @@ export const twitchAdapter: PlatformAdapter = {
       );
       const channel = channels.data[0] ?? null;
 
+      // Game context: prefer live stream's game, fall back to channel's configured category
+      const gameName = stream?.game_name || channel?.game_name || null;
+      const gameId = stream?.game_id || channel?.game_id || null;
+      const streamTitle = stream?.title || channel?.title || null;
+      const streamLanguage = stream?.language || null;
+      const streamTags =
+        stream?.tags && stream.tags.length > 0
+          ? stream.tags.join(",")
+          : channel?.tags && channel.tags.length > 0
+            ? channel.tags.join(",")
+            : null;
+      const broadcasterLanguage = channel?.broadcaster_language || null;
+
       return {
         platform: "twitch" as Platform,
         platformUserId,
@@ -693,12 +716,18 @@ export const twitchAdapter: PlatformAdapter = {
         postCount: null,
         extendedMetrics: {
           ...extendedMetrics,
-          // Store game info in extended metrics for reference
-          ...(channel
-            ? {
-                AVG_VIEWERS: isLive ? (stream?.viewer_count ?? null) : null,
-              }
-            : {}),
+          AVG_VIEWERS: isLive ? (stream?.viewer_count ?? null) : null,
+          // Stream/channel context — persisted so downstream widgets and
+          // aggregations (popular games, language filters, etc.) have
+          // something to read between snapshots.
+          CURRENT_GAME: gameName,
+          CURRENT_GAME_ID: gameId,
+          STREAM_TITLE: streamTitle,
+          STREAM_LANGUAGE: streamLanguage,
+          STREAM_TAGS: streamTags,
+          BROADCASTER_LANGUAGE: broadcasterLanguage,
+          STREAM_STARTED_AT: stream?.started_at || null,
+          IS_LIVE: isLive ? 1 : 0,
           // Stash profile metadata so the snapshot worker can refresh
           // the CreatorProfile bio, avatar, displayName, and slug without an extra API call.
           _bio: user.description || null,

@@ -98,27 +98,52 @@ export const snapshotRouter = router({
         take: 500,
       });
 
-      // Aggregate game occurrences and avg viewers
+      // Aggregate game occurrences and avg viewers.
+      // Key on twitchGameId when available (stable across renames),
+      // fall back to name. Track the most recent display name per key.
       const gameMap = new Map<
         string,
-        { count: number; totalViewers: number }
+        {
+          count: number;
+          liveCount: number;
+          totalViewers: number;
+          name: string;
+          twitchGameId: string | null;
+        }
       >();
 
       for (const snap of snapshots) {
         const ext = snap.extendedMetrics as Record<string, unknown> | null;
         if (!ext) continue;
         const gameName =
-          typeof ext.currentGame === "string" ? ext.currentGame : null;
+          typeof ext.CURRENT_GAME === "string" ? ext.CURRENT_GAME : null;
+        const twitchGameId =
+          typeof ext.CURRENT_GAME_ID === "string" && ext.CURRENT_GAME_ID
+            ? ext.CURRENT_GAME_ID
+            : null;
         if (!gameName) continue;
 
-        const viewers = typeof ext.avgViewers === "number" ? ext.avgViewers : 0;
+        const isLive =
+          typeof ext.AVG_VIEWERS === "number" && ext.AVG_VIEWERS > 0;
+        const viewers =
+          typeof ext.AVG_VIEWERS === "number" ? ext.AVG_VIEWERS : 0;
 
-        const existing = gameMap.get(gameName);
+        const key = twitchGameId ?? `name:${gameName}`;
+        const existing = gameMap.get(key);
         if (existing) {
           existing.count += 1;
-          existing.totalViewers += viewers;
+          if (isLive) {
+            existing.liveCount += 1;
+            existing.totalViewers += viewers;
+          }
         } else {
-          gameMap.set(gameName, { count: 1, totalViewers: viewers });
+          gameMap.set(key, {
+            count: 1,
+            liveCount: isLive ? 1 : 0,
+            totalViewers: isLive ? viewers : 0,
+            name: gameName,
+            twitchGameId,
+          });
         }
       }
 
@@ -127,25 +152,50 @@ export const snapshotRouter = router({
         .sort((a, b) => b[1].count - a[1].count)
         .slice(0, input.limit);
 
-      // Look up Game table slugs and cover images
-      const gameNames = sorted.map(([name]) => name);
+      // Look up Game table slugs and cover images — prefer twitchGameId match
+      const twitchIds = sorted
+        .map(([, v]) => v.twitchGameId)
+        .filter((id): id is string => id !== null);
+      const names = sorted.map(([, v]) => v.name);
       const games = await ctx.prisma.game.findMany({
-        where: { name: { in: gameNames } },
-        select: { name: true, slug: true, coverImageUrl: true },
+        where: {
+          OR: [
+            ...(twitchIds.length > 0
+              ? [{ twitchGameId: { in: twitchIds } }]
+              : []),
+            { name: { in: names } },
+          ],
+        },
+        select: {
+          name: true,
+          slug: true,
+          coverImageUrl: true,
+          twitchGameId: true,
+        },
       });
 
-      const gameInfoMap = new Map(games.map((g) => [g.name, g]));
+      const gameByTwitchId = new Map(
+        games
+          .filter((g) => g.twitchGameId)
+          .map((g) => [g.twitchGameId!, g] as const),
+      );
+      const gameByName = new Map(games.map((g) => [g.name, g] as const));
 
-      return sorted.map(([name, { count, totalViewers }]) => {
-        const gameInfo = gameInfoMap.get(name);
-        return {
-          gameName: name,
-          streamCount: count,
-          avgViewers: Math.round(totalViewers / count),
-          slug: gameInfo?.slug ?? null,
-          coverImageUrl: gameInfo?.coverImageUrl ?? null,
-        };
-      });
+      return sorted.map(
+        ([, { name, twitchGameId, count, liveCount, totalViewers }]) => {
+          const gameInfo =
+            (twitchGameId ? gameByTwitchId.get(twitchGameId) : undefined) ??
+            gameByName.get(name);
+          return {
+            gameName: name,
+            streamCount: count,
+            avgViewers:
+              liveCount > 0 ? Math.round(totalViewers / liveCount) : 0,
+            slug: gameInfo?.slug ?? null,
+            coverImageUrl: gameInfo?.coverImageUrl ?? null,
+          };
+        },
+      );
     }),
 
   getRecentStreams: publicProcedure
@@ -161,22 +211,17 @@ export const snapshotRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      // Fetch snapshots that contain live stream data (extended metrics)
-      const snapshots = await ctx.prisma.metricSnapshot.findMany({
+      // Real stream history comes from Twitch's Videos API (VOD archive),
+      // not from snapshot stitching — snapshot cadence is too sparse for
+      // reliable session reconstruction.
+      const twitchAccount = await ctx.prisma.platformAccount.findFirst({
         where: {
           creatorProfileId: input.creatorProfileId,
-          extendedMetrics: { not: Prisma.DbNull },
+          platform: "twitch",
         },
-        select: {
-          snapshotAt: true,
-          extendedMetrics: true,
-        },
-        orderBy: { snapshotAt: "asc" },
-        take: 2000,
+        select: { platformUserId: true },
       });
 
-      // Group consecutive snapshots into stream sessions
-      // Detect session boundaries as gaps > 1 hour between snapshots
       type StreamSession = {
         startedAt: string;
         endedAt: string;
@@ -184,94 +229,103 @@ export const snapshotRouter = router({
         durationMinutes: number;
         avgViewers: number;
         peakViewers: number;
+        title: string | null;
+        viewCount: number;
+        thumbnailUrl: string | null;
+        url: string | null;
+        language: string | null;
       };
 
-      const sessions: StreamSession[] = [];
-      let currentSession: {
-        start: Date;
-        end: Date;
-        game: string | null;
-        viewers: number[];
-        peak: number;
-      } | null = null;
-
-      const SESSION_GAP_MS = 60 * 60 * 1000; // 1 hour
-
-      for (const snap of snapshots) {
-        const ext = snap.extendedMetrics as Record<string, unknown> | null;
-        if (!ext) continue;
-
-        // Only consider snapshots where the channel was live
-        const viewerCount =
-          typeof ext.LIVE_VIEWER_COUNT === "number"
-            ? ext.LIVE_VIEWER_COUNT
-            : typeof ext.AVG_VIEWERS === "number"
-              ? ext.AVG_VIEWERS
-              : null;
-
-        if (viewerCount === null) continue;
-
-        const game =
-          typeof ext.currentGame === "string" ? ext.currentGame : null;
-
-        if (
-          currentSession &&
-          snap.snapshotAt.getTime() - currentSession.end.getTime() <
-            SESSION_GAP_MS
-        ) {
-          // Continue session
-          currentSession.end = snap.snapshotAt;
-          currentSession.viewers.push(viewerCount);
-          if (viewerCount > currentSession.peak)
-            currentSession.peak = viewerCount;
-          if (game && !currentSession.game) currentSession.game = game;
-        } else {
-          // Close previous session
-          if (currentSession) {
-            const avg =
-              currentSession.viewers.reduce((a, b) => a + b, 0) /
-              currentSession.viewers.length;
-            sessions.push({
-              startedAt: currentSession.start.toISOString(),
-              endedAt: currentSession.end.toISOString(),
-              game: currentSession.game,
-              durationMinutes: Math.round(
-                (currentSession.end.getTime() -
-                  currentSession.start.getTime()) /
-                  60000,
-              ),
-              avgViewers: Math.round(avg),
-              peakViewers: currentSession.peak,
-            });
-          }
-          // Start new session
-          currentSession = {
-            start: snap.snapshotAt,
-            end: snap.snapshotAt,
-            game,
-            viewers: [viewerCount],
-            peak: viewerCount,
-          };
-        }
+      if (!twitchAccount) {
+        return { sessions: [], total: 0, page: input.page };
       }
 
-      // Close last session
-      if (currentSession) {
-        const avg =
-          currentSession.viewers.reduce((a, b) => a + b, 0) /
-          currentSession.viewers.length;
-        sessions.push({
-          startedAt: currentSession.start.toISOString(),
-          endedAt: currentSession.end.toISOString(),
-          game: currentSession.game,
-          durationMinutes: Math.round(
-            (currentSession.end.getTime() - currentSession.start.getTime()) /
-              60000,
-          ),
-          avgViewers: Math.round(avg),
-          peakViewers: currentSession.peak,
+      let videos: Awaited<
+        ReturnType<typeof import("@/server/adapters/twitch").fetchVideos>
+      > = [];
+      try {
+        const { fetchVideos } = await import("@/server/adapters/twitch");
+        videos = await fetchVideos(twitchAccount.platformUserId, {
+          limit: 200,
         });
+      } catch {
+        return { sessions: [], total: 0, page: input.page };
       }
+
+      if (videos.length === 0) {
+        return { sessions: [], total: 0, page: input.page };
+      }
+
+      // Best-effort game / viewer enrichment: look up creator's snapshots
+      // that fall inside each VOD's [createdAt, createdAt + duration] window
+      // and pull CURRENT_GAME / PEAK_VIEWERS / AVG_VIEWERS.
+      const earliestStart = videos.reduce(
+        (min, v) => (new Date(v.createdAt) < min ? new Date(v.createdAt) : min),
+        new Date(videos[0]!.createdAt),
+      );
+      const snapshots = await ctx.prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          platform: "twitch",
+          snapshotAt: { gte: earliestStart },
+          extendedMetrics: { not: Prisma.DbNull },
+        },
+        select: {
+          snapshotAt: true,
+          extendedMetrics: true,
+        },
+        orderBy: { snapshotAt: "asc" },
+      });
+
+      const sessions: StreamSession[] = videos.map((video) => {
+        const start = new Date(video.createdAt);
+        const end = new Date(start.getTime() + video.durationSeconds * 1000);
+
+        let game: string | null = null;
+        let peak = 0;
+        const viewerSamples: number[] = [];
+
+        for (const snap of snapshots) {
+          if (snap.snapshotAt < start || snap.snapshotAt > end) continue;
+          const ext = snap.extendedMetrics as Record<string, unknown> | null;
+          if (!ext) continue;
+
+          if (!game && typeof ext.CURRENT_GAME === "string") {
+            game = ext.CURRENT_GAME;
+          }
+          const avg =
+            typeof ext.AVG_VIEWERS === "number"
+              ? ext.AVG_VIEWERS
+              : typeof ext.LIVE_VIEWER_COUNT === "number"
+                ? ext.LIVE_VIEWER_COUNT
+                : null;
+          if (avg !== null) viewerSamples.push(avg);
+          const snapPeak =
+            typeof ext.PEAK_VIEWERS === "number" ? ext.PEAK_VIEWERS : null;
+          if (snapPeak !== null && snapPeak > peak) peak = snapPeak;
+        }
+
+        const avgViewers =
+          viewerSamples.length > 0
+            ? Math.round(
+                viewerSamples.reduce((a, b) => a + b, 0) / viewerSamples.length,
+              )
+            : 0;
+
+        return {
+          startedAt: start.toISOString(),
+          endedAt: end.toISOString(),
+          game,
+          durationMinutes: Math.round(video.durationSeconds / 60),
+          avgViewers,
+          peakViewers: peak,
+          title: video.title || null,
+          viewCount: video.viewCount,
+          thumbnailUrl: video.thumbnailUrl || null,
+          url: video.url || null,
+          language: video.language,
+        };
+      });
 
       // Sort
       const sorted = [...sessions].sort((a, b) => {
@@ -301,7 +355,6 @@ export const snapshotRouter = router({
         }
       });
 
-      // Paginate
       const total = sorted.length;
       const start = (input.page - 1) * input.pageSize;
       const paginated = sorted.slice(start, start + input.pageSize);
@@ -330,13 +383,63 @@ export const snapshotRouter = router({
         return { clips: [], hasTwitch: false };
       }
 
+      // Prefer persisted clips (synced via snapshot jobs). Fall back to live
+      // Twitch API call only when the creator has no clips in the DB yet.
+      const stored = await ctx.prisma.creatorClip.findMany({
+        where: { creatorProfileId: input.creatorProfileId },
+        orderBy: { viewCount: "desc" },
+        take: input.limit,
+        select: {
+          clipId: true,
+          title: true,
+          thumbnailUrl: true,
+          url: true,
+          viewCount: true,
+          duration: true,
+          gameName: true,
+          language: true,
+          createdAt: true,
+        },
+      });
+
+      if (stored.length > 0) {
+        return {
+          clips: stored.map((c) => ({
+            id: c.clipId,
+            title: c.title,
+            thumbnailUrl: c.thumbnailUrl,
+            url: c.url,
+            viewCount: c.viewCount,
+            duration: c.duration ?? 0,
+            gameName: c.gameName,
+            language: c.language,
+            createdAt: c.createdAt.toISOString(),
+          })),
+          hasTwitch: true,
+        };
+      }
+
+      // Fallback: live fetch for creators with no cached clips yet
       try {
         const { fetchClips } = await import("@/server/adapters/twitch");
         const clips = await fetchClips(
           twitchAccount.platformUserId,
           input.limit,
         );
-        return { clips, hasTwitch: true };
+        return {
+          clips: clips.map((c) => ({
+            id: c.id,
+            title: c.title,
+            thumbnailUrl: c.thumbnailUrl,
+            url: c.url,
+            viewCount: c.viewCount,
+            duration: c.duration,
+            gameName: null as string | null,
+            language: c.language,
+            createdAt: c.createdAt,
+          })),
+          hasTwitch: true,
+        };
       } catch {
         return { clips: [], hasTwitch: true };
       }

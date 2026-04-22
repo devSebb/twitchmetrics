@@ -38,10 +38,10 @@ export const TIER_CONFIG: Record<SnapshotTier, TierConfig> = {
   tier3: {
     tier: "tier3",
     label: "Tier 3",
-    description: "All other creators, snapshotted weekly",
+    description: "All other creators, snapshotted daily",
     followerThreshold: 0,
-    cronExpression: "0 3 * * 0",
-    intervalHours: 168,
+    cronExpression: "0 3 * * *",
+    intervalHours: 24,
     promotionThreshold: 10_000,
     demotionThreshold: 0,
     demotionGracePeriod: 0,

@@ -31,6 +31,14 @@ type SearchGame = {
   relevance: number;
 };
 
+type UntrackedCreator = {
+  platformUserId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  isLive: boolean | null;
+};
+
 async function searchDatabase(query: string, type: string, page: number) {
   const offset = (page - 1) * RESULTS_PER_PAGE;
 
@@ -96,7 +104,27 @@ async function searchDatabase(query: string, type: string, page: number) {
   const creatorTotal = Number(creatorCountResult[0]?.count ?? 0);
   const gameTotal = Number(gameCountResult[0]?.count ?? 0);
 
-  return { creators, games, creatorTotal, gameTotal };
+  // Fallback: if no creator matches, surface live Twitch search results so
+  // users searching for famous streamers we haven't ingested yet still get
+  // something — with a CTA link pointing at Twitch.
+  let untrackedCreators: UntrackedCreator[] = [];
+  if (type !== "games" && creators.length === 0 && page === 1) {
+    try {
+      const { twitchAdapter } = await import("@/server/adapters/twitch");
+      const results = await twitchAdapter.search(query, 5);
+      untrackedCreators = results.map((r) => ({
+        platformUserId: r.platformUserId,
+        username: r.platformUsername,
+        displayName: r.platformDisplayName,
+        avatarUrl: r.platformAvatarUrl,
+        isLive: r.isLive,
+      }));
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  return { creators, games, creatorTotal, gameTotal, untrackedCreators };
 }
 
 const TABS = [
@@ -174,16 +202,74 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       {/* Server-rendered results */}
       {results && (
         <div className="mt-6">
-          {results.creators.length === 0 && results.games.length === 0 && (
-            <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-10 text-center">
-              <p className="text-lg font-medium text-[#DBDEE1]">
-                No results for &ldquo;{query}&rdquo;
-              </p>
-              <p className="mt-1 text-sm text-[#949BA4]">
-                Try a different search term or check the spelling
-              </p>
-            </div>
-          )}
+          {results.creators.length === 0 &&
+            results.games.length === 0 &&
+            results.untrackedCreators.length === 0 && (
+              <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-10 text-center">
+                <p className="text-lg font-medium text-[#DBDEE1]">
+                  No results for &ldquo;{query}&rdquo;
+                </p>
+                <p className="mt-1 text-sm text-[#949BA4]">
+                  Try a different search term or check the spelling
+                </p>
+              </div>
+            )}
+
+          {/* Untracked Twitch suggestions — shown when we have no DB match */}
+          {results.creators.length === 0 &&
+            results.untrackedCreators.length > 0 && (
+              <div className="mb-8">
+                <h2 className="mb-1 text-sm font-semibold uppercase text-[#949BA4]">
+                  On Twitch — not tracked yet
+                </h2>
+                <p className="mb-3 text-xs text-[#72767D]">
+                  These channels match your search but we haven&apos;t indexed
+                  them yet. Check back after our next refresh.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.untrackedCreators.map((c) => (
+                    <a
+                      key={c.platformUserId}
+                      href={`https://twitch.tv/${c.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#313338]"
+                    >
+                      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
+                        {c.avatarUrl ? (
+                          <Image
+                            src={c.avatarUrl}
+                            alt={c.displayName}
+                            fill
+                            className="object-cover"
+                            sizes="40px"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white bg-[#9146ff]">
+                            {c.displayName.charAt(0)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium text-[#DBDEE1]">
+                            {c.displayName}
+                          </span>
+                          {c.isLive && (
+                            <span className="flex-shrink-0 rounded bg-[#E32C19] px-1 py-0.5 text-[9px] font-bold text-white">
+                              LIVE
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[#72767D]">
+                          @{c.username} · on twitch.tv ↗
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
           {results.creators.length > 0 && (
             <div className="mb-8">

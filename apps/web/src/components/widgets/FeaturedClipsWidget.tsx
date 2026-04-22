@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { trpc } from "@/lib/trpc";
 import { formatNumber, formatRelativeTime } from "@/lib/utils/format";
-import { EmptyState } from "./EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type Props = {
@@ -29,26 +29,8 @@ export function FeaturedClipsWidget({ profile }: Props) {
     );
   }
 
-  if (!data?.hasTwitch) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No Twitch Account"
-        message="Connect Twitch to see clips."
-        compact
-      />
-    );
-  }
-
-  if (data.clips.length === 0) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No Clips"
-        message="Unable to load clips. Try again later."
-        compact
-      />
-    );
+  if (!data?.hasTwitch || data.clips.length === 0) {
+    return <EmptyWidgetSentinel />;
   }
 
   return (

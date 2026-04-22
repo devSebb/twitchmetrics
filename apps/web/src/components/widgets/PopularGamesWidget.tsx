@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { EmptyState } from "@/components/widgets/EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
 import { formatNumber } from "@/lib/utils/format";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
@@ -28,14 +28,7 @@ export function PopularGamesWidget({ profile }: PopularGamesWidgetProps) {
   }
 
   if (!games || games.length === 0) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No streaming data"
-        message="No streaming data yet. Games will appear once streams are recorded."
-        compact
-      />
-    );
+    return <EmptyWidgetSentinel />;
   }
 
   return (

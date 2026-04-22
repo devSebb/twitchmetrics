@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import { ViewerCountChart } from "@/components/charts";
-import { EmptyState } from "@/components/widgets/EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
 import { formatNumber } from "@/lib/utils/format";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
@@ -33,16 +33,16 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
       .map((s) => {
         const ext = s.extendedMetrics as Record<string, unknown> | null;
         const viewers =
-          typeof ext?.avgViewers === "number"
-            ? ext.avgViewers
-            : typeof ext?.liveViewerCount === "number"
-              ? ext.liveViewerCount
+          typeof ext?.AVG_VIEWERS === "number"
+            ? ext.AVG_VIEWERS
+            : typeof ext?.LIVE_VIEWER_COUNT === "number"
+              ? ext.LIVE_VIEWER_COUNT
               : null;
 
         if (viewers === null) return null;
 
         const game =
-          typeof ext?.currentGame === "string" ? ext.currentGame : undefined;
+          typeof ext?.CURRENT_GAME === "string" ? ext.CURRENT_GAME : undefined;
         return game !== undefined
           ? { date: new Date(s.snapshotAt).toISOString(), viewers, game }
           : { date: new Date(s.snapshotAt).toISOString(), viewers };
@@ -61,23 +61,16 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
     const ext = latest?.extendedMetrics as Record<string, unknown> | null;
     if (!ext) return null;
 
-    const isLive = ext.isLive === true;
+    const isLive = ext.IS_LIVE === 1 || ext.IS_LIVE === true;
     const currentViewers =
-      typeof ext.liveViewerCount === "number" ? ext.liveViewerCount : null;
+      typeof ext.LIVE_VIEWER_COUNT === "number" ? ext.LIVE_VIEWER_COUNT : null;
 
     if (!isLive) return null;
     return { viewers: currentViewers };
   }, [snapshotData]);
 
   if (!isLoading && chartData.length === 0) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No viewer data"
-        message="No viewer data available. Data will appear after streams are recorded."
-        compact
-      />
-    );
+    return <EmptyWidgetSentinel />;
   }
 
   return (

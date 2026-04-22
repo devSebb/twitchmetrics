@@ -104,10 +104,37 @@ export async function GET(request: Request) {
 
   const [creators, games] = await Promise.all([creatorsPromise, gamesPromise]);
 
+  // Fallback: if no DB creator matches and the user was looking for creators,
+  // surface live Twitch results so the UI can show "not tracked yet" suggestions.
+  type UntrackedCreator = {
+    platformUserId: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+    isLive: boolean | null;
+  };
+  let untrackedCreators: UntrackedCreator[] = [];
+  if (type !== "games" && creators.length === 0 && query.length >= 2) {
+    try {
+      const { twitchAdapter } = await import("@/server/adapters/twitch");
+      const results = await twitchAdapter.search(query, 5);
+      untrackedCreators = results.map((r) => ({
+        platformUserId: r.platformUserId,
+        username: r.platformUsername,
+        displayName: r.platformDisplayName,
+        avatarUrl: r.platformAvatarUrl,
+        isLive: r.isLive,
+      }));
+    } catch {
+      // Non-blocking — untracked fallback is a nice-to-have
+    }
+  }
+
   const response = serializeBigInt({
     data: {
       creators,
       games,
+      untrackedCreators,
     },
     meta: {
       query,

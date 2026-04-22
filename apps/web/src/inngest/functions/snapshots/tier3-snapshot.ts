@@ -2,10 +2,12 @@ import { inngest } from "../../client";
 import { runTierSnapshot } from "./shared";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
-// Cron: weekly, Sunday 3am UTC — Tier 3 creators (under 10K followers)
+// Cron: daily at 3am UTC — Tier 3 creators (under 10K followers).
+// Was weekly, which left small creators with barely any data points;
+// daily snapshots give growth rollups enough signal to work.
 export const tier3Snapshot = inngest.createFunction(
   { id: "tier3-snapshot", concurrency: { limit: 1 } },
-  { cron: "0 3 * * 0" },
+  { cron: "0 3 * * *" },
   async ({ step }) => {
     return executeIngestionRun(
       {

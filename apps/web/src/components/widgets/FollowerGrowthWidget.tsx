@@ -5,7 +5,7 @@ import type { Platform } from "@twitchmetrics/database";
 import { FollowerGrowthChart } from "@/components/charts";
 import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
-import { EmptyState } from "@/components/widgets/EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
@@ -63,25 +63,11 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
       : primaryQuery.isLoading;
 
   if (connectedPlatforms.length === 0) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No follower data"
-        message="No platform accounts connected yet."
-        compact
-      />
-    );
+    return <EmptyWidgetSentinel />;
   }
 
   if (!isLoading && chartData.length === 0 && platform !== "all") {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No follower data"
-        message="No follower data available yet. Data will appear after the next snapshot."
-        compact
-      />
-    );
+    return <EmptyWidgetSentinel />;
   }
 
   return (

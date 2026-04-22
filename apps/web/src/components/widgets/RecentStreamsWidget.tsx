@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDate, formatDuration, formatNumber } from "@/lib/utils/format";
-import { EmptyState } from "./EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type SortBy = "date" | "game" | "duration" | "avgViewers" | "peakViewers";
@@ -65,14 +65,7 @@ export function RecentStreamsWidget({ profile }: Props) {
   }
 
   if (!data || data.sessions.length === 0) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="No Streams"
-        message="No stream history available."
-        compact
-      />
-    );
+    return <EmptyWidgetSentinel />;
   }
 
   const totalPages = Math.ceil(data.total / 10);
