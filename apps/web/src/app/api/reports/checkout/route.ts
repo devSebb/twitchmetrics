@@ -36,22 +36,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find the template in DB (upsert if not yet seeded)
-    let template = await prisma.reportTemplate.findUnique({
-      where: { slug: matched.slug },
+    // Upsert template so stale rows from earlier schema shapes get refreshed.
+    const def = REPORT_TEMPLATES.find((t) => t.slug === matched.slug)!;
+    const template = await prisma.reportTemplate.upsert({
+      where: { slug: def.slug },
+      create: {
+        slug: def.slug,
+        name: def.name,
+        description: def.description,
+        priceInCents: def.priceInCents,
+        config: def.config,
+      },
+      update: {
+        name: def.name,
+        description: def.description,
+        priceInCents: def.priceInCents,
+        config: def.config,
+      },
     });
-    if (!template) {
-      const def = REPORT_TEMPLATES.find((t) => t.slug === matched.slug)!;
-      template = await prisma.reportTemplate.create({
-        data: {
-          slug: def.slug,
-          name: def.name,
-          description: def.description,
-          priceInCents: def.priceInCents,
-          config: def.config,
-        },
-      });
-    }
 
     const origin = request.headers.get("origin") ?? "http://localhost:3000";
 

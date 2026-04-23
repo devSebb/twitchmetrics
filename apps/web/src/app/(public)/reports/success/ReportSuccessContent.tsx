@@ -7,6 +7,7 @@ import Link from "next/link";
 type State =
   | { status: "loading" }
   | { status: "ready"; purchaseId: string; templateName: string }
+  | { status: "quote" }
   | { status: "error"; message: string };
 
 export function ReportSuccessContent() {
@@ -15,8 +16,14 @@ export function ReportSuccessContent() {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
+    const mode = params.get("mode");
     const sessionId = params.get("session_id");
     const purchaseId = params.get("purchase_id");
+
+    if (mode === "quote") {
+      setState({ status: "quote" });
+      return;
+    }
 
     const url = purchaseId
       ? `/api/reports/verify?purchase_id=${purchaseId}`
@@ -89,6 +96,44 @@ export function ReportSuccessContent() {
           <>
             <div className="mx-auto mb-6 h-10 w-10 animate-spin rounded-full border-2 border-[#3F4147] border-t-[#E32C19]" />
             <p className="text-sm text-[#949BA4]">Verifying your payment…</p>
+          </>
+        )}
+
+        {state.status === "quote" && (
+          <>
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#22c55e]/10">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="mb-1 text-xl font-bold text-[#F2F3F5]">
+              Request received
+            </h2>
+            <p className="mb-6 text-sm leading-relaxed text-[#DBDEE1]">
+              Thanks for the details. Our team will review your request and
+              reach out within{" "}
+              <span className="font-semibold text-[#F2F3F5]">24 hours</span>{" "}
+              with a custom quote for your report.
+            </p>
+            <Link
+              href="/reports"
+              className="inline-block rounded-lg bg-[#383A40] px-6 py-2.5 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            >
+              Back to Reports
+            </Link>
+            <p className="mt-6 text-xs text-[#4E5058]">
+              Keep an eye on your inbox — we&apos;ll reply to the email you
+              provided.
+            </p>
           </>
         )}
 

@@ -1,6 +1,10 @@
 import { prisma } from "@twitchmetrics/database";
 import type { TemplateConfig } from "@/lib/constants/report-templates";
 
+type GenerateArgs = {
+  entityIds?: string[];
+};
+
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
 
 function esc(v: unknown): string {
@@ -55,25 +59,41 @@ function periodLabel(timePeriod: string): string {
 async function generateGamesReport(
   config: TemplateConfig,
   reportName: string,
+  args: GenerateArgs = {},
 ): Promise<string> {
-  const limit = typeof config.topCount === "number" ? config.topCount : 500;
   const since = periodStart(config.timePeriod);
-  const metrics = config.metrics;
+  const metrics = config.allowedMetrics;
+  const byId = config.topCount === "byId";
+  const entityIds = args.entityIds ?? [];
 
-  const games = await prisma.game.findMany({
-    take: limit,
-    orderBy: [{ hoursWatched7d: "desc" }, { avgViewers7d: "desc" }],
-    include: {
-      viewerSnapshots: {
-        where: { snapshotAt: { gte: since } },
-        orderBy: { snapshotAt: "asc" },
-      },
-      topChannels: {
-        orderBy: { viewerHours: "desc" },
-        take: 5,
-      },
-    },
-  });
+  const games = byId
+    ? await prisma.game.findMany({
+        where: { id: { in: entityIds } },
+        include: {
+          viewerSnapshots: {
+            where: { snapshotAt: { gte: since } },
+            orderBy: { snapshotAt: "asc" },
+          },
+          topChannels: { orderBy: { viewerHours: "desc" }, take: 5 },
+        },
+      })
+    : await prisma.game.findMany({
+        take: typeof config.topCount === "number" ? config.topCount : 500,
+        orderBy: [{ hoursWatched7d: "desc" }, { avgViewers7d: "desc" }],
+        include: {
+          viewerSnapshots: {
+            where: { snapshotAt: { gte: since } },
+            orderBy: { snapshotAt: "asc" },
+          },
+          topChannels: { orderBy: { viewerHours: "desc" }, take: 5 },
+        },
+      });
+
+  // Preserve the user's picking order when byId.
+  if (byId) {
+    const order = new Map(entityIds.map((id, i) => [id, i] as const));
+    games.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  }
 
   // ── Build column list ──────────────────────────────────────────────────────
   const cols: string[] = ["Rank", "Game"];
@@ -175,34 +195,49 @@ async function generateGamesReport(
 async function generateChannelsReport(
   config: TemplateConfig,
   reportName: string,
+  args: GenerateArgs = {},
 ): Promise<string> {
-  const limit = typeof config.topCount === "number" ? config.topCount : 500;
   const since = periodStart(config.timePeriod);
-  const metrics = config.metrics;
+  const metrics = config.allowedMetrics;
+  const byId = config.topCount === "byId";
+  const entityIds = args.entityIds ?? [];
 
-  const creators = await prisma.creatorProfile.findMany({
-    take: limit,
-    where: { primaryPlatform: "twitch" },
-    orderBy: { totalFollowers: "desc" },
-    include: {
-      metricSnapshots: {
-        where: { platform: "twitch", snapshotAt: { gte: since } },
-        orderBy: { snapshotAt: "desc" },
-        take: 1,
-      },
-      growthRollups: {
-        where: { platform: "twitch" },
-      },
-    },
-  });
+  const creators = byId
+    ? await prisma.creatorProfile.findMany({
+        where: { id: { in: entityIds } },
+        include: {
+          metricSnapshots: {
+            where: { platform: "twitch", snapshotAt: { gte: since } },
+            orderBy: { snapshotAt: "desc" },
+            take: 1,
+          },
+          growthRollups: { where: { platform: "twitch" } },
+        },
+      })
+    : await prisma.creatorProfile.findMany({
+        take: typeof config.topCount === "number" ? config.topCount : 500,
+        where: { primaryPlatform: "twitch" },
+        orderBy: { totalFollowers: "desc" },
+        include: {
+          metricSnapshots: {
+            where: { platform: "twitch", snapshotAt: { gte: since } },
+            orderBy: { snapshotAt: "desc" },
+            take: 1,
+          },
+          growthRollups: { where: { platform: "twitch" } },
+        },
+      });
 
-  const cols: string[] = ["Rank", "Channel"];
+  if (byId) {
+    const order = new Map(entityIds.map((id, i) => [id, i] as const));
+    creators.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  }
+
+  const cols: string[] = ["Rank", "Channel", "Followers"];
   if (metrics.includes("avgViewers")) cols.push("Avg Viewers (est.)");
-  if (metrics.includes("peakViewers")) cols.push("Followers");
+  if (metrics.includes("peakViewers")) cols.push("Peak Viewers (est.)");
   if (metrics.includes("gender")) cols.push("Gender (if available)");
   if (metrics.includes("country")) cols.push("Primary Country");
-  if (metrics.includes("topCreators") || metrics.includes("topChannels"))
-    cols.push("Platform");
 
   const lines: string[] = [];
 
@@ -228,13 +263,17 @@ async function generateChannelsReport(
 
     totalFollowers += BigInt(Number(followers));
 
-    const cells: unknown[] = [i + 1, creator.displayName];
+    const estPeakViewers = Math.round(estAvgViewers * 1.8);
+
+    const cells: unknown[] = [
+      i + 1,
+      creator.displayName,
+      fmt(Number(followers)),
+    ];
     if (metrics.includes("avgViewers")) cells.push(fmt(estAvgViewers));
-    if (metrics.includes("peakViewers")) cells.push(fmt(Number(followers)));
+    if (metrics.includes("peakViewers")) cells.push(fmt(estPeakViewers));
     if (metrics.includes("gender")) cells.push(creator.gender ?? "N/A");
     if (metrics.includes("country")) cells.push(creator.country ?? "N/A");
-    if (metrics.includes("topCreators") || metrics.includes("topChannels"))
-      cells.push(creator.primaryPlatform);
 
     lines.push(cells.map(esc).join(","));
   });
@@ -256,12 +295,13 @@ async function generateChannelsReport(
 export async function generateReportCsv(
   config: TemplateConfig,
   reportName: string,
+  args: GenerateArgs = {},
 ): Promise<string> {
   if (config.includes[0] === "games") {
-    return generateGamesReport(config, reportName);
+    return generateGamesReport(config, reportName, args);
   }
   if (config.includes[0] === "channels") {
-    return generateChannelsReport(config, reportName);
+    return generateChannelsReport(config, reportName, args);
   }
   throw new Error(`Unsupported report type: ${config.includes[0]}`);
 }

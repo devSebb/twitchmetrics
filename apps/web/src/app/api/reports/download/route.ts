@@ -24,7 +24,10 @@ export async function GET(request: Request) {
   }
 
   const config = purchase.template.config as TemplateConfig;
-  const csv = await generateReportCsv(config, purchase.template.name);
+  const formData = (purchase.formData as { entityIds?: string[] }) ?? {};
+  const csv = await generateReportCsv(config, purchase.template.name, {
+    entityIds: formData.entityIds ?? [],
+  });
 
   const filename = `${purchase.template.slug}-${new Date().toISOString().split("T")[0]}.csv`;
 

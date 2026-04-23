@@ -1,9 +1,23 @@
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export type MetricKey =
+  | "hoursWatched"
+  | "avgViewers"
+  | "peakViewers"
+  | "topCreators"
+  | "airtime"
+  | "subscribers"
+  | "gender"
+  | "country"
+  | "topCategories";
+
 export type TemplateConfig = {
-  includes: string[];
-  topCount: number | "500+";
-  timePeriod: string;
-  platforms: string[];
-  metrics: string[];
+  includes: ["games"] | ["channels"];
+  // number = Top N, "byId" = specific entities picked by user
+  topCount: number | "byId";
+  timePeriod: "30d" | "90d";
+  platforms: ["twitch"];
+  allowedMetrics: MetricKey[];
 };
 
 export type ReportTemplateDefinition = {
@@ -14,156 +28,178 @@ export type ReportTemplateDefinition = {
   config: TemplateConfig;
 };
 
-export const REPORT_TEMPLATES: ReportTemplateDefinition[] = [
-  {
-    slug: "top-10-games-30d-twitch",
-    name: "Top 10 Games — Last 30 Days",
-    description:
-      "The 10 most-watched games on Twitch in the past 30 days, ranked by hours watched with average and peak viewer counts.",
-    priceInCents: 25000,
-    config: {
-      includes: ["games"],
-      topCount: 10,
-      timePeriod: "30d",
-      platforms: ["twitch"],
-      metrics: ["hoursWatched", "avgViewers", "peakViewers"],
-    },
-  },
-  {
-    slug: "top-50-games-30d-twitch",
-    name: "Top 50 Games — Last 30 Days",
-    description:
-      "The 50 most-watched games on Twitch in the past 30 days, ranked by hours watched.",
-    priceInCents: 25000,
-    config: {
-      includes: ["games"],
-      topCount: 50,
-      timePeriod: "30d",
-      platforms: ["twitch"],
-      metrics: ["hoursWatched", "avgViewers", "peakViewers"],
-    },
-  },
-  {
-    slug: "top-10-games-90d-twitch",
-    name: "Top 10 Games — Last 90 Days",
-    description:
-      "The 10 most-watched games on Twitch over the past 90 days with trend analysis.",
-    priceInCents: 25000,
-    config: {
-      includes: ["games"],
-      topCount: 10,
-      timePeriod: "90d",
-      platforms: ["twitch"],
-      metrics: ["hoursWatched", "avgViewers", "peakViewers"],
-    },
-  },
-  {
-    slug: "top-10-channels-30d-twitch",
-    name: "Top 10 Channels — Last 30 Days",
-    description:
-      "The 10 most-watched Twitch channels in the past 30 days with viewer and follower metrics.",
-    priceInCents: 25000,
-    config: {
-      includes: ["channels"],
-      topCount: 10,
-      timePeriod: "30d",
-      platforms: ["twitch"],
-      metrics: ["avgViewers", "peakViewers"],
-    },
-  },
-  {
-    slug: "top-50-channels-30d-twitch",
-    name: "Top 50 Channels — Last 30 Days",
-    description: "The 50 most-watched Twitch channels in the past 30 days.",
-    priceInCents: 25000,
-    config: {
-      includes: ["channels"],
-      topCount: 50,
-      timePeriod: "30d",
-      platforms: ["twitch"],
-      metrics: ["avgViewers", "peakViewers"],
-    },
-  },
-];
-
-// ─── Matching ────────────────────────────────────────────────────────────────
-
 export type FormSnapshot = {
   include: "games" | "channels" | null;
   topCount: number | "500+" | null;
   timePeriod: string;
   platforms: string[];
   metrics: string[];
-  channelGameSearch: string;
+  entityIds: string[];
+  entityLabels: string[];
 };
 
-function sorted(arr: string[]) {
-  return [...arr].sort();
+// ─── Catalog ─────────────────────────────────────────────────────────────────
+
+const GAMES_METRICS: MetricKey[] = [
+  "hoursWatched",
+  "avgViewers",
+  "peakViewers",
+  "topCreators",
+];
+
+const CHANNELS_METRICS: MetricKey[] = [
+  "avgViewers",
+  "peakViewers",
+  "gender",
+  "country",
+];
+
+const TOP_N_VALUES = [10, 50, 100, 250] as const;
+const PERIOD_VALUES = ["30d", "90d"] as const;
+
+const PERIOD_LABELS: Record<"30d" | "90d", string> = {
+  "30d": "Last 30 Days",
+  "90d": "Last 90 Days",
+};
+
+function buildTopN(
+  kind: "games" | "channels",
+  allowed: MetricKey[],
+): ReportTemplateDefinition[] {
+  const out: ReportTemplateDefinition[] = [];
+  for (const n of TOP_N_VALUES) {
+    for (const p of PERIOD_VALUES) {
+      out.push({
+        slug: `top-${n}-${kind}-${p}-twitch`,
+        name: `Top ${n} ${kind === "games" ? "Games" : "Channels"} — ${PERIOD_LABELS[p]}`,
+        description:
+          kind === "games"
+            ? `The ${n} most-watched games on Twitch over the ${PERIOD_LABELS[p].toLowerCase()}.`
+            : `The ${n} most-watched Twitch channels over the ${PERIOD_LABELS[p].toLowerCase()}.`,
+        priceInCents: 25000,
+        config: {
+          includes: [kind],
+          topCount: n,
+          timePeriod: p,
+          platforms: ["twitch"],
+          allowedMetrics: allowed,
+        },
+      });
+    }
+  }
+  return out;
+}
+
+function buildById(
+  kind: "games" | "channels",
+  allowed: MetricKey[],
+): ReportTemplateDefinition[] {
+  const label = kind === "games" ? "Games" : "Channels";
+  return PERIOD_VALUES.map((p) => ({
+    slug: `${kind}-by-id-${p}-twitch`,
+    name: `Selected ${label} — ${PERIOD_LABELS[p]}`,
+    description: `Metrics for a hand-picked list of ${kind} on Twitch over the ${PERIOD_LABELS[p].toLowerCase()}.`,
+    priceInCents: 25000,
+    config: {
+      includes: [kind],
+      topCount: "byId",
+      timePeriod: p,
+      platforms: ["twitch"],
+      allowedMetrics: allowed,
+    },
+  }));
+}
+
+export const REPORT_TEMPLATES: ReportTemplateDefinition[] = [
+  ...buildTopN("games", GAMES_METRICS),
+  ...buildTopN("channels", CHANNELS_METRICS),
+  ...buildById("games", GAMES_METRICS),
+  ...buildById("channels", CHANNELS_METRICS),
+];
+
+// ─── Matching ────────────────────────────────────────────────────────────────
+
+function isSubset(sub: string[], superset: readonly string[]): boolean {
+  return sub.every((s) => superset.includes(s));
 }
 
 export function matchTemplate(
   form: FormSnapshot,
 ): ReportTemplateDefinition | null {
-  if (
-    !form.include ||
-    !form.topCount ||
-    form.platforms.length === 0 ||
-    form.metrics.length === 0
-  )
+  if (!form.include || form.metrics.length === 0) return null;
+
+  // Only Twitch-only selections can match a green template today.
+  if (form.platforms.length !== 1 || form.platforms[0] !== "twitch")
     return null;
-  if (form.channelGameSearch.trim()) return null; // custom filters can't match a fixed template
+
+  // Only 30d / 90d are green.
+  if (form.timePeriod !== "30d" && form.timePeriod !== "90d") return null;
+
+  const hasEntities = form.entityIds.length > 0;
+  const hasTopN =
+    typeof form.topCount === "number" &&
+    TOP_N_VALUES.includes(form.topCount as (typeof TOP_N_VALUES)[number]);
+
+  // Exactly one of the two selectors must be set.
+  if (hasEntities === hasTopN) return null;
 
   for (const tpl of REPORT_TEMPLATES) {
     const c = tpl.config;
-    if (
-      c.includes[0] === form.include &&
-      c.topCount === form.topCount &&
-      c.timePeriod === form.timePeriod &&
-      JSON.stringify(sorted(c.platforms)) ===
-        JSON.stringify(sorted(form.platforms)) &&
-      JSON.stringify(sorted(c.metrics)) === JSON.stringify(sorted(form.metrics))
-    ) {
-      return tpl;
-    }
+    if (c.includes[0] !== form.include) continue;
+    if (c.timePeriod !== form.timePeriod) continue;
+    if (hasEntities && c.topCount !== "byId") continue;
+    if (!hasEntities && c.topCount !== form.topCount) continue;
+    if (!isSubset(form.metrics, c.allowedMetrics)) continue;
+    return tpl;
   }
   return null;
 }
 
-// ─── Complexity scoring ───────────────────────────────────────────────────────
+// ─── Complexity / quote reasons ──────────────────────────────────────────────
 
-export type ComplexityFlag = { label: string; score: number };
+export type QuoteReason = { label: string };
 
-export const SALES_THRESHOLD = 3;
+export function getQuoteReasons(form: FormSnapshot): QuoteReason[] {
+  const reasons: QuoteReason[] = [];
 
-export function getComplexity(form: FormSnapshot): {
-  score: number;
-  flags: ComplexityFlag[];
-  isSales: boolean;
-} {
-  const candidates: ComplexityFlag[] = [
-    { label: "Top 500+ report", score: 4 },
-    { label: "Custom date range", score: 4 },
-    { label: "12-month lookback", score: 2 },
-    { label: "6-month lookback", score: 1 },
-    { label: "3+ platforms selected", score: 2 },
-    { label: "Other streaming services included", score: 2 },
-    { label: "5+ metrics selected", score: 1 },
-    { label: "Specific channel / game filter", score: 1 },
-  ];
+  if (form.topCount === "500+") {
+    reasons.push({ label: "Top 500+ list" });
+  }
+  if (form.timePeriod === "custom") {
+    reasons.push({ label: "Custom date range" });
+  }
+  if (form.timePeriod === "12m") {
+    reasons.push({ label: "12-month lookback" });
+  }
+  if (form.timePeriod === "6m") {
+    reasons.push({ label: "6-month lookback" });
+  }
 
-  const triggered = [
-    form.topCount === "500+",
-    form.timePeriod === "custom",
-    form.timePeriod === "12m",
-    form.timePeriod === "6m",
-    form.platforms.length >= 3,
-    form.platforms.includes("otherStreaming"),
-    form.metrics.length >= 5,
-    !!form.channelGameSearch.trim(),
-  ];
+  const nonTwitch = form.platforms.filter((p) => p !== "twitch");
+  if (nonTwitch.length > 0) {
+    reasons.push({
+      label: `Platforms outside Twitch (${nonTwitch.join(", ")})`,
+    });
+  }
 
-  const flags = candidates.filter((_, i) => triggered[i]);
-  const score = flags.reduce((s, f) => s + f.score, 0);
+  // Metrics that no green template covers today.
+  const GREEN_METRICS = new Set<string>([
+    ...GAMES_METRICS,
+    ...CHANNELS_METRICS,
+  ]);
+  const unsupportedMetrics = form.metrics.filter((m) => !GREEN_METRICS.has(m));
+  if (unsupportedMetrics.length > 0) {
+    reasons.push({
+      label: `Metrics not auto-generated yet (${unsupportedMetrics.join(", ")})`,
+    });
+  }
 
-  return { score, flags, isSales: score >= SALES_THRESHOLD };
+  if (form.include === "games" && form.metrics.includes("gender")) {
+    reasons.push({ label: "Demographics for games reports" });
+  }
+  if (form.include === "games" && form.metrics.includes("country")) {
+    reasons.push({ label: "Country breakdown for games reports" });
+  }
+
+  return reasons;
 }
