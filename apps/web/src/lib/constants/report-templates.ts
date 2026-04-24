@@ -54,7 +54,7 @@ const CHANNELS_METRICS: MetricKey[] = [
   "country",
 ];
 
-const TOP_N_VALUES = [10, 50, 100, 250] as const;
+const TOP_N_VALUES = [50, 100, 250] as const;
 const PERIOD_VALUES = ["30d", "90d"] as const;
 
 const PERIOD_LABELS: Record<"30d" | "90d", string> = {
