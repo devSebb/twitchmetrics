@@ -192,6 +192,51 @@ async function generateGamesReport(
 
 // ─── Channels report ──────────────────────────────────────────────────────────
 
+// Pulls AVG_VIEWERS / PEAK_VIEWERS from extendedMetrics, falling back to
+// LIVE_VIEWER_COUNT when the adapter didn't stash the dedicated fields.
+// Returns null when the channel was never observed live in the period.
+function aggregateViewerStats(snaps: { extendedMetrics: unknown }[]): {
+  avgViewers: number | null;
+  peakViewers: number | null;
+  observations: number;
+} {
+  let peakViewers: number | null = null;
+  const avgSamples: number[] = [];
+  let observations = 0;
+
+  for (const s of snaps) {
+    const ext = s.extendedMetrics as Record<string, unknown> | null;
+    if (!ext) continue;
+
+    const peak =
+      typeof ext.PEAK_VIEWERS === "number"
+        ? ext.PEAK_VIEWERS
+        : typeof ext.LIVE_VIEWER_COUNT === "number"
+          ? ext.LIVE_VIEWER_COUNT
+          : null;
+
+    const avg =
+      typeof ext.AVG_VIEWERS === "number" && ext.AVG_VIEWERS > 0
+        ? ext.AVG_VIEWERS
+        : typeof ext.LIVE_VIEWER_COUNT === "number" && ext.LIVE_VIEWER_COUNT > 0
+          ? ext.LIVE_VIEWER_COUNT
+          : null;
+
+    if (peak !== null) {
+      if (peakViewers === null || peak > peakViewers) peakViewers = peak;
+      observations++;
+    }
+    if (avg !== null) avgSamples.push(avg);
+  }
+
+  const avgViewers =
+    avgSamples.length > 0
+      ? Math.round(avgSamples.reduce((a, b) => a + b, 0) / avgSamples.length)
+      : null;
+
+  return { avgViewers, peakViewers, observations };
+}
+
 async function generateChannelsReport(
   config: TemplateConfig,
   reportName: string,
@@ -205,27 +250,11 @@ async function generateChannelsReport(
   const creators = byId
     ? await prisma.creatorProfile.findMany({
         where: { id: { in: entityIds } },
-        include: {
-          metricSnapshots: {
-            where: { platform: "twitch", snapshotAt: { gte: since } },
-            orderBy: { snapshotAt: "desc" },
-            take: 1,
-          },
-          growthRollups: { where: { platform: "twitch" } },
-        },
       })
     : await prisma.creatorProfile.findMany({
         take: typeof config.topCount === "number" ? config.topCount : 500,
         where: { primaryPlatform: "twitch" },
         orderBy: { totalFollowers: "desc" },
-        include: {
-          metricSnapshots: {
-            where: { platform: "twitch", snapshotAt: { gte: since } },
-            orderBy: { snapshotAt: "desc" },
-            take: 1,
-          },
-          growthRollups: { where: { platform: "twitch" } },
-        },
       });
 
   if (byId) {
@@ -233,9 +262,44 @@ async function generateChannelsReport(
     creators.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
 
+  // Bulk-fetch all in-window Twitch snapshots for the selected creators in a
+  // single query. Grouping happens in memory — cheaper than N per-creator
+  // includes, and we only need three columns.
+  const creatorIds = creators.map((c) => c.id);
+  const needsViewerStats =
+    metrics.includes("avgViewers") || metrics.includes("peakViewers");
+
+  const snapshots =
+    creatorIds.length > 0
+      ? await prisma.metricSnapshot.findMany({
+          where: {
+            creatorProfileId: { in: creatorIds },
+            platform: "twitch",
+            snapshotAt: { gte: since },
+          },
+          select: {
+            creatorProfileId: true,
+            snapshotAt: true,
+            followerCount: true,
+            extendedMetrics: true,
+          },
+          orderBy: { snapshotAt: "desc" },
+        })
+      : [];
+
+  const snapsByCreator = new Map<string, typeof snapshots>();
+  for (const s of snapshots) {
+    const arr = snapsByCreator.get(s.creatorProfileId) ?? [];
+    arr.push(s);
+    snapsByCreator.set(s.creatorProfileId, arr);
+  }
+
   const cols: string[] = ["Rank", "Channel", "Followers"];
-  if (metrics.includes("avgViewers")) cols.push("Avg Viewers (est.)");
-  if (metrics.includes("peakViewers")) cols.push("Peak Viewers (est.)");
+  if (metrics.includes("avgViewers")) cols.push("Avg Viewers");
+  if (metrics.includes("peakViewers")) cols.push("Peak Viewers");
+  if (metrics.includes("avgViewers") || metrics.includes("peakViewers")) {
+    cols.push("Live Observations");
+  }
   if (metrics.includes("gender")) cols.push("Gender (if available)");
   if (metrics.includes("country")) cols.push("Primary Country");
 
@@ -246,39 +310,89 @@ async function generateChannelsReport(
   lines.push(row("Platforms", config.platforms.join(" + ")));
   lines.push(row("Generated", new Date().toISOString().split("T")[0]));
   lines.push(row("Source", "TwitchMetrics"));
+  if (needsViewerStats) {
+    lines.push(
+      row(
+        "Note",
+        "Viewer metrics aggregated from live-stream snapshots. 'N/A' means the channel was not observed live during this period.",
+      ),
+    );
+  }
   lines.push("");
 
   lines.push(cols.join(","));
 
   let totalFollowers = 0n;
+  let observedChannels = 0;
+  const runningAvgSum: number[] = [];
+  let runningPeakMax = 0;
 
   creators.forEach((creator, i) => {
-    const snap = creator.metricSnapshots[0];
-    const rollup = creator.growthRollups[0];
-
-    const followers = snap?.followerCount ?? creator.totalFollowers;
-    const estAvgViewers = rollup
-      ? Math.round(Number(followers) * 0.012)
-      : Math.round(Number(creator.totalFollowers) * 0.01);
-
+    const snaps = snapsByCreator.get(creator.id) ?? [];
+    const latestSnap = snaps[0]; // snapshots ordered desc
+    const followers = latestSnap?.followerCount ?? creator.totalFollowers;
     totalFollowers += BigInt(Number(followers));
 
-    const estPeakViewers = Math.round(estAvgViewers * 1.8);
+    const stats = needsViewerStats
+      ? aggregateViewerStats(snaps)
+      : { avgViewers: null, peakViewers: null, observations: 0 };
+
+    if (stats.observations > 0) observedChannels++;
+    if (stats.avgViewers !== null) runningAvgSum.push(stats.avgViewers);
+    if (stats.peakViewers !== null && stats.peakViewers > runningPeakMax) {
+      runningPeakMax = stats.peakViewers;
+    }
 
     const cells: unknown[] = [
       i + 1,
       creator.displayName,
       fmt(Number(followers)),
     ];
-    if (metrics.includes("avgViewers")) cells.push(fmt(estAvgViewers));
-    if (metrics.includes("peakViewers")) cells.push(fmt(estPeakViewers));
+    if (metrics.includes("avgViewers")) {
+      cells.push(stats.avgViewers !== null ? fmt(stats.avgViewers) : "N/A");
+    }
+    if (metrics.includes("peakViewers")) {
+      cells.push(stats.peakViewers !== null ? fmt(stats.peakViewers) : "N/A");
+    }
+    if (needsViewerStats) cells.push(stats.observations);
     if (metrics.includes("gender")) cells.push(creator.gender ?? "N/A");
     if (metrics.includes("country")) cells.push(creator.country ?? "N/A");
 
     lines.push(cells.map(esc).join(","));
   });
 
+  // ── Summary row ──────────────────────────────────────────────────────────
   lines.push("");
+  const sumCells: unknown[] = ["", "TOTALS / AVERAGES"];
+  sumCells.push(fmt(Number(totalFollowers)));
+  if (metrics.includes("avgViewers")) {
+    sumCells.push(
+      runningAvgSum.length > 0
+        ? fmt(
+            Math.round(
+              runningAvgSum.reduce((a, b) => a + b, 0) / runningAvgSum.length,
+            ),
+          )
+        : "N/A",
+    );
+  }
+  if (metrics.includes("peakViewers")) {
+    sumCells.push(runningPeakMax > 0 ? fmt(runningPeakMax) : "N/A");
+  }
+  if (needsViewerStats) sumCells.push("");
+  if (metrics.includes("gender")) sumCells.push("");
+  if (metrics.includes("country")) sumCells.push("");
+  lines.push(sumCells.map(esc).join(","));
+
+  lines.push("");
+  if (needsViewerStats) {
+    lines.push(
+      row(
+        "",
+        `Observed ${observedChannels} of ${creators.length} channels live during ${periodLabel(config.timePeriod)}.`,
+      ),
+    );
+  }
   lines.push(
     row(
       "",
