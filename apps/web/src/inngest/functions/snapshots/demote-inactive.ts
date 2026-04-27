@@ -56,14 +56,13 @@ export const demoteInactiveCreators = inngest.createFunction(
 
         await step.run("check-and-demote", async () => {
           for (const creator of tier1Claimed) {
-            // Check if any snapshot in last 30 days has isLive=true
             const liveSnapshot = await prisma.metricSnapshot.findFirst({
               where: {
                 creatorProfileId: creator.id,
                 snapshotAt: { gte: cutoffDate },
                 extendedMetrics: {
-                  path: ["isLive"],
-                  equals: true,
+                  path: ["IS_LIVE"],
+                  equals: 1,
                 },
               },
               select: { id: true },
