@@ -101,7 +101,7 @@ function AddPartnerForm({ onClose, profileSlug }: AddFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-3 rounded-lg border border-[#3F4147] bg-[#2B2D31] p-4"
+      className="space-y-3 rounded-lg border border-[#3F4147] bg-[#2B2D31] p-3"
     >
       <div>
         <label className="mb-1 block text-xs text-[#949BA4]">

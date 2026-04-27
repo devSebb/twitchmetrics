@@ -95,7 +95,7 @@ export function CreatorHeader({ creator }: CreatorHeaderProps) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#3F4147] bg-[#313338]">
-      <div className="flex flex-col sm:flex-row sm:items-start gap-5 p-5 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-5 p-5">
         {/* Avatar */}
         <div className="flex-shrink-0 self-center sm:self-start">
           <div className="h-28 w-28 overflow-hidden rounded-full border-3 border-[#3F4147] bg-[#383A40] sm:h-32 sm:w-32">

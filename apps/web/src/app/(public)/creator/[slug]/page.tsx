@@ -183,24 +183,19 @@ export default async function CreatorProfilePage({ params }: PageProps) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <div className="px-4 sm:px-6">
-        <CreatorHeader creator={headerData} />
-      </div>
-
-      <div className="mt-6">
-        <DashboardGrid
-          profile={serialized}
-          widgetConfig={creator.widgetConfig}
-          isClaimed={isClaimed}
-          isOwner={false}
-          showProfileHeader={false}
-        />
-      </div>
+      <CreatorHeader creator={headerData} />
+      <DashboardGrid
+        profile={serialized}
+        widgetConfig={creator.widgetConfig}
+        isClaimed={isClaimed}
+        isOwner={false}
+        showProfileHeader={false}
+      />
     </div>
   );
 }

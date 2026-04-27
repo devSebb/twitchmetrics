@@ -171,6 +171,12 @@ export function DashboardGrid({
     setEnabledWidgets(newConfig);
   }, []);
 
+  // When the parent already provides the page canvas (public creator page,
+  // showProfileHeader={false}), don't double-wrap — just contribute rows.
+  const contentClassName = showProfileHeader
+    ? "mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6"
+    : "space-y-4";
+
   return (
     <div>
       {/* Profile Header — full bleed (hidden when public page supplies its own) */}
@@ -179,7 +185,7 @@ export function DashboardGrid({
       )}
 
       {/* Content area */}
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
+      <div className={contentClassName}>
         {/* Customize button */}
         {isOwner && (
           <div className="flex justify-end">
