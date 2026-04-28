@@ -265,7 +265,7 @@ export function DashboardGrid({
         )}
 
         {/* Row 5: Follower Growth (2/3) | Viewer Count (1/3) */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 empty:hidden lg:grid-cols-3">
           {renderGated(
             "follower_growth",
             enabledSet,
@@ -291,7 +291,7 @@ export function DashboardGrid({
         </div>
 
         {/* Row 8: Rates (1/2) | Brand Safety (1/2) */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 empty:hidden md:grid-cols-2">
           {renderGated("rates", enabledSet, isClaimed, <RatesSection />)}
           {renderGated(
             "brand_safety",
