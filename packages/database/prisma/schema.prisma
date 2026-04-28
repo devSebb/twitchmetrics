@@ -62,17 +62,17 @@ enum ClaimStatus {
 // ============================================================
 
 model User {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String?   @unique
-  passwordHash  String?
-  emailVerified DateTime?
-  name          String?
-  image         String?
-  role          UserRole  @default(creator)
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                  String?   @unique
+  passwordHash           String?
+  emailVerified          DateTime?
+  name                   String?
+  image                  String?
+  role                   UserRole  @default(creator)
   suspended              Boolean   @default(false)
   hasCompletedOnboarding Boolean   @default(false)
   createdAt              DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  updatedAt              DateTime  @updatedAt
 
   accounts        Account[]
   sessions        Session[]
@@ -121,43 +121,43 @@ model VerificationToken {
 // ============================================================
 
 model CreatorProfile {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId         String?      @unique @db.Uuid
-  user           User?        @relation(fields: [userId], references: [id])
-  state          ProfileState @default(unclaimed)
-  snapshotTier   SnapshotTier @default(tier3)
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String?      @unique @db.Uuid
+  user         User?        @relation(fields: [userId], references: [id])
+  state        ProfileState @default(unclaimed)
+  snapshotTier SnapshotTier @default(tier3)
 
-  displayName    String
-  slug           String       @unique
-  avatarUrl      String?
-  bannerUrl      String?
-  bio            String?
-  country        String?
-  gender         String?
-  language       String?
-  age            Int?
-  interests      Json    @default("[]")
+  displayName String
+  slug        String  @unique
+  avatarUrl   String?
+  bannerUrl   String?
+  bio         String?
+  country     String?
+  gender      String?
+  language    String?
+  age         Int?
+  interests   Json    @default("[]")
 
   primaryPlatform Platform
 
   // Derived from recent stream snapshots (updated by enrichCreators)
-  derivedLanguage    String?
-  primaryGameName    String?
-  primaryGameSlug    String?
-  lastStreamAt       DateTime?
-  isActiveLast30d    Boolean    @default(false)
-  lastEnrichedAt     DateTime?
+  derivedLanguage String?
+  primaryGameName String?
+  primaryGameSlug String?
+  lastStreamAt    DateTime?
+  isActiveLast30d Boolean   @default(false)
+  lastEnrichedAt  DateTime?
 
-  totalFollowers BigInt @default(0)
-  totalViews     BigInt @default(0)
+  totalFollowers BigInt  @default(0)
+  totalViews     BigInt  @default(0)
   searchText     String? @default("")
   widgetConfig   Json    @default("[]")
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  lastSnapshotAt       DateTime?
-  lastLinkDiscoveryAt  DateTime?
-  claimedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  lastSnapshotAt      DateTime?
+  lastLinkDiscoveryAt DateTime?
+  claimedAt           DateTime?
 
   platformAccounts  PlatformAccount[]
   metricSnapshots   MetricSnapshot[]
@@ -237,7 +237,7 @@ model PlatformAccount {
   accessToken    String?
   refreshToken   String?
   tokenExpiresAt DateTime?
-  oauthScopes    String[] @default([])
+  oauthScopes    String[]  @default([])
 
   isOAuthConnected Boolean   @default(false)
   lastOAuthRefresh DateTime?
@@ -351,7 +351,7 @@ model BrandPartnership {
   campaignName String?
   startDate    DateTime?
   endDate      DateTime?
-  isPublic     Boolean  @default(true)
+  isPublic     Boolean   @default(true)
 
   createdAt DateTime @default(now())
 }
@@ -367,16 +367,16 @@ model Game {
   youtubeGameId String?
 
   name          String
-  slug          String   @unique
+  slug          String    @unique
   coverImageUrl String?
   summary       String?
   releaseDate   DateTime?
-  genres        String[] @default([])
-  platforms     String[] @default([])
+  genres        String[]  @default([])
+  platforms     String[]  @default([])
   developer     String?
   publisher     String?
 
-  searchText      String? @default("")
+  searchText String? @default("")
 
   currentViewers  Int    @default(0)
   currentChannels Int    @default(0)
@@ -398,12 +398,12 @@ model Game {
 }
 
 model GameBroadcastLanguage {
-  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gameId   String @db.Uuid
-  game     Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  language String
-  label    String
-  percent  Float
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameId    String   @db.Uuid
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  language  String
+  label     String
+  percent   Float
   updatedAt DateTime @default(now()) @updatedAt
 
   @@unique([gameId, language])
@@ -423,6 +423,7 @@ model GameTopChannel {
   viewerHours BigInt   @default(0)
   updatedAt   DateTime @default(now()) @updatedAt
 
+  @@unique([gameId, channelName])
   @@index([gameId, category])
 }
 
@@ -463,20 +464,20 @@ model CreatorClip {
 }
 
 model GameViewerSnapshot {
-  id     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gameId String   @db.Uuid
-  game   Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameId String @db.Uuid
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   snapshotAt DateTime @default(now())
 
-  twitchViewers  Int @default(0)
-  twitchChannels Int @default(0)
-  youtubeViewers Int @default(0)
+  twitchViewers   Int @default(0)
+  twitchChannels  Int @default(0)
+  youtubeViewers  Int @default(0)
   youtubeChannels Int @default(0)
-  kickViewers    Int @default(0)
-  kickChannels   Int @default(0)
-  totalViewers   Int @default(0)
-  totalChannels  Int @default(0)
+  kickViewers     Int @default(0)
+  kickChannels    Int @default(0)
+  totalViewers    Int @default(0)
+  totalChannels   Int @default(0)
 
   @@index([gameId, snapshotAt])
   @@index([snapshotAt])
@@ -549,21 +550,21 @@ model CreatorGrowthRollup {
   creatorProfileId String         @db.Uuid
   creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
 
-  platform         Platform
+  platform Platform
 
-  followerCount    BigInt   @default(0)
-  delta1d          BigInt   @default(0)
-  delta7d          BigInt   @default(0)
-  delta30d         BigInt   @default(0)
-  pct1d            Float    @default(0)
-  pct7d            Float    @default(0)
-  pct30d           Float    @default(0)
+  followerCount BigInt @default(0)
+  delta1d       BigInt @default(0)
+  delta7d       BigInt @default(0)
+  delta30d      BigInt @default(0)
+  pct1d         Float  @default(0)
+  pct7d         Float  @default(0)
+  pct30d        Float  @default(0)
 
-  trendDirection   String   @default("FLAT")
-  acceleration     String   @default("STABLE")
+  trendDirection String @default("FLAT")
+  acceleration   String @default("STABLE")
 
-  computedAt       DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([creatorProfileId, platform])
   @@index([trendDirection])
@@ -571,23 +572,23 @@ model CreatorGrowthRollup {
 }
 
 model IngestionRun {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   domain         String
   scope          String
   jobType        String
   platform       String?
   status         String
-  startedAt      DateTime @default(now())
+  startedAt      DateTime  @default(now())
   finishedAt     DateTime?
-  recordsScanned Int      @default(0)
-  recordsWritten Int      @default(0)
-  recordsSkipped Int      @default(0)
-  recordsFailed  Int      @default(0)
-  partialCount   Int      @default(0)
+  recordsScanned Int       @default(0)
+  recordsWritten Int       @default(0)
+  recordsSkipped Int       @default(0)
+  recordsFailed  Int       @default(0)
+  partialCount   Int       @default(0)
   quotaUsed      Int?
   errorSummary   String?
   metadata       Json?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   @@index([jobType, startedAt(sort: Desc)])
   @@index([domain, scope, startedAt(sort: Desc)])

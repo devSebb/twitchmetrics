@@ -90,14 +90,20 @@ async function refreshTopChannels(
     (left, right) => right.viewerCount - left.viewerCount,
   );
   const mostWatched = sortedByViewers.slice(0, 6);
+  const mostWatchedUserIds = new Set(mostWatched.map((s) => s.userId));
   const cutoff = snapshotAt.getTime() - EMERGING_WINDOW_HOURS * 60 * 60 * 1000;
 
+  // "Emerging" = recently-started streams that aren't already in mostWatched.
+  // Excluding mostWatched here is what prevents duplicate (gameId, channelName)
+  // rows further down — without it, a top streamer who started in the window
+  // would appear in both arrays and get inserted twice.
   const emergingPool = sortedByViewers.filter(
-    (stream) => new Date(stream.startedAt).getTime() >= cutoff,
+    (stream) =>
+      new Date(stream.startedAt).getTime() >= cutoff &&
+      !mostWatchedUserIds.has(stream.userId),
   );
   const fallbackPool = sortedByViewers.filter(
-    (stream) =>
-      !mostWatched.some((candidate) => candidate.userId === stream.userId),
+    (stream) => !mostWatchedUserIds.has(stream.userId),
   );
   const emerging = [...emergingPool, ...fallbackPool]
     .filter(
@@ -107,33 +113,40 @@ async function refreshTopChannels(
     )
     .slice(0, 5);
 
-  const rows = [...mostWatched, ...emerging].map((stream) => {
-    const liveDurationSeconds = Math.max(
-      0,
-      Math.floor(
-        (snapshotAt.getTime() - new Date(stream.startedAt).getTime()) / 1000,
-      ),
-    );
-    const viewerHours = BigInt(
-      Math.round(stream.viewerCount * (liveDurationSeconds / 3600)),
-    );
-    const category = mostWatched.some(
-      (candidate) => candidate.userId === stream.userId,
-    )
-      ? "most_watched"
-      : "emerging";
+  // Belt-and-suspenders: dedupe the combined list by userId before insert,
+  // so even an upstream API quirk can't produce duplicate rows.
+  const seenUserIds = new Set<string>();
+  const rows = [...mostWatched, ...emerging]
+    .filter((stream) => {
+      if (seenUserIds.has(stream.userId)) return false;
+      seenUserIds.add(stream.userId);
+      return true;
+    })
+    .map((stream) => {
+      const liveDurationSeconds = Math.max(
+        0,
+        Math.floor(
+          (snapshotAt.getTime() - new Date(stream.startedAt).getTime()) / 1000,
+        ),
+      );
+      const viewerHours = BigInt(
+        Math.round(stream.viewerCount * (liveDurationSeconds / 3600)),
+      );
+      const category = mostWatchedUserIds.has(stream.userId)
+        ? "most_watched"
+        : "emerging";
 
-    return {
-      gameId: game.id,
-      channelName: stream.userName,
-      avatarUrl: null,
-      slug: stream.userLogin.toLowerCase(),
-      category,
-      avgViewers: stream.viewerCount,
-      airtime: liveDurationSeconds,
-      viewerHours,
-    };
-  });
+      return {
+        gameId: game.id,
+        channelName: stream.userName,
+        avatarUrl: null,
+        slug: stream.userLogin.toLowerCase(),
+        category,
+        avgViewers: stream.viewerCount,
+        airtime: liveDurationSeconds,
+        viewerHours,
+      };
+    });
 
   await prisma.gameTopChannel.createMany({ data: rows });
 }

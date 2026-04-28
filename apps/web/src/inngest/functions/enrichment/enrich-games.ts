@@ -15,7 +15,7 @@ import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 const log = createLogger("enrich-games");
 const IGDB_RATE_DELAY_MS = 260;
-const ENRICH_BATCH_SIZE = 50;
+const ENRICH_BATCH_SIZE = 100;
 
 function shouldReplaceCoverImage(
   currentUrl: string | null,

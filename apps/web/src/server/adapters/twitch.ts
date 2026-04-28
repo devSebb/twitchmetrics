@@ -414,17 +414,32 @@ export async function fetchClips(
 }
 
 /**
- * Fetch top clips for a game.
- * Uses GET /clips?game_id={id}&first={limit}
+ * Fetch top clips for a game within a recent window.
+ *
+ * Twitch's `started_at`/`ended_at` filter (RFC 3339) restricts results to
+ * clips created in that window — required to keep the UI's "Last 30 Days"
+ * label honest. NOTE: when `started_at` is set without `ended_at`, Twitch
+ * silently defaults `ended_at` to 1 week after start, so both must be sent.
+ *
+ * Defaults to a 30-day window. Caller may override.
  */
 export async function fetchClipsByGame(
   twitchGameId: string,
   limit: number = 8,
+  windowDays: number = 30,
 ): Promise<ClipData[]> {
   return withRetry(async () => {
+    const now = Date.now();
+    const startedAt = new Date(
+      now - windowDays * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const endedAt = new Date(now).toISOString();
+
     const data = await helixFetch<PaginatedResponse<TwitchClip>>("/clips", {
       game_id: twitchGameId,
       first: String(Math.min(limit, 25)),
+      started_at: startedAt,
+      ended_at: endedAt,
     });
 
     return data.data.map((clip) => ({
