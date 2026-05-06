@@ -57,6 +57,15 @@ enum ClaimStatus {
   expired
 }
 
+enum Vertical {
+  gaming
+  irl
+  music
+  creative
+  sports
+  other
+}
+
 // ============================================================
 // AUTH & USERS
 // ============================================================
@@ -385,6 +394,8 @@ model Game {
   avgLiveChannels Int    @default(0)
   hoursWatched7d  BigInt @default(0)
 
+  vertical Vertical @default(gaming)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -395,6 +406,7 @@ model Game {
 
   @@index([currentViewers(sort: Desc)])
   @@index([name])
+  @@index([vertical, currentViewers(sort: Desc)])
 }
 
 model GameBroadcastLanguage {

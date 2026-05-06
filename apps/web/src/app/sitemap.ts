@@ -28,10 +28,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
-      url: `${SITE_URL}/games`,
+      url: `${SITE_URL}/browse`,
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 0.9,
+    },
+    {
+      url: `${SITE_URL}/browse?vertical=irl`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.7,
+    },
+    {
+      url: `${SITE_URL}/browse?vertical=music`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.6,
+    },
+    {
+      url: `${SITE_URL}/browse?vertical=creative`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.6,
+    },
+    {
+      url: `${SITE_URL}/browse?vertical=sports`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.6,
     },
     {
       url: `${SITE_URL}/reports`,

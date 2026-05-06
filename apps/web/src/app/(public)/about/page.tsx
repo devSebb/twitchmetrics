@@ -230,10 +230,10 @@ export default function AboutPage() {
               Top creators
             </Link>
             <Link
-              href="/games"
+              href="/browse"
               className="rounded-lg border border-[#3F4147] bg-[#313338] px-4 py-2.5 text-sm font-medium text-[#DBDEE1] transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
             >
-              Games & categories
+              Browse categories
             </Link>
             <Link
               href="/reports"

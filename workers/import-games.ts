@@ -16,6 +16,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { classifyVertical } from "../apps/web/src/lib/constants/categories";
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
@@ -289,12 +290,14 @@ async function importFromTwitchTopGames(): Promise<void> {
       ? tg.box_art_url.replace("{width}", "272").replace("{height}", "380")
       : null;
 
+    const finalIgdbId = igdbId && !isNaN(igdbId) ? igdbId : null;
     await prisma.game.create({
       data: {
         name: tg.name,
         slug,
         twitchGameId: tg.id,
-        igdbId: igdbId && !isNaN(igdbId) ? igdbId : null,
+        igdbId: finalIgdbId,
+        vertical: classifyVertical({ name: tg.name, igdbId: finalIgdbId }),
         coverImageUrl: igdbData
           ? (formatIgdbCoverUrl(igdbData.cover?.url) ?? coverUrl)
           : coverUrl,

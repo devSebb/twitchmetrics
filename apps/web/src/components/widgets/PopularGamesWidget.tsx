@@ -95,7 +95,7 @@ function GameCard({ game }: GameCardProps) {
 
   if (game.slug) {
     return (
-      <Link href={`/games/${game.slug}`} className="block">
+      <Link href={`/game/${game.slug}`} className="block">
         {content}
       </Link>
     );

@@ -22,6 +22,9 @@ export const gameRouter = router({
       z.object({
         search: z.string().optional(),
         genre: z.string().optional(),
+        vertical: z
+          .enum(["gaming", "irl", "music", "creative", "sports", "other"])
+          .optional(),
         sort: z
           .enum(["viewers", "channels", "hoursWatched", "name"])
           .default("viewers"),
@@ -41,6 +44,9 @@ export const gameRouter = router({
       }
       if (input.genre) {
         where.genres = { has: input.genre };
+      }
+      if (input.vertical) {
+        where.vertical = input.vertical;
       }
 
       const orderByMap = {

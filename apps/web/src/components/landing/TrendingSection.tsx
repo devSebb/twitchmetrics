@@ -109,7 +109,7 @@ export function TrendingSection({
                 Top Games
               </h3>
               <Link
-                href="/games"
+                href="/browse"
                 className="text-xs text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
               >
                 View All →

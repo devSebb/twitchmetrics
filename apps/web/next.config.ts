@@ -4,6 +4,15 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@twitchmetrics/database", "@twitchmetrics/ui"],
+  async redirects() {
+    return [
+      {
+        source: "/games",
+        destination: "/browse",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

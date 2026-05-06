@@ -3,6 +3,7 @@ import { inngest } from "../../client";
 import { twitchAdapter } from "@/server/adapters/twitch";
 import { createLogger } from "@/lib/logger";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
+import { classifyVertical } from "@/lib/constants/categories";
 
 const log = createLogger("discover-games");
 
@@ -100,6 +101,10 @@ export const discoverGames = inngest.createFunction(
                   slug,
                   twitchGameId: gameData.platformGameId,
                   igdbId: gameData.igdbId,
+                  vertical: classifyVertical({
+                    name: gameData.gameName,
+                    igdbId: gameData.igdbId,
+                  }),
                   coverImageUrl: gameData.boxArtUrl,
                   searchText: gameData.gameName.toLowerCase(),
                 },

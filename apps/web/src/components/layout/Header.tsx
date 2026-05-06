@@ -6,7 +6,7 @@ import { HeaderUserMenu } from "./HeaderUserMenu";
 
 const NAV_LINKS = [
   { label: "Channels", href: "/creators" },
-  { label: "Games", href: "/games" },
+  { label: "Categories", href: "/browse" },
   { label: "Reports", href: "/reports" },
 ] as const;
 

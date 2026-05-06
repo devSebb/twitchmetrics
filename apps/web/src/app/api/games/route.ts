@@ -9,7 +9,28 @@ import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 type GameIdRow = { id: string };
 type TotalRow = { total: bigint };
 
-function buildWhereClause(genre: string | null, query: string | null) {
+const VERTICALS = [
+  "gaming",
+  "irl",
+  "music",
+  "creative",
+  "sports",
+  "other",
+] as const;
+type VerticalParam = (typeof VERTICALS)[number];
+
+function parseVertical(raw: string | null): VerticalParam | null {
+  if (!raw) return null;
+  return (VERTICALS as readonly string[]).includes(raw)
+    ? (raw as VerticalParam)
+    : null;
+}
+
+function buildWhereClause(
+  genre: string | null,
+  query: string | null,
+  vertical: VerticalParam | null,
+) {
   const conditions: Prisma.Sql[] = [];
 
   if (genre) {
@@ -20,6 +41,10 @@ function buildWhereClause(genre: string | null, query: string | null) {
     conditions.push(
       Prisma.sql`(g."searchText" % ${query} OR g."searchText" ILIKE '%' || ${query} || '%')`,
     );
+  }
+
+  if (vertical) {
+    conditions.push(Prisma.sql`g.vertical = ${vertical}::"Vertical"`);
   }
 
   if (!conditions.length) {
@@ -53,14 +78,15 @@ export async function GET(request: Request) {
   const query = searchParams.get("q")?.trim() || null;
   const genre = searchParams.get("genre")?.trim() || null;
   const sort = searchParams.get("sort");
+  const vertical = parseVertical(searchParams.get("vertical")?.trim() || null);
 
-  const cacheKey = `games:list:p${page}:l${limit}:s${sort ?? "viewers"}:q${query ?? ""}:g${genre ?? ""}`;
+  const cacheKey = `games:list:p${page}:l${limit}:s${sort ?? "viewers"}:q${query ?? ""}:g${genre ?? ""}:v${vertical ?? ""}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
   }
 
-  const whereClause = buildWhereClause(genre, query);
+  const whereClause = buildWhereClause(genre, query, vertical);
   const orderClause = getOrderClause(sort);
 
   const [idRows, totalRows] = await Promise.all([

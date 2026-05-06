@@ -20,7 +20,7 @@ export function GenreFilter({ genres }: Props) {
       params.delete("genre");
     }
     params.delete("page");
-    router.push(`/games?${params.toString()}`);
+    router.push(`/browse?${params.toString()}`);
   }
 
   if (genres.length === 0) return null;

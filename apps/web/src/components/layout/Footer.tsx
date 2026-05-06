@@ -6,7 +6,7 @@ const NAV_SECTIONS = [
     title: "Product",
     links: [
       { label: "Channels", href: "/creators" },
-      { label: "Games", href: "/games" },
+      { label: "Categories", href: "/browse" },
       { label: "Reports", href: "/reports" },
     ],
   },
