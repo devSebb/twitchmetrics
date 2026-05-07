@@ -9,7 +9,13 @@ import { executeIngestionRun } from "@/server/services/ingestion/runs";
 const log = createLogger("game-snapshot");
 
 const SNAPSHOT_BATCH_SIZE = 5;
-const STREAM_PAGE_LIMIT = 5;
+// Pagination ceiling for /streams per game. Each page is 100 streams, so 30
+// pages = top 3,000 streams. Most games terminate well before the ceiling
+// (the loop breaks when Twitch returns no cursor). Only the biggest categories
+// (Just Chatting, GTA V) actually pay the full cost. Bumping from 5 was
+// necessary because currentChannels was capping at 500 and currentViewers was
+// undercounting on popular games.
+const STREAM_PAGE_LIMIT = 30;
 const EMERGING_WINDOW_HOURS = 12;
 
 type TrackedGame = {
