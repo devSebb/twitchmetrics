@@ -49,7 +49,7 @@ function verticalCopy(vertical: VerticalFilter): {
   }
   const label = VERTICAL_LABELS[vertical];
   return {
-    title: `Top ${label} Categories`,
+    title: `Top ${label}`,
     description: `Browse the most-watched ${label} categories on Twitch with live viewership data and channel counts.`,
     noun: "categories",
   };

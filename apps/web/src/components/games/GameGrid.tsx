@@ -36,23 +36,26 @@ type GameGridProps = {
 export function GameGrid({ initialData, initialMeta }: GameGridProps) {
   const searchParams = useSearchParams();
   const sort = searchParams.get("sort") ?? "viewers";
-  const genre = searchParams.get("genre") ?? "";
+  const vertical = searchParams.get("vertical") ?? "gaming";
+  const genre = vertical === "gaming" ? (searchParams.get("genre") ?? "") : "";
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     setPage(1);
-  }, [sort, genre]);
+  }, [sort, genre, vertical]);
 
-  const isDefaultParams = page === 1 && sort === "viewers" && !genre;
+  const isDefaultParams =
+    page === 1 && sort === "viewers" && !genre && vertical === "gaming";
 
   const { data, isLoading } = useQuery({
-    queryKey: ["games", sort, genre, page],
+    queryKey: ["games", sort, genre, page, vertical],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
       params.set("sort", sort);
       params.set("page", String(page));
       params.set("limit", "20");
       if (genre) params.set("genre", genre);
+      if (vertical !== "all") params.set("vertical", vertical);
       const res = await fetch(`/api/games?${params.toString()}`);
       return res.json() as Promise<ApiResponse>;
     },
