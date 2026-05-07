@@ -164,6 +164,12 @@ export default async function BrowsePage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <Suspense>
+        <div className="mb-6">
+          <VerticalPills />
+        </div>
+      </Suspense>
+
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
           <h1 className="text-2xl font-bold text-[#F2F3F5]">{title}</h1>
@@ -173,12 +179,6 @@ export default async function BrowsePage({ searchParams }: PageProps) {
           {formatNumber(total)} {noun}
         </span>
       </div>
-
-      <Suspense>
-        <div className="mb-4">
-          <VerticalPills />
-        </div>
-      </Suspense>
 
       <Suspense>
         <div className="mb-4">

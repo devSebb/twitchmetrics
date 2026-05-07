@@ -3,49 +3,62 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const SORTS = [
-  { label: "Viewers", value: "viewers", timeframe: "Live" },
-  { label: "Channels", value: "channels", timeframe: "Live" },
-  { label: "Hours Watched", value: "hoursWatched", timeframe: "Last 7 days" },
-] as const;
+type SortValue = "viewers" | "channels" | "hoursWatched";
+
+const SORTS: { label: string; value: SortValue }[] = [
+  { label: "Viewers", value: "viewers" },
+  { label: "Channels", value: "channels" },
+  { label: "Hours Watched", value: "hoursWatched" },
+];
+
+const TIMEFRAME: Record<SortValue, { label: string; live: boolean }> = {
+  viewers: { label: "Live", live: true },
+  channels: { label: "Live", live: true },
+  hoursWatched: { label: "Last 7 days", live: false },
+};
 
 export function GameSortControls() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentSort = searchParams.get("sort") ?? "viewers";
+  const currentSort = (searchParams.get("sort") ?? "viewers") as SortValue;
+  const status = TIMEFRAME[currentSort] ?? TIMEFRAME.viewers;
 
   return (
-    <div className="flex gap-1 rounded-md bg-[#1E1F22] p-1 w-fit">
-      {SORTS.map((s) => {
-        const isActive = currentSort === s.value;
-        return (
-          <button
-            key={s.value}
-            onClick={() => {
-              const params = new URLSearchParams(searchParams.toString());
-              params.set("sort", s.value);
-              params.delete("page");
-              router.push(`/browse?${params.toString()}`);
-            }}
-            className={cn(
-              "flex flex-col items-start rounded px-3 py-1.5 text-left transition-colors",
-              isActive
-                ? "bg-[#383A40] text-[#F2F3F5]"
-                : "text-[#949BA4] hover:text-[#DBDEE1]",
-            )}
-          >
-            <span className="text-xs font-medium leading-tight">{s.label}</span>
-            <span
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex gap-1 rounded-md bg-[#1E1F22] p-0.5 w-fit">
+        {SORTS.map((s) => {
+          const isActive = currentSort === s.value;
+          return (
+            <button
+              key={s.value}
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.set("sort", s.value);
+                params.delete("page");
+                router.push(`/browse?${params.toString()}`);
+              }}
               className={cn(
-                "text-[10px] leading-tight",
-                isActive ? "text-[#949BA4]" : "text-[#6D7079]",
+                "rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                isActive
+                  ? "bg-[#383A40] text-[#F2F3F5]"
+                  : "text-[#949BA4] hover:text-[#DBDEE1]",
               )}
             >
-              {s.timeframe}
-            </span>
-          </button>
-        );
-      })}
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-1.5 text-xs text-[#949BA4]">
+        {status.live && (
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+          </span>
+        )}
+        <span>{status.label}</span>
+      </div>
     </div>
   );
 }
