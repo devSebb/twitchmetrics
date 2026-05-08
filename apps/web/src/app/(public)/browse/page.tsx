@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { Vertical } from "@twitchmetrics/database";
+import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
@@ -104,7 +105,9 @@ async function getGames(
         ? { hoursWatched7d: "desc" as const }
         : { currentViewers: "desc" as const };
 
-  const where: { vertical?: Vertical; genres?: { has: string } } = {};
+  const where: Prisma.GameWhereInput = {
+    OR: [{ currentChannels: { gt: 0 } }, { hoursWatched7d: { gt: 0 } }],
+  };
   if (vertical !== "all") where.vertical = vertical;
   if (genre) where.genres = { has: genre };
 

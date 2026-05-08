@@ -39,6 +39,8 @@ export const NON_GAME_CATEGORIES: Record<string, Vertical> = {
   "Science & Technology": "creative",
   "Writing & Reading": "creative",
   "Tabletop RPGs": "creative",
+  "Dungeons & Dragons": "creative",
+  "Magic: The Gathering": "creative",
   Sports: "sports",
   Chess: "sports",
   Poker: "sports",
@@ -46,6 +48,7 @@ export const NON_GAME_CATEGORIES: Record<string, Vertical> = {
   Slots: "sports",
   "Virtual Casino": "sports",
   "Kings League": "sports",
+  "Always On": "other",
 };
 
 type GameForClassify = {
