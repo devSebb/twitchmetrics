@@ -123,7 +123,7 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
   return (
     <Link
       href={`/creator/${creator.slug}`}
-      className="group flex w-[220px] flex-shrink-0 flex-col items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-4 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
+      className="group flex h-full flex-col items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-4 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
     >
       {/* Avatar */}
       <div className="relative h-16 w-16 overflow-hidden rounded-full bg-[#383A40]">

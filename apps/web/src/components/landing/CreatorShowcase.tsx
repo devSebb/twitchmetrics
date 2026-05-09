@@ -27,7 +27,10 @@ export function CreatorShowcase({ creators }: CreatorShowcaseProps) {
       <div className="mx-auto max-w-6xl px-6">
         <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[#383A40]">
           {creators.map((creator) => (
-            <div key={creator.slug} className="snap-start">
+            <div
+              key={creator.slug}
+              className="w-[220px] flex-shrink-0 snap-start"
+            >
               <CreatorCard creator={creator} />
             </div>
           ))}

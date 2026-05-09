@@ -4,7 +4,11 @@ import { Platform, Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
-import { CreatorFilters, CreatorGrid } from "@/components/creators";
+import {
+  CreatorPlatformPills,
+  CreatorSortControls,
+  CreatorGrid,
+} from "@/components/creators";
 
 export const revalidate = 300; // ISR: revalidate every 5 minutes
 
@@ -169,21 +173,6 @@ type PageProps = {
   }>;
 };
 
-const PLATFORM_LABELS: Record<Platform, string> = {
-  twitch: "Twitch",
-  youtube: "YouTube",
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  x: "X",
-  kick: "Kick",
-};
-
-const SORT_LABELS: Record<SortOption, string> = {
-  followers: "Most followed",
-  trending: "Trending this week",
-  recent: "Newest additions",
-};
-
 export default async function CreatorsPage({ searchParams }: PageProps) {
   const {
     platform: platformParam,
@@ -205,10 +194,15 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
     limit: 20,
     totalPages: Math.ceil(total / 20),
   };
-  const activePlatformLabel = platform ? PLATFORM_LABELS[platform] : "All";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <Suspense>
+        <div className="mb-6">
+          <CreatorPlatformPills />
+        </div>
+      </Suspense>
+
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
           <h1 className="text-2xl font-bold text-[#F2F3F5]">Top Channels</h1>
@@ -217,19 +211,18 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
             sort the directory by scale or recent movement.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-[#949BA4] sm:justify-end">
-          <span>{formatNumber(total)} channels</span>
-          <span className="hidden text-[#4E5058] sm:inline">•</span>
-          <span>{activePlatformLabel}</span>
-          <span className="hidden text-[#4E5058] sm:inline">•</span>
-          <span>{SORT_LABELS[sort]}</span>
-        </div>
+        <span className="text-sm text-[#949BA4]">
+          {formatNumber(total)} channels
+        </span>
       </div>
 
       <Suspense>
-        <div className="mb-6">
-          <CreatorFilters />
+        <div className="mb-4">
+          <CreatorSortControls />
         </div>
+      </Suspense>
+
+      <Suspense>
         <CreatorGrid initialData={initialCreators} initialMeta={initialMeta} />
       </Suspense>
     </div>
