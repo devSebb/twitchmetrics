@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 type SocialLoginButtonsProps = {
   callbackUrl?: string;
   mode?: "login" | "register";
+  enabledProviders?: readonly ProviderId[];
 };
 
 /** Login/register only — order: YouTube → Twitch (X added when credentials are configured). */
@@ -23,13 +24,20 @@ const PROVIDERS = [
   },
 ] as const;
 
+type ProviderId = (typeof PROVIDERS)[number]["provider"];
+
 const LOGO_PX = 52;
 
 export function SocialLoginButtons({
   callbackUrl = "/home",
   mode = "login",
+  enabledProviders = PROVIDERS.map((provider) => provider.provider),
 }: SocialLoginButtonsProps) {
   const heading = mode === "register" ? "Sign up with" : "Sign in with";
+  const enabledProviderSet = new Set(enabledProviders);
+  const visibleProviders = PROVIDERS.filter((provider) =>
+    enabledProviderSet.has(provider.provider),
+  );
 
   return (
     <div className="space-y-4">
@@ -40,7 +48,7 @@ export function SocialLoginButtons({
         className="m-0 flex list-none flex-wrap items-start justify-center gap-x-8 gap-y-5 p-0 sm:gap-x-10"
         role="list"
       >
-        {PROVIDERS.map((item) => (
+        {visibleProviders.map((item) => (
           <li key={item.provider}>
             <button
               type="button"

@@ -102,12 +102,42 @@ export async function connectPlatform(
         platformUserId,
       },
     },
+    include: {
+      creatorProfile: {
+        select: {
+          id: true,
+          userId: true,
+        },
+      },
+    },
   });
 
   if (existingPlatformAccount) {
+    const userProfile = await prisma.creatorProfile.findUnique({
+      where: { userId: input.userId },
+      select: { id: true },
+    });
+
+    if (
+      existingPlatformAccount.creatorProfile.userId &&
+      existingPlatformAccount.creatorProfile.userId !== input.userId
+    ) {
+      throw new Error(
+        `${platform} account is already linked to another creator profile`,
+      );
+    }
+
+    const shouldMoveToUserProfile =
+      !existingPlatformAccount.creatorProfile.userId &&
+      userProfile &&
+      userProfile.id !== existingPlatformAccount.creatorProfileId;
+
     const updated = await prisma.platformAccount.update({
       where: { id: existingPlatformAccount.id },
       data: {
+        ...(shouldMoveToUserProfile
+          ? { creatorProfileId: userProfile.id }
+          : {}),
         accessToken: encryptedAccessToken,
         refreshToken: encryptedRefreshToken,
         tokenExpiresAt,
@@ -117,13 +147,24 @@ export async function connectPlatform(
       },
     });
 
+    if (!existingPlatformAccount.creatorProfile.userId && !userProfile) {
+      await prisma.creatorProfile.update({
+        where: { id: existingPlatformAccount.creatorProfileId },
+        data: {
+          userId: input.userId,
+          state: "claimed",
+          claimedAt: new Date(),
+        },
+      });
+    }
+
     // Fire snapshot event on reconnect (user explicitly triggered OAuth)
     try {
       const { inngest } = await import("@/inngest/client");
       void inngest.send({
         name: "creator/platform.connected",
         data: {
-          creatorProfileId: existingPlatformAccount.creatorProfileId,
+          creatorProfileId: updated.creatorProfileId,
           platform,
           platformUserId,
           platformAccountId: existingPlatformAccount.id,

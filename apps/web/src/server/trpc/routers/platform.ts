@@ -2,11 +2,15 @@ import { Platform, type PlatformAccount } from "@twitchmetrics/database";
 import { z } from "zod";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { decryptToken, encryptToken } from "@/lib/encryption";
+import {
+  isOAuthProviderConfigured,
+  type OAuthProviderId,
+} from "@/lib/oauth-providers";
 import { refreshAccessTokenForPlatform } from "@/server/services/token-refresh";
 import { protectedProcedure } from "../middleware";
 import { router } from "../root";
 
-const PLATFORM_PROVIDER_MAP: Partial<Record<Platform, string[]>> = {
+const PLATFORM_PROVIDER_MAP: Partial<Record<Platform, OAuthProviderId[]>> = {
   twitch: ["twitch"],
   youtube: ["google"],
   x: ["twitter"],
@@ -47,21 +51,7 @@ export const platformRouter = router({
         : null;
 
       const providerNames = PLATFORM_PROVIDER_MAP[platform] ?? [];
-      const oauthProviderReady =
-        platform === "instagram"
-          ? Boolean(
-              (process.env.INSTAGRAM_CLIENT_ID ||
-                process.env.INSTAGRAM_APP_ID) &&
-              (process.env.INSTAGRAM_CLIENT_SECRET ||
-                process.env.INSTAGRAM_APP_SECRET),
-            )
-          : platform === "tiktok"
-            ? Boolean(
-                (process.env.TIKTOK_CLIENT_KEY ||
-                  process.env.TIKTOK_CLIENT_ID) &&
-                process.env.TIKTOK_CLIENT_SECRET,
-              )
-            : providerNames.length > 0;
+      const oauthProviderReady = providerNames.some(isOAuthProviderConfigured);
 
       return {
         platform,

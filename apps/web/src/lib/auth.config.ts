@@ -5,8 +5,12 @@ import type { NextAuthConfig } from "next-auth";
  * Used exclusively by middleware.ts to verify JWT tokens at the Edge.
  * The full auth config (with Prisma adapter, providers, callbacks) lives in auth.ts.
  */
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
 export const authConfig = {
   providers: [],
+  ...(authSecret ? { secret: authSecret } : {}),
+  trustHost: true,
   session: { strategy: "jwt" as const },
   callbacks: {
     jwt({ token }) {

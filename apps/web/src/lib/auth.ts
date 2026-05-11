@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import type { Account, Profile, User } from "next-auth";
 import type { Adapter } from "next-auth/adapters";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import TwitchProvider from "next-auth/providers/twitch";
@@ -9,6 +10,7 @@ import ResendProvider from "next-auth/providers/resend";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@twitchmetrics/database";
+import { isOAuthProviderConfigured } from "@/lib/oauth-providers";
 import { InstagramProvider } from "@/server/auth/instagram-provider";
 import { TikTokProvider } from "@/server/auth/tiktok-provider";
 import { connectPlatform } from "@/server/services/platform-connection";
@@ -18,45 +20,95 @@ const credentialsSchema = z.object({
   password: z.string().min(1),
 });
 
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
+async function syncPlatformConnection({
+  user,
+  account,
+  profile,
+}: {
+  user: User;
+  account: Account | null;
+  profile?: Profile;
+}) {
+  if (!account || (account.type !== "oauth" && account.type !== "oidc")) {
+    return;
+  }
+
+  if (!user.id) {
+    return;
+  }
+
+  try {
+    await connectPlatform({
+      userId: user.id,
+      provider: account.provider,
+      providerAccountId: account.providerAccountId,
+      accessToken: account.access_token ?? null,
+      refreshToken: account.refresh_token ?? null,
+      expiresAt: account.expires_at ?? null,
+      scope: account.scope ?? null,
+      profile,
+    });
+  } catch (error) {
+    console.error("Failed to sync platform account after OAuth sign-in", {
+      provider: account.provider,
+      userId: user.id,
+      error,
+    });
+  }
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
+  ...(authSecret ? { secret: authSecret } : {}),
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   providers: [
     // Twitch — Helix API
-    TwitchProvider({
-      clientId: process.env.TWITCH_CLIENT_ID!,
-      clientSecret: process.env.TWITCH_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: ["user:read:email", "channel:read:subscriptions"].join(" "),
-        },
-      },
-    }),
+    ...(isOAuthProviderConfigured("twitch")
+      ? [
+          TwitchProvider({
+            clientId: process.env.TWITCH_CLIENT_ID!,
+            clientSecret: process.env.TWITCH_CLIENT_SECRET!,
+            authorization: {
+              params: {
+                scope: ["user:read:email", "channel:read:subscriptions"].join(
+                  " ",
+                ),
+              },
+            },
+          }),
+        ]
+      : []),
 
     // Google/YouTube — Data API v3 + Analytics API
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: [
-            "openid",
-            "email",
-            "profile",
-            "https://www.googleapis.com/auth/youtube.readonly",
-            "https://www.googleapis.com/auth/yt-analytics.readonly",
-          ].join(" "),
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
-    }),
+    ...(isOAuthProviderConfigured("google")
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID!,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+            authorization: {
+              params: {
+                scope: [
+                  "openid",
+                  "email",
+                  "profile",
+                  "https://www.googleapis.com/auth/youtube.readonly",
+                  "https://www.googleapis.com/auth/yt-analytics.readonly",
+                ].join(" "),
+                access_type: "offline",
+                prompt: "consent",
+              },
+            },
+          }),
+        ]
+      : []),
 
-    ...((process.env.INSTAGRAM_CLIENT_ID || process.env.INSTAGRAM_APP_ID) &&
-    (process.env.INSTAGRAM_CLIENT_SECRET || process.env.INSTAGRAM_APP_SECRET)
+    ...(isOAuthProviderConfigured("instagram")
       ? [
           InstagramProvider({
             clientId:
@@ -71,8 +123,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ]
       : []),
 
-    ...((process.env.TIKTOK_CLIENT_KEY || process.env.TIKTOK_CLIENT_ID) &&
-    process.env.TIKTOK_CLIENT_SECRET
+    ...(isOAuthProviderConfigured("tiktok")
       ? [
           TikTokProvider({
             clientKey:
@@ -85,11 +136,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
 
     // X / Twitter
-    ...(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET
+    ...(isOAuthProviderConfigured("twitter")
       ? [
           TwitterProvider({
-            clientId: process.env.TWITTER_CLIENT_ID,
-            clientSecret: process.env.TWITTER_CLIENT_SECRET,
+            clientId: process.env.TWITTER_CLIENT_ID!,
+            clientSecret: process.env.TWITTER_CLIENT_SECRET!,
           }),
         ]
       : []),
@@ -252,27 +303,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       }
 
-      // OAuth sign-in: link the provider account to the creator profile.
-      // This is fire-and-forget for the sign-in flow — errors are logged but
-      // never block the user from getting a session.
-      try {
-        await connectPlatform({
-          userId: user.id!,
-          provider: account.provider,
-          providerAccountId: account.providerAccountId,
-          accessToken: account.access_token ?? null,
-          refreshToken: account.refresh_token ?? null,
-          expiresAt: account.expires_at ?? null,
-          scope: account.scope ?? null,
-          profile,
-        });
-      } catch (error) {
-        console.error("Failed to connect platform account during sign-in", {
-          provider: account.provider,
-          error,
-        });
-      }
-
       // Middleware handles /onboarding redirect for incomplete onboarding.
       return true;
     },
@@ -293,5 +323,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: "/login",
+  },
+  events: {
+    signIn: async ({ user, account, profile }) => {
+      await syncPlatformConnection({
+        user,
+        account,
+        ...(profile ? { profile } : {}),
+      });
+    },
   },
 });

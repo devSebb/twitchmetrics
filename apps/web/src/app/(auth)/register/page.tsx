@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RegisterForm, SocialLoginButtons } from "@/components/auth";
+import { getConfiguredSocialLoginProviders } from "@/lib/oauth-providers";
 
 type RegisterPageProps = {
   searchParams: Promise<{
@@ -21,6 +22,7 @@ export default async function RegisterPage({
   const params = await searchParams;
   const callbackUrl = getSafeReturnTo(params.returnTo ?? params.callbackUrl);
   const loginHref = `/login?returnTo=${encodeURIComponent(callbackUrl)}`;
+  const socialProviders = getConfiguredSocialLoginProviders();
 
   return (
     <div className="w-full max-w-md">
@@ -57,7 +59,11 @@ export default async function RegisterPage({
         </div>
 
         <div className="mt-6">
-          <SocialLoginButtons callbackUrl={callbackUrl} mode="register" />
+          <SocialLoginButtons
+            callbackUrl={callbackUrl}
+            enabledProviders={socialProviders}
+            mode="register"
+          />
         </div>
 
         <div className="my-6 flex items-center gap-3">
