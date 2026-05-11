@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CreatorCard } from "@/components/shared";
+import { CreatorList } from "./CreatorList";
 import { cn } from "@/lib/utils";
 import type { Platform } from "@/lib/constants/platforms";
 
@@ -19,6 +20,10 @@ type CreatorData = {
     pct7d: number;
     trendDirection: string;
   } | null;
+  airTimeSeconds?: number | null;
+  avgAirTimeSeconds?: number | null;
+  peakViewers?: number | null;
+  avgViewers?: number | null;
 };
 
 type ApiResponse = {
@@ -40,10 +45,12 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   const searchParams = useSearchParams();
   const platform = searchParams.get("platform") ?? "";
   const sort = searchParams.get("sort") ?? "followers";
+  const view = searchParams.get("view") === "list" ? "list" : "grid";
   const pageParam = Number(searchParams.get("page") ?? "1");
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
-  const isDefaultParams = page === 1 && !platform && sort === "followers";
+  const isDefaultParams =
+    page === 1 && !platform && sort === "followers" && view === "grid";
 
   function buildCreatorsUrl(nextPage: number) {
     const params = new URLSearchParams(searchParams.toString());
@@ -57,13 +64,14 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ["creators", platform, sort, page],
+    queryKey: ["creators", platform, sort, page, view],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
       if (platform) params.set("platform", platform);
       params.set("sort", sort);
       params.set("page", String(page));
       params.set("limit", "20");
+      if (view === "list") params.set("view", "list");
       const res = await fetch(`/api/creators?${params.toString()}`);
       return res.json() as Promise<ApiResponse>;
     },
@@ -78,12 +86,23 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
 
   return (
     <div>
-      {isLoading && creators.length === 0 && (
+      {isLoading && creators.length === 0 && view === "grid" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
               className="h-[220px] animate-pulse rounded-lg border border-[#3F4147] bg-[#313338]"
+            />
+          ))}
+        </div>
+      )}
+
+      {isLoading && creators.length === 0 && view === "list" && (
+        <div className="space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-10 animate-pulse rounded-lg bg-[#383A40]"
             />
           ))}
         </div>
@@ -97,11 +116,15 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
 
       {creators.length > 0 && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {creators.map((creator: CreatorData) => (
-              <CreatorCard key={creator.slug} creator={creator} />
-            ))}
-          </div>
+          {view === "list" ? (
+            <CreatorList rows={creators} />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {creators.map((creator: CreatorData) => (
+                <CreatorCard key={creator.slug} creator={creator} />
+              ))}
+            </div>
+          )}
 
           {/* Pagination */}
           {meta.totalPages > 1 && (

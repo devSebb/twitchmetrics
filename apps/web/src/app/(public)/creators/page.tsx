@@ -7,6 +7,7 @@ import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
   CreatorPlatformPills,
   CreatorSortControls,
+  CreatorViewToggle,
   CreatorGrid,
 } from "@/components/creators";
 
@@ -217,7 +218,8 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
       </div>
 
       <Suspense>
-        <div className="mb-4">
+        <div className="mb-4 flex items-center gap-3">
+          <CreatorViewToggle />
           <CreatorSortControls />
         </div>
       </Suspense>

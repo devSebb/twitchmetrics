@@ -36,7 +36,7 @@ export function CreatorSortControls() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-1 items-center justify-between gap-3">
       <div className="flex w-fit gap-1 rounded-md bg-[#1E1F22] p-0.5">
         {SORTS.map((s) => {
           const isActive = currentSort === s.value;

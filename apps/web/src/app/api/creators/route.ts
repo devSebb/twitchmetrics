@@ -5,6 +5,10 @@ import { buildMeta, parsePagination } from "@/app/api/_lib/pagination";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
+import {
+  getStreamingStatsBatch,
+  emptyStreamingStats,
+} from "@/server/services/creator-streaming-stats";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -79,9 +83,11 @@ export async function GET(request: Request) {
   const query = searchParams.get("q")?.trim() || null;
   const platform = parsePlatform(searchParams.get("platform"));
   const sort = searchParams.get("sort");
+  const view = searchParams.get("view") === "list" ? "list" : "grid";
 
-  // Cache by normalized query params
-  const cacheKey = `creators:list:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}`;
+  // Cache by normalized query params (view splits list/grid into separate keys
+  // since list responses carry extra streaming-stat fields).
+  const cacheKey = `creators:list:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -183,6 +189,14 @@ export async function GET(request: Request) {
           : null,
       };
     });
+
+  if (view === "list") {
+    const statsById = await getStreamingStatsBatch(ids);
+    for (const row of data) {
+      const stats = statsById.get(row.id) ?? emptyStreamingStats();
+      Object.assign(row, stats);
+    }
+  }
 
   const response = serializeBigInt({
     data,
