@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -84,12 +85,20 @@ export function LoginForm({ callbackUrl = "/dashboard/home" }: LoginFormProps) {
       </div>
 
       <div>
-        <label
-          htmlFor="login-password"
-          className="mb-1 block text-sm text-[#DBDEE1]"
-        >
-          Password
-        </label>
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <label
+            htmlFor="login-password"
+            className="block text-sm text-[#DBDEE1]"
+          >
+            Password
+          </label>
+          <Link
+            href="/forgot-password"
+            className="text-xs font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <div className="relative">
           <input
             id="login-password"

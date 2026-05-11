@@ -83,12 +83,13 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  creatorProfile  CreatorProfile?
-  managedCreators TalentManagerAccess[] @relation("ManagerToCreator")
-  claimRequests   ClaimRequest[]
-  auditLogs       AuditLog[]
+  accounts            Account[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  creatorProfile      CreatorProfile?
+  managedCreators     TalentManagerAccess[] @relation("ManagerToCreator")
+  claimRequests       ClaimRequest[]
+  auditLogs           AuditLog[]
 }
 
 model Account {
@@ -123,6 +124,21 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  requestIpHash String?
+  userAgentHash String?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // ============================================================
