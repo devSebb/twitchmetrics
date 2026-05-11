@@ -61,7 +61,7 @@ export function DashboardProfileHeader({ profile, isOwner }: Props) {
       </div>
 
       {/* Content below banner */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
           {/* Avatar */}
           <div className="-mt-12 sm:-mt-16">

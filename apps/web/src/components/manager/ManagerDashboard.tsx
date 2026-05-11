@@ -56,7 +56,7 @@ export function ManagerDashboard({ userId }: ManagerDashboardProps) {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="mb-6 flex items-center justify-between">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-9 w-32" />
@@ -76,7 +76,7 @@ export function ManagerDashboard({ userId }: ManagerDashboardProps) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       {/* Header */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

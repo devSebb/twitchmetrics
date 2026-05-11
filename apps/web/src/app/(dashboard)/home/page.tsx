@@ -43,7 +43,7 @@ export default async function DashboardHomePage() {
     ]);
 
     return (
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-3xl font-bold text-[#F2F3F5]">Admin Dashboard</h1>
           <p className="mt-1 text-sm text-[#949BA4]">
@@ -155,7 +155,7 @@ export default async function DashboardHomePage() {
 
   if (session.user.role === "talent_manager") {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-3xl font-bold text-[#F2F3F5]">
             Welcome back, {user?.name ?? "Manager"}
@@ -197,7 +197,7 @@ export default async function DashboardHomePage() {
     creatorProfile.platformAccounts.length === 0
   ) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-3xl font-bold text-[#F2F3F5]">
             Welcome, {user?.name ?? "Creator"}
@@ -249,7 +249,7 @@ export default async function DashboardHomePage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
       <div>
         <h1 className="text-3xl font-bold text-[#F2F3F5]">
           Welcome back, {user?.name ?? "Creator"}

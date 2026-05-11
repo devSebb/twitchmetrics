@@ -40,7 +40,7 @@ export default async function BrandPartnershipsPage() {
 
   if (!profile) {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
         <h1 className="text-3xl font-bold text-[#F2F3F5]">
           Brand Partnerships
         </h1>
@@ -60,7 +60,7 @@ export default async function BrandPartnershipsPage() {
 
   if (!isClaimed) {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
         <h1 className="text-3xl font-bold text-[#F2F3F5]">
           Brand Partnerships
         </h1>
@@ -77,7 +77,7 @@ export default async function BrandPartnershipsPage() {
   const serialized = serializeBigInt(profile) as unknown as SerializedProfile;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
       <div>
         <h1 className="text-3xl font-bold text-[#F2F3F5]">
           Brand Partnerships

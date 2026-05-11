@@ -129,7 +129,7 @@ export default async function CreatorAnalyticsPage() {
     (creatorProfile.state !== "claimed" && creatorProfile.state !== "premium")
   ) {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
         <h1 className="text-3xl font-bold text-[#F2F3F5]">Analytics</h1>
         <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-6">
           <p className="text-sm text-[#949BA4]">
@@ -176,7 +176,7 @@ export default async function CreatorAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-[#F2F3F5]">Analytics</h1>

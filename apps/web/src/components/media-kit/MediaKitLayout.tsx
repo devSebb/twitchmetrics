@@ -127,7 +127,7 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
   );
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* Hero Section */}
       <Card className="relative overflow-hidden p-0">
         {bannerSrc ? (

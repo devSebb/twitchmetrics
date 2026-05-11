@@ -174,7 +174,7 @@ export function DashboardGrid({
   // When the parent already provides the page canvas (public creator page,
   // showProfileHeader={false}), don't double-wrap — just contribute rows.
   const contentClassName = showProfileHeader
-    ? "mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6"
+    ? "mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6"
     : "space-y-4";
 
   return (
