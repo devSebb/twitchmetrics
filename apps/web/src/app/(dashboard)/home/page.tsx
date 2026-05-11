@@ -129,6 +129,10 @@ export default async function DashboardHomePage() {
     );
   }
 
+  if (session.user.role === "talent_manager") {
+    redirect("/dashboard/roster");
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -152,40 +156,6 @@ export default async function DashboardHomePage() {
       },
     },
   });
-
-  if (session.user.role === "talent_manager") {
-    return (
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
-        <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">
-            Welcome back, {user?.name ?? "Manager"}
-          </h1>
-          <p className="mt-1 text-sm text-[#949BA4]">
-            Manage your creator roster and track performance across your team.
-          </p>
-        </div>
-        <Card>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-[#F2F3F5]">
-                Creator Roster
-              </h2>
-              <p className="mt-1 text-sm text-[#949BA4]">
-                View and manage your partnered creators, track their growth, and
-                coordinate campaigns.
-              </p>
-            </div>
-            <Link
-              href="/dashboard/roster"
-              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#E32C19] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
-            >
-              Open roster
-            </Link>
-          </div>
-        </Card>
-      </div>
-    );
-  }
 
   const creatorProfile = user?.creatorProfile;
   const isClaimed =

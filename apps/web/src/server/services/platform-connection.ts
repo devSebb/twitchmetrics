@@ -132,31 +132,52 @@ export async function connectPlatform(
       userProfile &&
       userProfile.id !== existingPlatformAccount.creatorProfileId;
 
-    const updated = await prisma.platformAccount.update({
-      where: { id: existingPlatformAccount.id },
-      data: {
-        ...(shouldMoveToUserProfile
-          ? { creatorProfileId: userProfile.id }
-          : {}),
-        accessToken: encryptedAccessToken,
-        refreshToken: encryptedRefreshToken,
-        tokenExpiresAt,
-        oauthScopes,
-        isOAuthConnected: true,
-        lastOAuthRefresh: new Date(),
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      if (shouldMoveToUserProfile) {
+        // Prefer the pre-discovered canonical profile for this platform user.
+        // The old user placeholder is detached so the canonical profile can own
+        // the app user and keep its public slug/search history.
+        await tx.platformAccount.updateMany({
+          where: {
+            creatorProfileId: userProfile.id,
+            platform: { not: platform },
+          },
+          data: { creatorProfileId: existingPlatformAccount.creatorProfileId },
+        });
 
-    if (!existingPlatformAccount.creatorProfile.userId && !userProfile) {
-      await prisma.creatorProfile.update({
-        where: { id: existingPlatformAccount.creatorProfileId },
+        await tx.creatorProfile.update({
+          where: { id: userProfile.id },
+          data: {
+            userId: null,
+            state: "unclaimed",
+            claimedAt: null,
+          },
+        });
+      }
+
+      if (!existingPlatformAccount.creatorProfile.userId) {
+        await tx.creatorProfile.update({
+          where: { id: existingPlatformAccount.creatorProfileId },
+          data: {
+            userId: input.userId,
+            state: "claimed",
+            claimedAt: new Date(),
+          },
+        });
+      }
+
+      return tx.platformAccount.update({
+        where: { id: existingPlatformAccount.id },
         data: {
-          userId: input.userId,
-          state: "claimed",
-          claimedAt: new Date(),
+          accessToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
+          tokenExpiresAt,
+          oauthScopes,
+          isOAuthConnected: true,
+          lastOAuthRefresh: new Date(),
         },
       });
-    }
+    });
 
     // Fire snapshot event on reconnect (user explicitly triggered OAuth)
     try {
