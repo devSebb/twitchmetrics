@@ -37,6 +37,10 @@ export const platformRouter = router({
         ? {
             isConnected: account.isOAuthConnected,
             username: account.platformUsername,
+            displayName: account.platformDisplayName,
+            profileUrl: account.platformUrl,
+            avatarUrl: account.platformAvatarUrl,
+            platformUserId: account.platformUserId,
             followerCount:
               account.followerCount !== null
                 ? account.followerCount.toString()

@@ -17,6 +17,13 @@ type ConnectPlatformInput = {
   profile?: unknown;
 };
 
+type PlatformIdentity = {
+  username: string | null;
+  displayName: string | null;
+  profileUrl: string | null;
+  avatarUrl: string | null;
+};
+
 export type ConnectPlatformResult = {
   platformAccount: PlatformAccount;
   isNewConnection: boolean;
@@ -30,6 +37,17 @@ const PROVIDER_PLATFORM_MAP: Record<string, Platform> = {
   instagram: "instagram",
   tiktok: "tiktok",
 };
+
+function getStringProperty(value: unknown, property: string): string | null {
+  if (!value || typeof value !== "object" || !(property in value)) {
+    return null;
+  }
+
+  const propertyValue = (value as Record<string, unknown>)[property];
+  return typeof propertyValue === "string" && propertyValue.length > 0
+    ? propertyValue
+    : null;
+}
 
 async function resolvePlatformUserId(
   input: ConnectPlatformInput,
@@ -69,6 +87,55 @@ async function resolvePlatformUserId(
   return input.providerAccountId || null;
 }
 
+function resolvePlatformIdentity(
+  input: ConnectPlatformInput,
+  platform: Platform,
+  platformUserId: string,
+): PlatformIdentity {
+  if (platform === "twitch") {
+    const username =
+      getStringProperty(input.profile, "preferred_username") ??
+      getStringProperty(input.profile, "login") ??
+      getStringProperty(input.profile, "username");
+    const displayName =
+      getStringProperty(input.profile, "name") ??
+      getStringProperty(input.profile, "display_name") ??
+      username;
+    const avatarUrl = getStringProperty(input.profile, "picture");
+
+    return {
+      username,
+      displayName,
+      profileUrl: username ? `https://twitch.tv/${username}` : null,
+      avatarUrl,
+    };
+  }
+
+  if (
+    platform === "x" &&
+    input.profile &&
+    typeof input.profile === "object" &&
+    "data" in input.profile
+  ) {
+    const data = (input.profile as { data?: unknown }).data;
+    const username = getStringProperty(data, "username");
+
+    return {
+      username,
+      displayName: getStringProperty(data, "name") ?? username,
+      profileUrl: username ? `https://x.com/${username}` : null,
+      avatarUrl: getStringProperty(data, "profile_image_url"),
+    };
+  }
+
+  return {
+    username: platformUserId,
+    displayName: null,
+    profileUrl: null,
+    avatarUrl: null,
+  };
+}
+
 export async function connectPlatform(
   input: ConnectPlatformInput,
 ): Promise<ConnectPlatformResult | null> {
@@ -82,6 +149,7 @@ export async function connectPlatform(
     return null;
   }
 
+  const identity = resolvePlatformIdentity(input, platform, platformUserId);
   const encryptedAccessToken = input.accessToken
     ? await encryptToken(input.accessToken)
     : null;
@@ -169,6 +237,15 @@ export async function connectPlatform(
       return tx.platformAccount.update({
         where: { id: existingPlatformAccount.id },
         data: {
+          platformUsername:
+            identity.username ?? existingPlatformAccount.platformUsername,
+          ...(identity.displayName
+            ? { platformDisplayName: identity.displayName }
+            : {}),
+          ...(identity.profileUrl ? { platformUrl: identity.profileUrl } : {}),
+          ...(identity.avatarUrl
+            ? { platformAvatarUrl: identity.avatarUrl }
+            : {}),
           accessToken: encryptedAccessToken,
           refreshToken: encryptedRefreshToken,
           tokenExpiresAt,
@@ -225,7 +302,10 @@ export async function connectPlatform(
       creatorProfileId: ensuredCreatorProfile.id,
       platform,
       platformUserId,
-      platformUsername: platformUserId,
+      platformUsername: identity.username ?? platformUserId,
+      platformDisplayName: identity.displayName,
+      platformUrl: identity.profileUrl,
+      platformAvatarUrl: identity.avatarUrl,
       accessToken: encryptedAccessToken,
       refreshToken: encryptedRefreshToken,
       tokenExpiresAt,

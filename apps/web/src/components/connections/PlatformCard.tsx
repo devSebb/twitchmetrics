@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 type PlatformConnection = {
   isConnected: boolean;
   username: string | null;
+  displayName: string | null;
+  profileUrl: string | null;
+  avatarUrl: string | null;
+  platformUserId: string;
   followerCount: string | null;
   lastSyncedAt: string | null;
   tokenExpiresAt: string | null;
@@ -45,6 +49,10 @@ export function PlatformCard({
   const isKick = platform === "kick";
   const showBetaBadge = platform === "instagram" || platform === "tiktok";
   const isUnavailable = isKick || !config.oauthSupported || !oauthProviderReady;
+  const connectedUsername =
+    isConnected && connection?.username ? connection.username : null;
+  const connectedDisplayName =
+    isConnected && connection?.displayName ? connection.displayName : null;
 
   return (
     <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-4">
@@ -85,10 +93,54 @@ export function PlatformCard({
         </p>
       )}
 
+      {isConnected && connection ? (
+        <div className="mt-4 flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#2B2D31] p-3">
+          {connection.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={connection.avatarUrl}
+              alt=""
+              className="h-10 w-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#383A40] text-sm font-semibold text-[#DBDEE1]">
+              {config.name.charAt(0)}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#F2F3F5]">
+              {connectedDisplayName ?? connectedUsername ?? config.name}
+            </p>
+            {connectedUsername ? (
+              connection.profileUrl ? (
+                <a
+                  href={connection.profileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate text-xs text-[#93c5fd] hover:underline"
+                >
+                  @{connectedUsername}
+                </a>
+              ) : (
+                <p className="truncate text-xs text-[#949BA4]">
+                  @{connectedUsername}
+                </p>
+              )
+            ) : (
+              <p className="truncate text-xs text-[#949BA4]">
+                ID: {connection.platformUserId}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-4 space-y-1 text-sm text-[#DBDEE1]">
         <p>
           Username:{" "}
-          <span className="text-[#949BA4]">{connection?.username ?? "-"}</span>
+          <span className="text-[#949BA4]">
+            {connectedUsername ? `@${connectedUsername}` : "-"}
+          </span>
         </p>
         <p>
           Followers:{" "}
