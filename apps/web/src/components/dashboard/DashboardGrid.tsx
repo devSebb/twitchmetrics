@@ -72,6 +72,12 @@ export type SerializedProfile = {
   bannerUrl: string | null;
   bio: string | null;
   country: string | null;
+  language?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  interests?: string[] | null;
+  ownerEmail?: string | null;
+  ownerImage?: string | null;
   primaryPlatform: Platform;
   totalFollowers: string;
   totalViews: string;

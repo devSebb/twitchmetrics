@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Image from "next/image";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
+import { computeProfileCompletion } from "@/lib/profile-completion";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import type { SerializedProfile } from "./DashboardGrid";
 
@@ -20,18 +21,24 @@ function formatFollowers(count: string | null): string {
   return n.toLocaleString();
 }
 
-function computeCompletion(profile: SerializedProfile): number {
-  let score = 0;
-  if (profile.bio) score += 25;
-  if (profile.avatarUrl) score += 25;
-  if (profile.bannerUrl) score += 25;
-  if (profile.platformAccounts.length > 0) score += 25;
-  return score;
-}
-
 export function DashboardProfileHeader({ profile, isOwner }: Props) {
   const [copied, setCopied] = useState(false);
-  const completion = computeCompletion(profile);
+  const activeConnections = profile.platformAccounts.filter(
+    (account) => account.isOAuthConnected,
+  ).length;
+  const completion = computeProfileCompletion({
+    displayName: profile.displayName,
+    email: profile.ownerEmail,
+    avatarUrl: profile.avatarUrl ?? profile.ownerImage,
+    country: profile.country,
+    language: profile.language,
+    gender: profile.gender,
+    age: profile.age,
+    interests: profile.interests,
+    bio: profile.bio,
+    connectedAccountsCount: activeConnections,
+    partnershipsCount: profile.brandPartnerships.length,
+  }).percentage;
 
   const handleCopyUrl = useCallback(() => {
     const url = `${window.location.origin}/creator/${profile.slug}`;

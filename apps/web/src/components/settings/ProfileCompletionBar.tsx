@@ -1,5 +1,7 @@
 "use client";
 
+import { computeProfileCompletion } from "@/lib/profile-completion";
+
 type ProfileCompletionBarProps = {
   displayName: string | null;
   email: string | null;
@@ -12,12 +14,6 @@ type ProfileCompletionBarProps = {
   bio: string | null;
   connectedAccountsCount: number;
   partnershipsCount: number;
-};
-
-type WeightedField = {
-  label: string;
-  weight: number;
-  filled: boolean;
 };
 
 function getStrengthLabel(pct: number): string {
@@ -35,25 +31,7 @@ function getStrengthColor(pct: number): string {
 }
 
 export function ProfileCompletionBar(props: ProfileCompletionBarProps) {
-  const fields: WeightedField[] = [
-    { label: "Name", weight: 10, filled: !!props.displayName },
-    { label: "Email", weight: 10, filled: !!props.email },
-    { label: "Avatar", weight: 10, filled: !!props.avatarUrl },
-    { label: "Country", weight: 10, filled: !!props.country },
-    { label: "Language", weight: 10, filled: !!props.language },
-    { label: "Gender", weight: 5, filled: !!props.gender },
-    { label: "Age", weight: 5, filled: !!props.age },
-    { label: "Interests", weight: 10, filled: props.interests.length > 0 },
-    { label: "Description", weight: 10, filled: !!props.bio?.trim() },
-    {
-      label: "Connected Accounts",
-      weight: 15,
-      filled: props.connectedAccountsCount > 0,
-    },
-    { label: "Partnerships", weight: 5, filled: props.partnershipsCount > 0 },
-  ];
-
-  const pct = fields.reduce((sum, f) => sum + (f.filled ? f.weight : 0), 0);
+  const pct = computeProfileCompletion(props).percentage;
   const strengthLabel = getStrengthLabel(pct);
   const strengthColor = getStrengthColor(pct);
 

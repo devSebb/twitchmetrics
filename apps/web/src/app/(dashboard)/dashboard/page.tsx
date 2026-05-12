@@ -16,48 +16,54 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const profile = await prisma.creatorProfile.findUnique({
-    where: { userId: session.user.id },
-    include: {
-      platformAccounts: {
-        select: {
-          platform: true,
-          followerCount: true,
-          totalViews: true,
-          lastSyncedAt: true,
-          isOAuthConnected: true,
+  const [profile, user] = await Promise.all([
+    prisma.creatorProfile.findUnique({
+      where: { userId: session.user.id },
+      include: {
+        platformAccounts: {
+          select: {
+            platform: true,
+            followerCount: true,
+            totalViews: true,
+            lastSyncedAt: true,
+            isOAuthConnected: true,
+          },
+        },
+        growthRollups: {
+          select: {
+            platform: true,
+            followerCount: true,
+            delta1d: true,
+            delta7d: true,
+            delta30d: true,
+            pct1d: true,
+            pct7d: true,
+            pct30d: true,
+            trendDirection: true,
+            acceleration: true,
+            computedAt: true,
+          },
+        },
+        brandPartnerships: {
+          where: { isPublic: true },
+          select: {
+            id: true,
+            brandName: true,
+            brandLogoUrl: true,
+            campaignName: true,
+            startDate: true,
+            endDate: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 12,
         },
       },
-      growthRollups: {
-        select: {
-          platform: true,
-          followerCount: true,
-          delta1d: true,
-          delta7d: true,
-          delta30d: true,
-          pct1d: true,
-          pct7d: true,
-          pct30d: true,
-          trendDirection: true,
-          acceleration: true,
-          computedAt: true,
-        },
-      },
-      brandPartnerships: {
-        where: { isPublic: true },
-        select: {
-          id: true,
-          brandName: true,
-          brandLogoUrl: true,
-          campaignName: true,
-          startDate: true,
-          endDate: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 12,
-      },
-    },
-  });
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { email: true, image: true },
+    }),
+  ]);
 
   if (!profile) {
     // Talent managers and users without profiles should go to home
@@ -83,7 +89,11 @@ export default async function DashboardPage() {
 
   // serializeBigInt converts BigInt → string at runtime, but TS still sees the Prisma type.
   // Cast to SerializedProfile since the runtime shape matches after serialization.
-  const serialized = serializeBigInt(profile) as unknown as SerializedProfile;
+  const serialized = {
+    ...(serializeBigInt(profile) as Record<string, unknown>),
+    ownerEmail: user?.email ?? null,
+    ownerImage: user?.image ?? null,
+  } as unknown as SerializedProfile;
 
   return (
     <DashboardGrid
