@@ -330,7 +330,7 @@ export function ReportRequestForm({
     { key: "peakViewers", label: () => "Peak Viewers" },
     {
       key: "topCreators",
-      label: (inc) => (inc === "channels" ? "Top Channels" : "Top Creators"),
+      label: (inc) => (inc === "games" ? "Top Channels" : "Top Creators"),
     },
     { key: "airtime", label: () => "Airtime" },
     { key: "subscribers", label: () => "Subscribers" },

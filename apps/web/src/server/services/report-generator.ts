@@ -1,9 +1,16 @@
 import { prisma } from "@twitchmetrics/database";
-import type { TemplateConfig } from "@/lib/constants/report-templates";
+import type {
+  MetricKey,
+  TemplateConfig,
+} from "@/lib/constants/report-templates";
 
 type GenerateArgs = {
   entityIds?: string[];
+  selectedMetrics?: string[];
 };
+
+const HALF_HOUR_MS = 30 * 60 * 1000;
+const MIN_GOOD_COVERAGE_PERCENT = 80;
 
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
 
@@ -26,21 +33,37 @@ function fmtHours(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
+function fmtPercent(n: number): string {
+  return `${n.toFixed(1)}%`;
+}
+
+function fmtDateTime(d: Date | null): string {
+  return d ? d.toISOString() : "N/A";
+}
+
+function selectedMetricsFor(
+  config: TemplateConfig,
+  requested: string[] | undefined,
+): MetricKey[] {
+  if (!requested || requested.length === 0) return config.allowedMetrics;
+  const allowed = new Set(config.allowedMetrics);
+  return requested.filter((m): m is MetricKey => allowed.has(m as MetricKey));
+}
+
 // ─── Period helpers ───────────────────────────────────────────────────────────
 
-function periodStart(timePeriod: string): Date {
-  const now = new Date();
+function periodStart(timePeriod: string, end: Date): Date {
   switch (timePeriod) {
     case "30d":
-      return new Date(now.getTime() - 30 * 86400_000);
+      return new Date(end.getTime() - 30 * 86400_000);
     case "90d":
-      return new Date(now.getTime() - 90 * 86400_000);
+      return new Date(end.getTime() - 90 * 86400_000);
     case "6m":
-      return new Date(now.getTime() - 183 * 86400_000);
+      return new Date(end.getTime() - 183 * 86400_000);
     case "12m":
-      return new Date(now.getTime() - 365 * 86400_000);
+      return new Date(end.getTime() - 365 * 86400_000);
     default:
-      return new Date(now.getTime() - 30 * 86400_000);
+      return new Date(end.getTime() - 30 * 86400_000);
   }
 }
 
@@ -54,6 +77,101 @@ function periodLabel(timePeriod: string): string {
   return labels[timePeriod] ?? "Custom";
 }
 
+function expectedSnapshotCount(start: Date, end: Date): number {
+  return Math.max(
+    1,
+    Math.ceil((end.getTime() - start.getTime()) / HALF_HOUR_MS),
+  );
+}
+
+type GameSnapshot = {
+  snapshotAt: Date;
+  twitchViewers: number;
+};
+
+type GamePeriodMetrics = {
+  hoursWatched: number;
+  observedHours: number;
+  avgViewers: number | null;
+  peakViewers: number | null;
+  snapshotCount: number;
+  expectedSnapshots: number;
+  coveragePercent: number;
+  firstSnapshot: Date | null;
+  lastSnapshot: Date | null;
+  dataQuality: "Good" | "Partial" | "Low" | "No data";
+};
+
+function computeGamePeriodMetrics(
+  snapshots: GameSnapshot[],
+  start: Date,
+  end: Date,
+): GamePeriodMetrics {
+  const ordered = [...snapshots].sort(
+    (a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime(),
+  );
+  const expected = expectedSnapshotCount(start, end);
+  const snapshotCount = ordered.length;
+  const coveragePercent = Math.min(100, (snapshotCount / expected) * 100);
+
+  let hoursWatched = 0;
+  let observedMs = 0;
+  let peakViewers: number | null = null;
+
+  for (let i = 0; i < ordered.length; i++) {
+    const current = ordered[i]!;
+    const next = ordered[i + 1];
+    const intervalStart = Math.max(
+      current.snapshotAt.getTime(),
+      start.getTime(),
+    );
+    const naturalEnd = next
+      ? next.snapshotAt.getTime()
+      : current.snapshotAt.getTime() + HALF_HOUR_MS;
+    const intervalEnd = Math.min(naturalEnd, end.getTime());
+    const intervalMs = Math.max(
+      0,
+      Math.min(HALF_HOUR_MS, intervalEnd - intervalStart),
+    );
+
+    if (intervalMs > 0) {
+      hoursWatched += current.twitchViewers * (intervalMs / 3_600_000);
+      observedMs += intervalMs;
+    }
+
+    peakViewers =
+      peakViewers === null
+        ? current.twitchViewers
+        : Math.max(peakViewers, current.twitchViewers);
+  }
+
+  const observedHours = observedMs / 3_600_000;
+  const avgViewers =
+    observedHours > 0 ? Math.round(hoursWatched / observedHours) : null;
+
+  const dataQuality =
+    snapshotCount === 0
+      ? "No data"
+      : coveragePercent >= MIN_GOOD_COVERAGE_PERCENT
+        ? "Good"
+        : coveragePercent >= 50
+          ? "Partial"
+          : "Low";
+
+  return {
+    hoursWatched,
+    observedHours,
+    avgViewers,
+    peakViewers,
+    snapshotCount,
+    expectedSnapshots: expected,
+    coveragePercent,
+    firstSnapshot: ordered[0]?.snapshotAt ?? null,
+    lastSnapshot: ordered[ordered.length - 1]?.snapshotAt ?? null,
+    dataQuality,
+  };
+}
+
 // ─── Games report ─────────────────────────────────────────────────────────────
 
 async function generateGamesReport(
@@ -61,55 +179,120 @@ async function generateGamesReport(
   reportName: string,
   args: GenerateArgs = {},
 ): Promise<string> {
-  const since = periodStart(config.timePeriod);
-  const metrics = config.allowedMetrics;
+  const generatedAt = new Date();
+  const since = periodStart(config.timePeriod, generatedAt);
+  const metrics = selectedMetricsFor(config, args.selectedMetrics);
   const byId = config.topCount === "byId";
   const entityIds = args.entityIds ?? [];
 
-  const games = byId
+  const rawGames = byId
     ? await prisma.game.findMany({
         where: { id: { in: entityIds } },
         include: {
           viewerSnapshots: {
-            where: { snapshotAt: { gte: since } },
+            where: { snapshotAt: { gte: since, lte: generatedAt } },
             orderBy: { snapshotAt: "asc" },
           },
           topChannels: { orderBy: { viewerHours: "desc" }, take: 5 },
         },
       })
     : await prisma.game.findMany({
-        take: typeof config.topCount === "number" ? config.topCount : 500,
-        orderBy: [{ hoursWatched7d: "desc" }, { avgViewers7d: "desc" }],
+        where: {
+          viewerSnapshots: {
+            some: { snapshotAt: { gte: since, lte: generatedAt } },
+          },
+        },
         include: {
           viewerSnapshots: {
-            where: { snapshotAt: { gte: since } },
+            where: { snapshotAt: { gte: since, lte: generatedAt } },
             orderBy: { snapshotAt: "asc" },
           },
           topChannels: { orderBy: { viewerHours: "desc" }, take: 5 },
         },
       });
 
-  // Preserve the user's picking order when byId.
+  const gamesWithMetrics = rawGames.map((game) => ({
+    game,
+    period: computeGamePeriodMetrics(game.viewerSnapshots, since, generatedAt),
+  }));
+
   if (byId) {
     const order = new Map(entityIds.map((id, i) => [id, i] as const));
-    games.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    gamesWithMetrics.sort(
+      (a, b) => (order.get(a.game.id) ?? 0) - (order.get(b.game.id) ?? 0),
+    );
+  } else {
+    gamesWithMetrics.sort((a, b) => {
+      if (b.period.hoursWatched !== a.period.hoursWatched) {
+        return b.period.hoursWatched - a.period.hoursWatched;
+      }
+      if ((b.period.avgViewers ?? 0) !== (a.period.avgViewers ?? 0)) {
+        return (b.period.avgViewers ?? 0) - (a.period.avgViewers ?? 0);
+      }
+      return (b.period.peakViewers ?? 0) - (a.period.peakViewers ?? 0);
+    });
   }
+
+  const games =
+    !byId && typeof config.topCount === "number"
+      ? gamesWithMetrics.slice(0, config.topCount)
+      : gamesWithMetrics;
 
   // ── Build column list ──────────────────────────────────────────────────────
   const cols: string[] = ["Rank", "Game"];
   if (metrics.includes("hoursWatched")) cols.push("Hours Watched (est.)");
   if (metrics.includes("avgViewers")) cols.push("Avg Viewers");
   if (metrics.includes("peakViewers")) cols.push("Peak Viewers");
-  if (metrics.includes("topCreators")) cols.push("Top Channels (by viewers)");
+  if (metrics.includes("topCreators"))
+    cols.push("Top Channels (latest snapshot)");
+  cols.push(
+    "Snapshot Count",
+    "Expected Snapshots",
+    "Coverage",
+    "First Snapshot",
+    "Last Snapshot",
+    "Data Quality",
+  );
 
   const lines: string[] = [];
 
   // ── Report header ──────────────────────────────────────────────────────────
   lines.push(row("Report", reportName));
   lines.push(row("Period", periodLabel(config.timePeriod)));
+  lines.push(row("Period Start", since.toISOString()));
+  lines.push(row("Period End", generatedAt.toISOString()));
   lines.push(row("Platforms", config.platforms.join(" + ")));
-  lines.push(row("Generated", new Date().toISOString().split("T")[0]));
-  lines.push(row("Source", "TwitchMetrics"));
+  lines.push(row("Generated", generatedAt.toISOString()));
+  lines.push(row("Source", "Twitch API via TwitchMetrics game snapshots"));
+  lines.push(row("Snapshot Cadence", "Every 30 minutes"));
+  lines.push(
+    row(
+      "Ranking Basis",
+      byId
+        ? "User-selected games, preserving selected order"
+        : "Estimated Twitch hours watched inside the selected period",
+    ),
+  );
+  lines.push(
+    row(
+      "Methodology",
+      "Hours watched and average viewers are computed from observed Twitch game viewer snapshots inside the period. Average viewers is time-weighted by observed snapshot intervals.",
+    ),
+  );
+  lines.push(
+    row(
+      "Data Quality",
+      `Good means at least ${MIN_GOOD_COVERAGE_PERCENT}% snapshot coverage for the period. Lower coverage is still exported but flagged per row.`,
+    ),
+  );
+  if (metrics.includes("topCreators")) {
+    lines.push(
+      row(
+        "Top Channels Note",
+        "Top Channels reflects the latest stored live-channel snapshot for each game, not a full-period channel ranking.",
+      ),
+    );
+  }
   lines.push("");
 
   // ── Column headers ─────────────────────────────────────────────────────────
@@ -117,46 +300,25 @@ async function generateGamesReport(
 
   // ── Data rows ──────────────────────────────────────────────────────────────
   let totalHours = 0;
-  let totalAvgViewers = 0;
+  let totalObservedHours = 0;
   let maxPeak = 0;
+  let lowCoverageRows = 0;
 
-  games.forEach((game, i) => {
-    const snaps = game.viewerSnapshots;
-    let hoursWatched: number;
-    let avgViewers: number;
-    let peakViewers: number;
-
-    if (snaps.length >= 2) {
-      // Estimate hours watched from snapshots: sum of viewers × time delta
-      let hours = 0;
-      for (let j = 1; j < snaps.length; j++) {
-        const deltaHours =
-          (snaps[j]!.snapshotAt.getTime() -
-            snaps[j - 1]!.snapshotAt.getTime()) /
-          3_600_000;
-        const viewers = snaps[j]!.twitchViewers + snaps[j - 1]!.twitchViewers;
-        hours += (viewers / 2) * deltaHours;
-      }
-      hoursWatched = hours;
-      avgViewers =
-        snaps.reduce((s, sn) => s + sn.twitchViewers, 0) / snaps.length;
-      peakViewers = Math.max(...snaps.map((sn) => sn.twitchViewers));
-    } else {
-      // Fall back to stored aggregates, scaled to period
-      const periodDays = (Date.now() - since.getTime()) / 86400_000;
-      hoursWatched = Number(game.hoursWatched7d) * (periodDays / 7);
-      avgViewers = game.avgViewers7d;
-      peakViewers = game.peakViewers24h;
+  games.forEach(({ game, period }, i) => {
+    totalHours += period.hoursWatched;
+    totalObservedHours += period.observedHours;
+    if (period.peakViewers !== null && period.peakViewers > maxPeak) {
+      maxPeak = period.peakViewers;
     }
-
-    totalHours += hoursWatched;
-    totalAvgViewers += avgViewers;
-    if (peakViewers > maxPeak) maxPeak = peakViewers;
+    if (period.coveragePercent < MIN_GOOD_COVERAGE_PERCENT) lowCoverageRows++;
 
     const cells: unknown[] = [i + 1, game.name];
-    if (metrics.includes("hoursWatched")) cells.push(fmtHours(hoursWatched));
-    if (metrics.includes("avgViewers")) cells.push(fmt(Math.round(avgViewers)));
-    if (metrics.includes("peakViewers")) cells.push(fmt(peakViewers));
+    if (metrics.includes("hoursWatched"))
+      cells.push(fmtHours(period.hoursWatched));
+    if (metrics.includes("avgViewers"))
+      cells.push(period.avgViewers !== null ? fmt(period.avgViewers) : "N/A");
+    if (metrics.includes("peakViewers"))
+      cells.push(period.peakViewers !== null ? fmt(period.peakViewers) : "N/A");
     if (metrics.includes("topCreators")) {
       const topCh = game.topChannels
         .slice(0, 3)
@@ -164,6 +326,14 @@ async function generateGamesReport(
         .join(" | ");
       cells.push(topCh);
     }
+    cells.push(
+      period.snapshotCount,
+      period.expectedSnapshots,
+      fmtPercent(period.coveragePercent),
+      fmtDateTime(period.firstSnapshot),
+      fmtDateTime(period.lastSnapshot),
+      period.dataQuality,
+    );
 
     lines.push(cells.map(esc).join(","));
   });
@@ -172,19 +342,33 @@ async function generateGamesReport(
   lines.push("");
   const sumCells: unknown[] = ["", "TOTALS / AVERAGES"];
   if (metrics.includes("hoursWatched")) sumCells.push(fmtHours(totalHours));
-  if (metrics.includes("avgViewers"))
-    sumCells.push(fmt(Math.round(totalAvgViewers / Math.max(games.length, 1))));
+  if (metrics.includes("avgViewers")) {
+    sumCells.push(
+      totalObservedHours > 0
+        ? fmt(Math.round(totalHours / totalObservedHours))
+        : "N/A",
+    );
+  }
   if (metrics.includes("peakViewers")) sumCells.push(fmt(maxPeak));
   if (metrics.includes("topCreators")) sumCells.push("");
+  sumCells.push("", "", "", "", "", "");
   lines.push(sumCells.map(esc).join(","));
 
   lines.push("");
   lines.push(
     row(
       "",
-      `Data covers ${games.length} games over ${periodLabel(config.timePeriod)}`,
+      `Data covers ${games.length} games over ${periodLabel(config.timePeriod)}.`,
     ),
   );
+  if (lowCoverageRows > 0) {
+    lines.push(
+      row(
+        "",
+        `${lowCoverageRows} row(s) are below ${MIN_GOOD_COVERAGE_PERCENT}% snapshot coverage and are flagged in the Data Quality column.`,
+      ),
+    );
+  }
   lines.push(row("", "© TwitchMetrics — twitchmetrics.vercel.app"));
 
   return lines.join("\n");
@@ -242,7 +426,7 @@ async function generateChannelsReport(
   reportName: string,
   args: GenerateArgs = {},
 ): Promise<string> {
-  const since = periodStart(config.timePeriod);
+  const since = periodStart(config.timePeriod, new Date());
   const metrics = config.allowedMetrics;
   const byId = config.topCount === "byId";
   const entityIds = args.entityIds ?? [];
