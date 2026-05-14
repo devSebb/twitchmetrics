@@ -21,6 +21,8 @@
     "worker:search-reindex": "tsx --env-file=apps/web/.env.local workers/search-reindex.ts",
     "worker:discover-social-links": "tsx --env-file=apps/web/.env.local workers/discover-social-links.ts",
     "worker:snapshot-youtube": "tsx --env-file=apps/web/.env.local workers/snapshot-youtube.ts",
+    "worker:streamhatchet": "tsx --env-file=apps/web/.env.local workers/streamhatchet-ingest.ts",
+    "worker:streamhatchet-link": "tsx --env-file=apps/web/.env.local workers/streamhatchet-link-identities.ts",
     "worker:cleanup-invalid-accounts": "tsx --env-file=apps/web/.env.local workers/cleanup-invalid-platform-accounts.ts",
     "worker:purge-low-quality": "tsx --env-file=apps/web/.env.local workers/purge-low-quality-creators.ts",
     "prepare": "husky"

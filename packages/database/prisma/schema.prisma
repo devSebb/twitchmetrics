@@ -192,6 +192,7 @@ model CreatorProfile {
   brandPartnerships BrandPartnership[]
   growthRollups     CreatorGrowthRollup[]
   clips             CreatorClip[]
+  streamSessions    StreamSessionFact[]
 
   @@index([state])
   @@index([snapshotTier])
@@ -509,6 +510,192 @@ model GameViewerSnapshot {
 
   @@index([gameId, snapshotAt])
   @@index([snapshotAt])
+}
+
+// ============================================================
+// EXTERNAL SESSION DATA
+// ============================================================
+
+model StreamHatchetSourceObject {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  bucket       String
+  key          String
+  etag         String?
+  size         BigInt?
+  lastModified DateTime?
+
+  dataset       String    @default("daily_sessions_summary")
+  platform      String?
+  partitionDate DateTime? @db.Date
+
+  status       String  @default("discovered")
+  rowCount     Int?
+  importedRows Int     @default(0)
+  skippedRows  Int     @default(0)
+  failedRows   Int     @default(0)
+  errorSummary String?
+  metadata     Json?
+
+  lastImportedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  streamSessions StreamSessionFact[]
+
+  @@unique([bucket, key])
+  @@index([platform, partitionDate])
+  @@index([status, updatedAt])
+}
+
+model StreamSessionFact {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  source         String                    @default("streamhatchet")
+  sourceObjectId String                    @db.Uuid
+  sourceObject   StreamHatchetSourceObject @relation(fields: [sourceObjectId], references: [id], onDelete: Cascade)
+
+  creatorProfileId String?         @db.Uuid
+  creatorProfile   CreatorProfile? @relation(fields: [creatorProfileId], references: [id], onDelete: SetNull)
+
+  platform            String
+  platformUserId      String
+  platformVideoId     String?
+  platformUsername    String
+  platformDisplayName String?
+  platformLogoUrl     String?
+  country             String?
+
+  partitionDate DateTime @db.Date
+
+  streamBeginsAt DateTime
+  streamEndsAt   DateTime
+  peakViewersAt  DateTime?
+  sessionTitle   String?   @db.Text
+
+  primaryGameName String?
+  allGameNames    String[] @default([])
+
+  airtimeMinutes       Int
+  minutesWatched       BigInt
+  sessionViews         BigInt?
+  averageViewers       Float
+  averageViewersGlobal Float?
+  peakViewers          Int
+
+  share              Float?
+  shareCrossPlatform Float?
+  bestRank           Int?
+  averageRank        Float?
+  worstRank          Int?
+  aggregation        String @default("basic")
+
+  rawData      Json?
+  contentLabel Json?
+  rowHash      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, platform, platformUserId, streamBeginsAt, streamEndsAt])
+  @@index([sourceObjectId])
+  @@index([creatorProfileId, platform, partitionDate])
+  @@index([platform, partitionDate])
+  @@index([platform, primaryGameName, partitionDate])
+  @@index([platformUserId, platform, partitionDate])
+  @@index([rowHash])
+}
+
+model ChannelDailyRollup {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  source           String   @default("streamhatchet")
+  platform         String
+  date             DateTime @db.Date
+  creatorProfileId String?  @db.Uuid
+
+  platformUserId      String
+  platformUsername    String
+  platformDisplayName String?
+  platformLogoUrl     String?
+  country             String?
+
+  sessionCount   Int     @default(0)
+  airtimeMinutes Int     @default(0)
+  minutesWatched BigInt  @default(0)
+  sessionViews   BigInt?
+
+  averageViewers       Float?
+  averageViewersGlobal Float?
+  peakViewers          Int?
+  peakViewersAt        DateTime?
+
+  primaryGameName String?
+  gameNames       String[]  @default([])
+  bestRank        Int?
+  averageRank     Float?
+  worstRank       Int?
+  lastStreamAt    DateTime?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([source, platform, date, platformUserId])
+  @@index([creatorProfileId, platform, date])
+  @@index([platform, date, minutesWatched(sort: Desc)])
+  @@index([platform, date, peakViewers(sort: Desc)])
+}
+
+model GameDailyRollup {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  source   String   @default("streamhatchet")
+  platform String
+  date     DateTime @db.Date
+  gameName String
+
+  sessionCount   Int    @default(0)
+  channelCount   Int    @default(0)
+  airtimeMinutes Int    @default(0)
+  minutesWatched BigInt @default(0)
+
+  averageViewers Float?
+  peakViewers    Int?
+
+  topChannelUserId      String?
+  topChannelUsername    String?
+  topChannelDisplayName String?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([source, platform, date, gameName])
+  @@index([platform, date, minutesWatched(sort: Desc)])
+  @@index([platform, gameName, date])
+}
+
+model ChannelGameDailyRollup {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  source           String   @default("streamhatchet")
+  platform         String
+  date             DateTime @db.Date
+  creatorProfileId String?  @db.Uuid
+
+  platformUserId      String
+  platformUsername    String
+  platformDisplayName String?
+  gameName            String
+
+  sessionCount   Int    @default(0)
+  airtimeMinutes Int    @default(0)
+  minutesWatched BigInt @default(0)
+  averageViewers Float?
+  peakViewers    Int?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([source, platform, date, platformUserId, gameName])
+  @@index([creatorProfileId, platform, date])
+  @@index([platform, date, gameName, minutesWatched(sort: Desc)])
 }
 
 // ============================================================

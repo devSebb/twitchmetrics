@@ -79,7 +79,14 @@ async function getCreators({
   const take = 20;
   const skip = (page - 1) * take;
   const whereClause = platform
-    ? Prisma.sql`WHERE cp."primaryPlatform" = ${platform}::"Platform"`
+    ? Prisma.sql`
+        WHERE EXISTS (
+          SELECT 1
+          FROM "PlatformAccount" pa
+          WHERE pa."creatorProfileId" = cp.id
+            AND pa.platform = ${platform}::"Platform"
+        )
+      `
     : Prisma.sql``;
   const orderClause =
     sort === "trending"
@@ -109,8 +116,6 @@ async function getCreators({
   `);
 
   const ids = idRows.map((row) => row.id);
-  const countWhere = platform ? { primaryPlatform: platform } : undefined;
-
   const [creators, countResult]: [CreatorRecord[], number] = await Promise.all([
     ids.length
       ? db.creatorProfile.findMany({
@@ -123,8 +128,10 @@ async function getCreators({
           },
         })
       : Promise.resolve([] as CreatorRecord[]),
-    countWhere
-      ? db.creatorProfile.count({ where: countWhere })
+    platform
+      ? db.creatorProfile.count({
+          where: { platformAccounts: { some: { platform } } },
+        })
       : db.creatorProfile.count(),
   ]);
 

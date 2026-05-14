@@ -5,6 +5,115 @@ import { publicProcedure, router } from "../root";
 import { adminProcedure } from "../middleware";
 import { getTierForCreator } from "@/lib/constants/tiers";
 
+type StreamHatchetAccount = {
+  platform: Platform;
+  platformUserId: string;
+  platformUsername: string;
+};
+
+type StreamHatchetPlatform = "kick";
+
+type StreamSession = {
+  startedAt: string;
+  endedAt: string;
+  platform: Platform;
+  source: "twitch_api" | "streamhatchet";
+  game: string | null;
+  durationMinutes: number;
+  avgViewers: number;
+  peakViewers: number;
+  title: string | null;
+  viewCount: number;
+  thumbnailUrl: string | null;
+  url: string | null;
+  language: string | null;
+};
+
+const STREAMHATCHET_SUPPORTED_PLATFORMS: Platform[] = ["kick"];
+
+function streamHatchetPlatform(
+  platform: Platform,
+): StreamHatchetPlatform | null {
+  return platform === "kick" ? "kick" : null;
+}
+
+async function getStreamHatchetAccounts(
+  prisma: {
+    platformAccount: {
+      findMany: (args: {
+        where: {
+          creatorProfileId: string;
+          platform: { in: Platform[] };
+        };
+        select: {
+          platform: true;
+          platformUserId: true;
+          platformUsername: true;
+        };
+      }) => Promise<StreamHatchetAccount[]>;
+    };
+  },
+  creatorProfileId: string,
+): Promise<StreamHatchetAccount[]> {
+  return prisma.platformAccount.findMany({
+    where: {
+      creatorProfileId,
+      platform: { in: STREAMHATCHET_SUPPORTED_PLATFORMS },
+    },
+    select: {
+      platform: true,
+      platformUserId: true,
+      platformUsername: true,
+    },
+  });
+}
+
+function streamHatchetIdentityWhere(
+  accounts: StreamHatchetAccount[],
+): Prisma.StreamSessionFactWhereInput[] {
+  return accounts.flatMap((account) => {
+    const platform = streamHatchetPlatform(account.platform);
+    if (!platform) return [];
+
+    const identity: Prisma.StreamSessionFactWhereInput[] = [
+      { platformUserId: account.platformUserId },
+    ];
+    if (account.platformUsername) {
+      identity.push({
+        platformUsername: {
+          equals: account.platformUsername,
+          mode: "insensitive",
+        },
+      });
+    }
+
+    return [{ platform, OR: identity }];
+  });
+}
+
+function streamHatchetRollupIdentityWhere(
+  accounts: StreamHatchetAccount[],
+): Prisma.ChannelDailyRollupWhereInput[] {
+  return accounts.flatMap((account) => {
+    const platform = streamHatchetPlatform(account.platform);
+    if (!platform) return [];
+
+    const identity: Prisma.ChannelDailyRollupWhereInput[] = [
+      { platformUserId: account.platformUserId },
+    ];
+    if (account.platformUsername) {
+      identity.push({
+        platformUsername: {
+          equals: account.platformUsername,
+          mode: "insensitive",
+        },
+      });
+    }
+
+    return [{ platform, OR: identity }];
+  });
+}
+
 export const snapshotRouter = router({
   getGrowthData: publicProcedure
     .input(
@@ -147,6 +256,51 @@ export const snapshotRouter = router({
         }
       }
 
+      const streamHatchetAccounts = await getStreamHatchetAccounts(
+        ctx.prisma,
+        input.creatorProfileId,
+      );
+      const streamHatchetWhere = streamHatchetIdentityWhere(
+        streamHatchetAccounts,
+      );
+      const streamHatchetSessions =
+        streamHatchetWhere.length > 0
+          ? await ctx.prisma.streamSessionFact.findMany({
+              where: { OR: streamHatchetWhere },
+              select: {
+                platform: true,
+                primaryGameName: true,
+                airtimeMinutes: true,
+                minutesWatched: true,
+              },
+              orderBy: { streamBeginsAt: "desc" },
+              take: 500,
+            })
+          : [];
+
+      for (const session of streamHatchetSessions) {
+        if (!session.primaryGameName) continue;
+        const key = `streamhatchet:${session.platform}:${session.primaryGameName}`;
+        const viewers =
+          session.airtimeMinutes > 0
+            ? Number(session.minutesWatched) / session.airtimeMinutes
+            : 0;
+        const existing = gameMap.get(key);
+        if (existing) {
+          existing.count += 1;
+          existing.liveCount += 1;
+          existing.totalViewers += viewers;
+        } else {
+          gameMap.set(key, {
+            count: 1,
+            liveCount: 1,
+            totalViewers: viewers,
+            name: session.primaryGameName,
+            twitchGameId: null,
+          });
+        }
+      }
+
       // Sort by count and limit
       const sorted = [...gameMap.entries()]
         .sort((a, b) => b[1].count - a[1].count)
@@ -211,7 +365,7 @@ export const snapshotRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      // Real stream history comes from Twitch's Videos API (VOD archive),
+      // Real Twitch stream history comes from Twitch's Videos API (VOD archive),
       // not from snapshot stitching — snapshot cadence is too sparse for
       // reliable session reconstruction.
       const twitchAccount = await ctx.prisma.platformAccount.findFirst({
@@ -222,60 +376,47 @@ export const snapshotRouter = router({
         select: { platformUserId: true },
       });
 
-      type StreamSession = {
-        startedAt: string;
-        endedAt: string;
-        game: string | null;
-        durationMinutes: number;
-        avgViewers: number;
-        peakViewers: number;
-        title: string | null;
-        viewCount: number;
-        thumbnailUrl: string | null;
-        url: string | null;
-        language: string | null;
-      };
-
-      if (!twitchAccount) {
-        return { sessions: [], total: 0, page: input.page };
-      }
-
       let videos: Awaited<
         ReturnType<typeof import("@/server/adapters/twitch").fetchVideos>
       > = [];
-      try {
-        const { fetchVideos } = await import("@/server/adapters/twitch");
-        videos = await fetchVideos(twitchAccount.platformUserId, {
-          limit: 200,
-        });
-      } catch {
-        return { sessions: [], total: 0, page: input.page };
-      }
-
-      if (videos.length === 0) {
-        return { sessions: [], total: 0, page: input.page };
+      if (twitchAccount) {
+        try {
+          const { fetchVideos } = await import("@/server/adapters/twitch");
+          videos = await fetchVideos(twitchAccount.platformUserId, {
+            limit: 200,
+          });
+        } catch {
+          videos = [];
+        }
       }
 
       // Best-effort game / viewer enrichment: look up creator's snapshots
       // that fall inside each VOD's [createdAt, createdAt + duration] window
       // and pull CURRENT_GAME / PEAK_VIEWERS / AVG_VIEWERS.
-      const earliestStart = videos.reduce(
-        (min, v) => (new Date(v.createdAt) < min ? new Date(v.createdAt) : min),
-        new Date(videos[0]!.createdAt),
-      );
-      const snapshots = await ctx.prisma.metricSnapshot.findMany({
-        where: {
-          creatorProfileId: input.creatorProfileId,
-          platform: "twitch",
-          snapshotAt: { gte: earliestStart },
-          extendedMetrics: { not: Prisma.DbNull },
-        },
-        select: {
-          snapshotAt: true,
-          extendedMetrics: true,
-        },
-        orderBy: { snapshotAt: "asc" },
-      });
+      const earliestStart =
+        videos.length > 0
+          ? videos.reduce(
+              (min, v) =>
+                new Date(v.createdAt) < min ? new Date(v.createdAt) : min,
+              new Date(videos[0]!.createdAt),
+            )
+          : null;
+      const snapshots =
+        earliestStart !== null
+          ? await ctx.prisma.metricSnapshot.findMany({
+              where: {
+                creatorProfileId: input.creatorProfileId,
+                platform: "twitch",
+                snapshotAt: { gte: earliestStart },
+                extendedMetrics: { not: Prisma.DbNull },
+              },
+              select: {
+                snapshotAt: true,
+                extendedMetrics: true,
+              },
+              orderBy: { snapshotAt: "asc" },
+            })
+          : [];
 
       const sessions: StreamSession[] = videos.map((video) => {
         const start = new Date(video.createdAt);
@@ -315,6 +456,8 @@ export const snapshotRouter = router({
         return {
           startedAt: start.toISOString(),
           endedAt: end.toISOString(),
+          platform: "twitch",
+          source: "twitch_api",
           game,
           durationMinutes: Math.round(video.durationSeconds / 60),
           avgViewers,
@@ -326,6 +469,54 @@ export const snapshotRouter = router({
           language: video.language,
         };
       });
+
+      const streamHatchetAccounts = await getStreamHatchetAccounts(
+        ctx.prisma,
+        input.creatorProfileId,
+      );
+      const streamHatchetWhere = streamHatchetIdentityWhere(
+        streamHatchetAccounts,
+      );
+
+      if (streamHatchetWhere.length > 0) {
+        const streamHatchetSessions =
+          await ctx.prisma.streamSessionFact.findMany({
+            where: { OR: streamHatchetWhere },
+            select: {
+              streamBeginsAt: true,
+              streamEndsAt: true,
+              platform: true,
+              primaryGameName: true,
+              airtimeMinutes: true,
+              averageViewers: true,
+              peakViewers: true,
+              sessionTitle: true,
+              sessionViews: true,
+            },
+            orderBy: { streamBeginsAt: "desc" },
+            take: 200,
+          });
+
+        sessions.push(
+          ...streamHatchetSessions.map(
+            (session): StreamSession => ({
+              startedAt: session.streamBeginsAt.toISOString(),
+              endedAt: session.streamEndsAt.toISOString(),
+              platform: session.platform as Platform,
+              source: "streamhatchet",
+              game: session.primaryGameName,
+              durationMinutes: session.airtimeMinutes,
+              avgViewers: Math.round(session.averageViewers),
+              peakViewers: session.peakViewers,
+              title: session.sessionTitle,
+              viewCount: Number(session.sessionViews ?? 0n),
+              thumbnailUrl: null,
+              url: null,
+              language: null,
+            }),
+          ),
+        );
+      }
 
       // Sort
       const sorted = [...sessions].sort((a, b) => {
@@ -511,13 +702,6 @@ export const snapshotRouter = router({
         }
       }
 
-      const avgViewers =
-        viewerValues.length > 0
-          ? Math.round(
-              viewerValues.reduce((a, b) => a + b, 0) / viewerValues.length,
-            )
-          : null;
-
       // Followers gain: per-platform first/last followerCount diff
       const platformFirstLast = new Map<
         Platform,
@@ -585,6 +769,81 @@ export const snapshotRouter = router({
         ...platformsWithViewerData,
         ...platformsWithFollowerData,
       ]);
+
+      const streamHatchetAccounts = await getStreamHatchetAccounts(
+        ctx.prisma,
+        input.creatorProfileId,
+      );
+      const streamHatchetWhere = streamHatchetRollupIdentityWhere(
+        streamHatchetAccounts,
+      );
+
+      if (streamHatchetWhere.length > 0) {
+        const rollups = await ctx.prisma.channelDailyRollup.findMany({
+          where: {
+            date: { gte: since },
+            OR: streamHatchetWhere,
+          },
+          select: {
+            platform: true,
+            sessionCount: true,
+            airtimeMinutes: true,
+            minutesWatched: true,
+            peakViewers: true,
+          },
+        });
+
+        if (rollups.length > 0) {
+          const streamHatchetAirtimeSeconds =
+            rollups.reduce((sum, row) => sum + row.airtimeMinutes, 0) * 60;
+          const streamHatchetMinutesWatched = rollups.reduce(
+            (sum, row) => sum + Number(row.minutesWatched),
+            0,
+          );
+          const streamHatchetStreamCount = rollups.reduce(
+            (sum, row) => sum + row.sessionCount,
+            0,
+          );
+          const streamHatchetPeak = rollups.reduce<number | null>(
+            (peak, row) =>
+              row.peakViewers === null
+                ? peak
+                : peak === null
+                  ? row.peakViewers
+                  : Math.max(peak, row.peakViewers),
+            null,
+          );
+
+          airTimeSeconds = (airTimeSeconds ?? 0) + streamHatchetAirtimeSeconds;
+          streamCount += streamHatchetStreamCount;
+          avgAirTimeSeconds =
+            streamCount > 0 ? Math.round(airTimeSeconds / streamCount) : null;
+
+          if (streamHatchetPeak !== null) {
+            peakViewers =
+              peakViewers === null
+                ? streamHatchetPeak
+                : Math.max(peakViewers, streamHatchetPeak);
+          }
+
+          if (streamHatchetAirtimeSeconds > 0) {
+            viewerValues.push(
+              streamHatchetMinutesWatched / (streamHatchetAirtimeSeconds / 60),
+            );
+          }
+
+          for (const row of rollups) {
+            if (row.platform === "kick") allPlatforms.add("kick");
+          }
+        }
+      }
+
+      const avgViewers =
+        viewerValues.length > 0
+          ? Math.round(
+              viewerValues.reduce((a, b) => a + b, 0) / viewerValues.length,
+            )
+          : null;
 
       return {
         airTimeSeconds,

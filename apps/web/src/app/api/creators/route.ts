@@ -32,7 +32,14 @@ function buildWhereClause(platform: Platform | null, query: string | null) {
   const conditions: Prisma.Sql[] = [];
 
   if (platform) {
-    conditions.push(Prisma.sql`cp."primaryPlatform" = ${platform}::"Platform"`);
+    conditions.push(Prisma.sql`
+      EXISTS (
+        SELECT 1
+        FROM "PlatformAccount" pa
+        WHERE pa."creatorProfileId" = cp.id
+          AND pa.platform = ${platform}::"Platform"
+      )
+    `);
   }
 
   if (query) {
@@ -87,7 +94,7 @@ export async function GET(request: Request) {
 
   // Cache by normalized query params (view splits list/grid into separate keys
   // since list responses carry extra streaming-stat fields).
-  const cacheKey = `creators:list:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
+  const cacheKey = `creators:list:v2:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);

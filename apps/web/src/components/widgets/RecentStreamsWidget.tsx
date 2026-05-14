@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { trpc } from "@/lib/trpc";
 import { formatDate, formatDuration, formatNumber } from "@/lib/utils/format";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
@@ -13,13 +14,18 @@ type Props = {
   profile: SerializedProfile;
 };
 
-const COLUMNS: { key: SortBy; label: string }[] = [
+const COLUMNS = [
   { key: "date", label: "Date" },
+  { key: "platform", label: "Platform", sortable: false },
   { key: "game", label: "Game / Category" },
   { key: "duration", label: "Duration" },
   { key: "avgViewers", label: "Avg Viewers" },
   { key: "peakViewers", label: "Peak Viewers" },
-];
+].map((column) => ({ sortable: true, ...column })) as {
+  key: SortBy | "platform";
+  label: string;
+  sortable: boolean;
+}[];
 
 function SortArrow({ active, order }: { active: boolean; order: SortOrder }) {
   if (!active) return null;
@@ -42,7 +48,8 @@ export function RecentStreamsWidget({ profile }: Props) {
   });
 
   const handleSort = useCallback(
-    (col: SortBy) => {
+    (col: SortBy | "platform") => {
+      if (col === "platform") return;
       if (col === sortBy) {
         setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
       } else {
@@ -79,11 +86,15 @@ export function RecentStreamsWidget({ profile }: Props) {
               {COLUMNS.map((col) => (
                 <th
                   key={col.key}
-                  className="cursor-pointer px-3 py-2 text-xs font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+                  className={`px-3 py-2 text-xs font-medium text-[#949BA4] transition-colors ${
+                    col.sortable ? "cursor-pointer hover:text-[#DBDEE1]" : ""
+                  }`}
                   onClick={() => handleSort(col.key)}
                 >
                   {col.label}
-                  <SortArrow active={sortBy === col.key} order={sortOrder} />
+                  {col.sortable && (
+                    <SortArrow active={sortBy === col.key} order={sortOrder} />
+                  )}
                 </th>
               ))}
             </tr>
@@ -96,6 +107,18 @@ export function RecentStreamsWidget({ profile }: Props) {
               >
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
                   {formatDate(session.startedAt)}
+                </td>
+                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          PLATFORM_CONFIG[session.platform].color,
+                      }}
+                    />
+                    {PLATFORM_CONFIG[session.platform].name}
+                  </span>
                 </td>
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
                   {session.game ?? (
