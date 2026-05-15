@@ -64,6 +64,8 @@ afreeca in older partitions
 - No new `CreatorProfile` rows are created by default.
 - No fuzzy cross-platform matching is performed by default.
 - Directory platform filters mean "creator has this platform account", not "this is the creator's primary platform".
+- Use `--matched-only` for Twitch and YouTube backfills. This scans the S3 object but writes only sessions that resolve to an existing `PlatformAccount`.
+- Matched-only imports intentionally do not write `GameDailyRollup`, because that table represents platform-wide game totals and a matched-only import would be partial. They still write creator/channel rollups.
 
 ## Deferred Admin Dashboard Work
 
@@ -104,6 +106,24 @@ Backfill recent KICK days:
 
 ```bash
 pnpm worker:streamhatchet -- --platform kick --days 30 --write
+```
+
+Targeted Twitch dry-run for existing creators:
+
+```bash
+pnpm worker:streamhatchet -- --platform twitch --date 2026-05-13 --matched-only
+```
+
+Targeted Twitch import for existing creators:
+
+```bash
+pnpm worker:streamhatchet -- --platform twitch --date 2026-05-13 --matched-only --write
+```
+
+Targeted YouTube import for existing linked YouTube accounts:
+
+```bash
+pnpm worker:streamhatchet -- --platform yt --date 2026-05-13 --matched-only --write
 ```
 
 Reprocess a known object:

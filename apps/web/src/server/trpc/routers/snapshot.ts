@@ -11,7 +11,7 @@ type StreamHatchetAccount = {
   platformUsername: string;
 };
 
-type StreamHatchetPlatform = "kick";
+type StreamHatchetPlatform = "kick" | "twitch" | "yt" | "ytg";
 
 type StreamSession = {
   startedAt: string;
@@ -29,12 +29,37 @@ type StreamSession = {
   language: string | null;
 };
 
-const STREAMHATCHET_SUPPORTED_PLATFORMS: Platform[] = ["kick"];
+const STREAMHATCHET_SUPPORTED_PLATFORMS: Platform[] = [
+  "kick",
+  "twitch",
+  "youtube",
+];
 
-function streamHatchetPlatform(
-  platform: Platform,
-): StreamHatchetPlatform | null {
-  return platform === "kick" ? "kick" : null;
+function streamHatchetPlatforms(platform: Platform): StreamHatchetPlatform[] {
+  switch (platform) {
+    case "kick":
+      return ["kick"];
+    case "twitch":
+      return ["twitch"];
+    case "youtube":
+      return ["yt", "ytg"];
+    default:
+      return [];
+  }
+}
+
+function internalPlatformForStreamHatchet(platform: string): Platform | null {
+  switch (platform) {
+    case "kick":
+      return "kick";
+    case "twitch":
+      return "twitch";
+    case "yt":
+    case "ytg":
+      return "youtube";
+    default:
+      return null;
+  }
 }
 
 async function getStreamHatchetAccounts(
@@ -72,13 +97,13 @@ function streamHatchetIdentityWhere(
   accounts: StreamHatchetAccount[],
 ): Prisma.StreamSessionFactWhereInput[] {
   return accounts.flatMap((account) => {
-    const platform = streamHatchetPlatform(account.platform);
-    if (!platform) return [];
+    const platforms = streamHatchetPlatforms(account.platform);
+    if (platforms.length === 0) return [];
 
     const identity: Prisma.StreamSessionFactWhereInput[] = [
       { platformUserId: account.platformUserId },
     ];
-    if (account.platformUsername) {
+    if (account.platform === "kick" && account.platformUsername) {
       identity.push({
         platformUsername: {
           equals: account.platformUsername,
@@ -87,7 +112,7 @@ function streamHatchetIdentityWhere(
       });
     }
 
-    return [{ platform, OR: identity }];
+    return platforms.map((platform) => ({ platform, OR: identity }));
   });
 }
 
@@ -95,13 +120,13 @@ function streamHatchetRollupIdentityWhere(
   accounts: StreamHatchetAccount[],
 ): Prisma.ChannelDailyRollupWhereInput[] {
   return accounts.flatMap((account) => {
-    const platform = streamHatchetPlatform(account.platform);
-    if (!platform) return [];
+    const platforms = streamHatchetPlatforms(account.platform);
+    if (platforms.length === 0) return [];
 
     const identity: Prisma.ChannelDailyRollupWhereInput[] = [
       { platformUserId: account.platformUserId },
     ];
-    if (account.platformUsername) {
+    if (account.platform === "kick" && account.platformUsername) {
       identity.push({
         platformUsername: {
           equals: account.platformUsername,
@@ -110,8 +135,36 @@ function streamHatchetRollupIdentityWhere(
       });
     }
 
-    return [{ platform, OR: identity }];
+    return platforms.map((platform) => ({ platform, OR: identity }));
   });
+}
+
+function sessionsOverlap(left: StreamSession, right: StreamSession): boolean {
+  if (left.platform !== right.platform) return false;
+  const leftStart = new Date(left.startedAt).getTime();
+  const leftEnd = new Date(left.endedAt).getTime();
+  const rightStart = new Date(right.startedAt).getTime();
+  const rightEnd = new Date(right.endedAt).getTime();
+  const overlap = Math.min(leftEnd, rightEnd) - Math.max(leftStart, rightStart);
+  if (overlap <= 0) return Math.abs(leftStart - rightStart) <= 30 * 60 * 1000;
+  const shorter = Math.min(leftEnd - leftStart, rightEnd - rightStart);
+  return shorter > 0 && overlap / shorter >= 0.5;
+}
+
+function dedupeStreamSessions(sessions: StreamSession[]): StreamSession[] {
+  const preferred = [...sessions].sort((left, right) => {
+    if (left.source !== right.source) {
+      return left.source === "streamhatchet" ? -1 : 1;
+    }
+    return right.startedAt.localeCompare(left.startedAt);
+  });
+
+  const kept: StreamSession[] = [];
+  for (const session of preferred) {
+    if (kept.some((existing) => sessionsOverlap(existing, session))) continue;
+    kept.push(session);
+  }
+  return kept;
 }
 
 export const snapshotRouter = router({
@@ -202,7 +255,7 @@ export const snapshotRouter = router({
           creatorProfileId: input.creatorProfileId,
           extendedMetrics: { not: Prisma.DbNull },
         },
-        select: { extendedMetrics: true },
+        select: { platform: true, extendedMetrics: true },
         orderBy: { snapshotAt: "desc" },
         take: 500,
       });
@@ -221,7 +274,35 @@ export const snapshotRouter = router({
         }
       >();
 
+      const streamHatchetAccounts = await getStreamHatchetAccounts(
+        ctx.prisma,
+        input.creatorProfileId,
+      );
+      const streamHatchetWhere = streamHatchetIdentityWhere(
+        streamHatchetAccounts,
+      );
+      const streamHatchetSessions =
+        streamHatchetWhere.length > 0
+          ? await ctx.prisma.streamSessionFact.findMany({
+              where: { OR: streamHatchetWhere },
+              select: {
+                platform: true,
+                primaryGameName: true,
+                airtimeMinutes: true,
+                minutesWatched: true,
+              },
+              orderBy: { streamBeginsAt: "desc" },
+              take: 500,
+            })
+          : [];
+      const streamHatchetGamePlatforms = new Set(
+        streamHatchetSessions
+          .map((session) => internalPlatformForStreamHatchet(session.platform))
+          .filter((platform): platform is Platform => platform !== null),
+      );
+
       for (const snap of snapshots) {
+        if (streamHatchetGamePlatforms.has(snap.platform)) continue;
         const ext = snap.extendedMetrics as Record<string, unknown> | null;
         if (!ext) continue;
         const gameName =
@@ -255,28 +336,6 @@ export const snapshotRouter = router({
           });
         }
       }
-
-      const streamHatchetAccounts = await getStreamHatchetAccounts(
-        ctx.prisma,
-        input.creatorProfileId,
-      );
-      const streamHatchetWhere = streamHatchetIdentityWhere(
-        streamHatchetAccounts,
-      );
-      const streamHatchetSessions =
-        streamHatchetWhere.length > 0
-          ? await ctx.prisma.streamSessionFact.findMany({
-              where: { OR: streamHatchetWhere },
-              select: {
-                platform: true,
-                primaryGameName: true,
-                airtimeMinutes: true,
-                minutesWatched: true,
-              },
-              orderBy: { streamBeginsAt: "desc" },
-              take: 500,
-            })
-          : [];
 
       for (const session of streamHatchetSessions) {
         if (!session.primaryGameName) continue;
@@ -498,28 +557,32 @@ export const snapshotRouter = router({
           });
 
         sessions.push(
-          ...streamHatchetSessions.map(
-            (session): StreamSession => ({
-              startedAt: session.streamBeginsAt.toISOString(),
-              endedAt: session.streamEndsAt.toISOString(),
-              platform: session.platform as Platform,
-              source: "streamhatchet",
-              game: session.primaryGameName,
-              durationMinutes: session.airtimeMinutes,
-              avgViewers: Math.round(session.averageViewers),
-              peakViewers: session.peakViewers,
-              title: session.sessionTitle,
-              viewCount: Number(session.sessionViews ?? 0n),
-              thumbnailUrl: null,
-              url: null,
-              language: null,
-            }),
-          ),
+          ...streamHatchetSessions.flatMap((session): StreamSession[] => {
+            const platform = internalPlatformForStreamHatchet(session.platform);
+            if (!platform) return [];
+            return [
+              {
+                startedAt: session.streamBeginsAt.toISOString(),
+                endedAt: session.streamEndsAt.toISOString(),
+                platform,
+                source: "streamhatchet",
+                game: session.primaryGameName,
+                durationMinutes: session.airtimeMinutes,
+                avgViewers: Math.round(session.averageViewers),
+                peakViewers: session.peakViewers,
+                title: session.sessionTitle,
+                viewCount: Number(session.sessionViews ?? 0n),
+                thumbnailUrl: null,
+                url: null,
+                language: null,
+              },
+            ];
+          }),
         );
       }
 
       // Sort
-      const sorted = [...sessions].sort((a, b) => {
+      const sorted = dedupeStreamSessions(sessions).sort((a, b) => {
         switch (input.sortBy) {
           case "date":
             return input.sortOrder === "desc"
@@ -734,6 +797,10 @@ export const snapshotRouter = router({
       let airTimeSeconds: number | null = null;
       let avgAirTimeSeconds: number | null = null;
       let streamCount = 0;
+      let twitchApiAirTimeSeconds: number | null = null;
+      let twitchApiStreamCount = 0;
+      let addedTwitchApiAirtime = false;
+      let suppressTwitchApiAirtime = false;
 
       try {
         const twitchAccount = await ctx.prisma.platformAccount.findFirst({
@@ -752,12 +819,11 @@ export const snapshotRouter = router({
           });
 
           if (videos.length > 0) {
-            streamCount = videos.length;
-            airTimeSeconds = videos.reduce(
+            twitchApiStreamCount = videos.length;
+            twitchApiAirTimeSeconds = videos.reduce(
               (sum, v) => sum + v.durationSeconds,
               0,
             );
-            avgAirTimeSeconds = Math.round(airTimeSeconds / streamCount);
           }
         }
       } catch {
@@ -794,6 +860,7 @@ export const snapshotRouter = router({
         });
 
         if (rollups.length > 0) {
+          const streamHatchetRollupPlatforms = new Set<Platform>();
           const streamHatchetAirtimeSeconds =
             rollups.reduce((sum, row) => sum + row.airtimeMinutes, 0) * 60;
           const streamHatchetMinutesWatched = rollups.reduce(
@@ -833,9 +900,40 @@ export const snapshotRouter = router({
           }
 
           for (const row of rollups) {
-            if (row.platform === "kick") allPlatforms.add("kick");
+            const platform = internalPlatformForStreamHatchet(row.platform);
+            if (platform) {
+              allPlatforms.add(platform);
+              streamHatchetRollupPlatforms.add(platform);
+            }
+          }
+          suppressTwitchApiAirtime = streamHatchetRollupPlatforms.has("twitch");
+
+          if (
+            twitchApiAirTimeSeconds !== null &&
+            twitchApiStreamCount > 0 &&
+            !suppressTwitchApiAirtime
+          ) {
+            airTimeSeconds = (airTimeSeconds ?? 0) + twitchApiAirTimeSeconds;
+            streamCount += twitchApiStreamCount;
+            addedTwitchApiAirtime = true;
+            avgAirTimeSeconds =
+              streamCount > 0
+                ? Math.round((airTimeSeconds ?? 0) / streamCount)
+                : null;
           }
         }
+      }
+
+      if (
+        !addedTwitchApiAirtime &&
+        !suppressTwitchApiAirtime &&
+        twitchApiAirTimeSeconds !== null &&
+        twitchApiStreamCount > 0
+      ) {
+        airTimeSeconds = (airTimeSeconds ?? 0) + twitchApiAirTimeSeconds;
+        streamCount += twitchApiStreamCount;
+        avgAirTimeSeconds =
+          streamCount > 0 ? Math.round(airTimeSeconds / streamCount) : null;
       }
 
       const avgViewers =

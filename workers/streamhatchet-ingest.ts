@@ -9,6 +9,7 @@
  *   pnpm worker:streamhatchet -- --platform kick --date 2026-05-13
  *   pnpm worker:streamhatchet -- --platform kick --date 2026-05-13 --write
  *   pnpm worker:streamhatchet -- --platform kick --days 30 --write
+ *   pnpm worker:streamhatchet -- --platform twitch --date 2026-05-13 --matched-only --write
  */
 
 import { PrismaClient, Prisma, type Platform } from "@prisma/client";
@@ -48,6 +49,7 @@ type ImportConfig = {
   dates: Date[];
   write: boolean;
   force: boolean;
+  matchedOnly: boolean;
   rowLimit: number | undefined;
 };
 
@@ -138,6 +140,7 @@ function parseConfig(): ImportConfig {
     dates,
     write: args.includes("--write"),
     force: args.includes("--force"),
+    matchedOnly: args.includes("--matched-only"),
     rowLimit:
       rowLimit && Number.isFinite(rowLimit) && rowLimit > 0
         ? rowLimit
@@ -184,6 +187,30 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+function importMode(
+  config: Pick<ImportConfig, "matchedOnly">,
+): "matched" | "full" {
+  return config.matchedOnly ? "matched" : "full";
+}
+
+function metadataImportMode(
+  metadata: Prisma.JsonValue | null,
+): "matched" | "full" | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return "full";
+  }
+  const value = (metadata as { importMode?: unknown }).importMode;
+  return value === "matched" || value === "full" ? value : "full";
+}
+
+function canSkipImportedObject(input: {
+  existingMode: "matched" | "full" | null;
+  currentMode: "matched" | "full";
+}): boolean {
+  if (input.existingMode === input.currentMode) return true;
+  return input.existingMode === "full" && input.currentMode === "matched";
+}
+
 async function loadExistingProfileMatches(
   platform: DailySessionPlatform,
 ): Promise<{
@@ -224,11 +251,17 @@ function resolveCreatorProfileId(
   session: StreamHatchetDailySession,
   matches: Awaited<ReturnType<typeof loadExistingProfileMatches>>,
 ): string | null {
+  const idMatch = matches.byPlatformUserId.get(session.platformUserId);
+  if (idMatch) return idMatch.creatorProfileId;
+
+  // Username fallback is intentionally limited to KICK. Twitch and YouTube
+  // have stable platform IDs in StreamHatchet, so targeted imports should not
+  // rely on potentially ambiguous display/user names.
+  if (session.platform !== "kick") return null;
+
   return (
-    matches.byPlatformUserId.get(session.platformUserId)?.creatorProfileId ??
     matches.byUsername.get(session.platformUsername.toLowerCase())
-      ?.creatorProfileId ??
-    null
+      ?.creatorProfileId ?? null
   );
 }
 
@@ -309,6 +342,7 @@ function mostWatchedGame(sessions: RollupSession[]): string | null {
 async function recomputeRollups(input: {
   platform: DailySessionPlatform;
   partitionDate: Date;
+  matchedOnly: boolean;
 }): Promise<{
   channelRollups: number;
   gameRollups: number;
@@ -331,13 +365,17 @@ async function recomputeRollups(input: {
         date: input.partitionDate,
       },
     }),
-    prisma.gameDailyRollup.deleteMany({
-      where: {
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-      },
-    }),
+    ...(input.matchedOnly
+      ? []
+      : [
+          prisma.gameDailyRollup.deleteMany({
+            where: {
+              source: SOURCE,
+              platform: input.platform,
+              date: input.partitionDate,
+            },
+          }),
+        ]),
     prisma.channelGameDailyRollup.deleteMany({
       where: {
         source: SOURCE,
@@ -357,7 +395,9 @@ async function recomputeRollups(input: {
 
     const gameName = session.primaryGameName;
     if (gameName) {
-      byGame.set(gameName, [...(byGame.get(gameName) ?? []), session]);
+      if (!input.matchedOnly) {
+        byGame.set(gameName, [...(byGame.get(gameName) ?? []), session]);
+      }
       const channelGameKey = `${channelKey}\u0000${gameName}`;
       byChannelGame.set(channelGameKey, [
         ...(byChannelGame.get(channelGameKey) ?? []),
@@ -454,46 +494,48 @@ async function recomputeRollups(input: {
   }
 
   const gameRollups: Prisma.GameDailyRollupCreateManyInput[] = [];
-  for (const [gameName, gameSessions] of byGame.entries()) {
-    const minutesWatched = gameSessions.reduce(
-      (sum, session) => sum + session.minutesWatched,
-      0n,
-    );
-    const airtimeMinutes = gameSessions.reduce(
-      (sum, session) => sum + session.airtimeMinutes,
-      0,
-    );
-    const peak = gameSessions.reduce(
-      (best, session) =>
-        best === null || session.peakViewers > best.peakViewers
-          ? session
-          : best,
-      null as RollupSession | null,
-    );
-    const topChannel = gameSessions.reduce(
-      (best, session) =>
-        best === null || session.minutesWatched > best.minutesWatched
-          ? session
-          : best,
-      null as RollupSession | null,
-    );
+  if (!input.matchedOnly) {
+    for (const [gameName, gameSessions] of byGame.entries()) {
+      const minutesWatched = gameSessions.reduce(
+        (sum, session) => sum + session.minutesWatched,
+        0n,
+      );
+      const airtimeMinutes = gameSessions.reduce(
+        (sum, session) => sum + session.airtimeMinutes,
+        0,
+      );
+      const peak = gameSessions.reduce(
+        (best, session) =>
+          best === null || session.peakViewers > best.peakViewers
+            ? session
+            : best,
+        null as RollupSession | null,
+      );
+      const topChannel = gameSessions.reduce(
+        (best, session) =>
+          best === null || session.minutesWatched > best.minutesWatched
+            ? session
+            : best,
+        null as RollupSession | null,
+      );
 
-    gameRollups.push({
-      source: SOURCE,
-      platform: input.platform,
-      date: input.partitionDate,
-      gameName,
-      sessionCount: gameSessions.length,
-      channelCount: new Set(gameSessions.map((s) => s.platformUserId)).size,
-      airtimeMinutes,
-      minutesWatched,
-      averageViewers:
-        airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
-      peakViewers: peak?.peakViewers ?? null,
-      topChannelUserId: topChannel?.platformUserId ?? null,
-      topChannelUsername: topChannel?.platformUsername ?? null,
-      topChannelDisplayName: topChannel?.platformDisplayName ?? null,
-    });
+      gameRollups.push({
+        source: SOURCE,
+        platform: input.platform,
+        date: input.partitionDate,
+        gameName,
+        sessionCount: gameSessions.length,
+        channelCount: new Set(gameSessions.map((s) => s.platformUserId)).size,
+        airtimeMinutes,
+        minutesWatched,
+        averageViewers:
+          airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
+        peakViewers: peak?.peakViewers ?? null,
+        topChannelUserId: topChannel?.platformUserId ?? null,
+        topChannelUsername: topChannel?.platformUsername ?? null,
+        topChannelDisplayName: topChannel?.platformDisplayName ?? null,
+      });
+    }
   }
 
   const channelGameRollups: Prisma.ChannelGameDailyRollupCreateManyInput[] = [];
@@ -553,10 +595,12 @@ async function recomputeRollups(input: {
 
 async function importOneDate(config: ImportConfig, date: Date) {
   const key = buildDailySessionKey(config.prefix, date, config.platform);
+  const mode = importMode(config);
   log("info", "Inspecting S3 object", {
     bucket: config.bucket,
     key,
     write: config.write,
+    matchedOnly: config.matchedOnly,
   });
 
   const metadata = await headS3Object(config.bucket, key, {
@@ -567,35 +611,67 @@ async function importOneDate(config: ImportConfig, date: Date) {
     profile: config.profile,
     region: config.region,
   });
+
+  const existingObject = await prisma.streamHatchetSourceObject.findUnique({
+    where: { bucket_key: { bucket: config.bucket, key } },
+  });
+
+  if (
+    config.write &&
+    existingObject &&
+    existingObject.status === "completed" &&
+    existingObject.etag === metadata.etag &&
+    canSkipImportedObject({
+      existingMode: metadataImportMode(existingObject.metadata),
+      currentMode: mode,
+    }) &&
+    !config.force
+  ) {
+    log("info", "Object already imported; skipping", {
+      key,
+      etag: metadata.etag,
+      importMode: metadataImportMode(existingObject.metadata),
+      requestedMode: mode,
+    });
+    return {
+      scanned: 0,
+      written: 0,
+      skipped: Number(existingObject.importedRows),
+      failed: 0,
+      matched: 0,
+    };
+  }
+
   const localPath = await downloadS3Object(config.bucket, key, {
     profile: config.profile,
     region: config.region,
   });
 
-  const sessions: StreamHatchetDailySession[] = [];
-  const parseStats = await parseDailySessionCsv({
-    filePath: localPath,
-    platform: config.platform,
-    partitionDate: date,
-    rowLimit: config.rowLimit,
-    onSession: (session) => {
-      sessions.push(session);
-    },
-  });
-
   const matches = await loadExistingProfileMatches(config.platform);
   let matchedSessions = 0;
-  for (const session of sessions) {
-    if (resolveCreatorProfileId(session, matches)) matchedSessions++;
-  }
+  let written = 0;
+  let pendingBatch: Prisma.StreamSessionFactCreateManyInput[] = [];
+
+  let sourceObjectId: string | null = null;
 
   if (!config.write) {
+    const parseStats = await parseDailySessionCsv({
+      filePath: localPath,
+      platform: config.platform,
+      partitionDate: date,
+      rowLimit: config.rowLimit,
+      onSession: (session) => {
+        if (resolveCreatorProfileId(session, matches)) matchedSessions++;
+      },
+    });
+
     log("info", "Dry run complete for date", {
       date: formatDate(date),
       s3RowCount,
       parsedRows: parseStats.rowsAccepted,
       rejectedRows: parseStats.rowsRejected,
       matchedExistingProfiles: matchedSessions,
+      matchedOnly: config.matchedOnly,
       objectSize: metadata.size?.toString() ?? null,
       etag: metadata.etag,
     });
@@ -605,29 +681,6 @@ async function importOneDate(config: ImportConfig, date: Date) {
       skipped: parseStats.rowsAccepted,
       failed: parseStats.rowsRejected,
       matched: matchedSessions,
-    };
-  }
-
-  const existingObject = await prisma.streamHatchetSourceObject.findUnique({
-    where: { bucket_key: { bucket: config.bucket, key } },
-  });
-
-  if (
-    existingObject &&
-    existingObject.status === "completed" &&
-    existingObject.etag === metadata.etag &&
-    !config.force
-  ) {
-    log("info", "Object already imported; skipping", {
-      key,
-      etag: metadata.etag,
-    });
-    return {
-      scanned: 0,
-      written: 0,
-      skipped: Number(existingObject.importedRows),
-      failed: 0,
-      matched: 0,
     };
   }
 
@@ -645,6 +698,8 @@ async function importOneDate(config: ImportConfig, date: Date) {
       metadata: {
         s3RowCount,
         rowLimit: config.rowLimit ?? null,
+        importMode: mode,
+        matchedOnly: config.matchedOnly,
       } satisfies Prisma.InputJsonValue,
     },
     create: {
@@ -660,9 +715,12 @@ async function importOneDate(config: ImportConfig, date: Date) {
       metadata: {
         s3RowCount,
         rowLimit: config.rowLimit ?? null,
+        importMode: mode,
+        matchedOnly: config.matchedOnly,
       } satisfies Prisma.InputJsonValue,
     },
   });
+  sourceObjectId = sourceObject.id;
 
   if (config.force) {
     await prisma.streamSessionFact.deleteMany({
@@ -670,25 +728,39 @@ async function importOneDate(config: ImportConfig, date: Date) {
     });
   }
 
-  let written = 0;
-  for (const batch of chunk(sessions, BATCH_SIZE)) {
-    const data = batch.map((session) =>
-      sessionCreateInput(
-        session,
-        sourceObject.id,
-        resolveCreatorProfileId(session, matches),
-      ),
-    );
+  async function flushPendingBatch() {
+    if (pendingBatch.length === 0) return;
     const result = await prisma.streamSessionFact.createMany({
-      data,
+      data: pendingBatch,
       skipDuplicates: true,
     });
     written += result.count;
+    pendingBatch = [];
   }
+
+  const parseStats = await parseDailySessionCsv({
+    filePath: localPath,
+    platform: config.platform,
+    partitionDate: date,
+    rowLimit: config.rowLimit,
+    onSession: async (session) => {
+      const creatorProfileId = resolveCreatorProfileId(session, matches);
+      if (creatorProfileId) matchedSessions++;
+      if (config.matchedOnly && !creatorProfileId) return;
+      pendingBatch.push(
+        sessionCreateInput(session, sourceObject.id, creatorProfileId),
+      );
+      if (pendingBatch.length >= BATCH_SIZE) {
+        await flushPendingBatch();
+      }
+    },
+  });
+  await flushPendingBatch();
 
   const rollups = await recomputeRollups({
     platform: config.platform,
     partitionDate: date,
+    matchedOnly: config.matchedOnly,
   });
 
   await prisma.streamHatchetSourceObject.update({
@@ -704,6 +776,9 @@ async function importOneDate(config: ImportConfig, date: Date) {
         s3RowCount,
         parsedRows: parseStats.rowsAccepted,
         matchedExistingProfiles: matchedSessions,
+        matchedOnly: config.matchedOnly,
+        importMode: mode,
+        sourceObjectId,
         rollups,
       } satisfies Prisma.InputJsonValue,
     },
@@ -713,9 +788,10 @@ async function importOneDate(config: ImportConfig, date: Date) {
     date: formatDate(date),
     parsedRows: parseStats.rowsAccepted,
     written,
-    duplicateRows: parseStats.rowsAccepted - written,
+    skippedOrDuplicateRows: parseStats.rowsAccepted - written,
     rejectedRows: parseStats.rowsRejected,
     matchedExistingProfiles: matchedSessions,
+    matchedOnly: config.matchedOnly,
     ...rollups,
   });
 
@@ -738,6 +814,7 @@ async function main() {
     profile: config.profile,
     write: config.write,
     force: config.force,
+    matchedOnly: config.matchedOnly,
     rowLimit: config.rowLimit ?? null,
   });
 
@@ -787,6 +864,8 @@ async function main() {
             matchedExistingProfiles: summary.matched,
             platform: config.platform,
             dates: config.dates.map(formatDate),
+            matchedOnly: config.matchedOnly,
+            importMode: importMode(config),
           } satisfies Prisma.InputJsonValue,
         },
       });
