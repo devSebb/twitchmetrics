@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import type { Platform } from "@twitchmetrics/database";
+import { PlatformIcon } from "@/components/shared";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
 import { formatNumber } from "@/lib/utils/format";
@@ -51,6 +53,7 @@ type GameCardProps = {
     avgViewers: number;
     slug: string | null;
     coverImageUrl: string | null;
+    platforms?: Platform[];
   };
 };
 
@@ -77,9 +80,24 @@ function GameCard({ game }: GameCardProps) {
 
       {/* Game info */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-[#DBDEE1]">
-          {game.gameName}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-sm font-medium text-[#DBDEE1]">
+            {game.gameName}
+          </p>
+          {game.platforms && game.platforms.length > 0 && (
+            <div className="flex flex-shrink-0 items-center gap-1">
+              {game.platforms.map((platform) => (
+                <PlatformIcon
+                  key={platform}
+                  platform={platform}
+                  size="xs"
+                  rounded="full"
+                  className="h-3.5 w-3.5"
+                />
+              ))}
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-3 text-xs text-[#949BA4]">
           <span>
             <span className="text-[#F2F3F5]">

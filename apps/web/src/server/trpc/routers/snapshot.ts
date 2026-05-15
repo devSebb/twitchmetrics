@@ -139,6 +139,33 @@ function streamHatchetRollupIdentityWhere(
   });
 }
 
+function streamHatchetGameRollupIdentityWhere(
+  accounts: StreamHatchetAccount[],
+): Prisma.ChannelGameDailyRollupWhereInput[] {
+  return accounts.flatMap((account) => {
+    const platforms = streamHatchetPlatforms(account.platform);
+    if (platforms.length === 0) return [];
+
+    const identity: Prisma.ChannelGameDailyRollupWhereInput[] = [
+      { platformUserId: account.platformUserId },
+    ];
+    if (account.platform === "kick" && account.platformUsername) {
+      identity.push({
+        platformUsername: {
+          equals: account.platformUsername,
+          mode: "insensitive",
+        },
+      });
+    }
+
+    return platforms.map((platform) => ({ platform, OR: identity }));
+  });
+}
+
+function normalizeGameName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function sessionsOverlap(left: StreamSession, right: StreamSession): boolean {
   if (left.platform !== right.platform) return false;
   const leftStart = new Date(left.startedAt).getTime();
@@ -249,7 +276,113 @@ export const snapshotRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      // Aggregate most-streamed games from MetricSnapshot extendedMetrics
+      const streamHatchetAccounts = await getStreamHatchetAccounts(
+        ctx.prisma,
+        input.creatorProfileId,
+      );
+      const streamHatchetGameRollupWhere = streamHatchetGameRollupIdentityWhere(
+        streamHatchetAccounts,
+      );
+
+      if (streamHatchetGameRollupWhere.length > 0) {
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+
+        const rollups = await ctx.prisma.channelGameDailyRollup.findMany({
+          where: {
+            OR: streamHatchetGameRollupWhere,
+            date: { gte: since },
+          },
+          select: {
+            platform: true,
+            gameName: true,
+            sessionCount: true,
+            airtimeMinutes: true,
+            minutesWatched: true,
+          },
+          orderBy: { minutesWatched: "desc" },
+          take: 1000,
+        });
+
+        if (rollups.length > 0) {
+          const gameMap = new Map<
+            string,
+            {
+              name: string;
+              streamCount: number;
+              airtimeMinutes: number;
+              minutesWatched: bigint;
+              platforms: Set<Platform>;
+            }
+          >();
+
+          for (const rollup of rollups) {
+            const name = rollup.gameName.trim();
+            if (!name) continue;
+
+            const platform = internalPlatformForStreamHatchet(rollup.platform);
+            const key = normalizeGameName(name);
+            const existing = gameMap.get(key);
+            if (existing) {
+              existing.streamCount += rollup.sessionCount;
+              existing.airtimeMinutes += rollup.airtimeMinutes;
+              existing.minutesWatched += rollup.minutesWatched;
+              if (platform) existing.platforms.add(platform);
+            } else {
+              gameMap.set(key, {
+                name,
+                streamCount: rollup.sessionCount,
+                airtimeMinutes: rollup.airtimeMinutes,
+                minutesWatched: rollup.minutesWatched,
+                platforms: platform ? new Set([platform]) : new Set(),
+              });
+            }
+          }
+
+          const sorted = [...gameMap.values()]
+            .sort((a, b) =>
+              a.minutesWatched === b.minutesWatched
+                ? b.streamCount - a.streamCount
+                : a.minutesWatched > b.minutesWatched
+                  ? -1
+                  : 1,
+            )
+            .slice(0, input.limit);
+
+          const names = sorted.map((game) => game.name);
+          const games = await ctx.prisma.game.findMany({
+            where: { name: { in: names } },
+            select: {
+              name: true,
+              slug: true,
+              coverImageUrl: true,
+            },
+          });
+          const gameByName = new Map(
+            games.map((game) => [normalizeGameName(game.name), game] as const),
+          );
+
+          return sorted.map((game) => {
+            const gameInfo = gameByName.get(normalizeGameName(game.name));
+            return {
+              gameName: game.name,
+              streamCount: game.streamCount,
+              avgViewers:
+                game.airtimeMinutes > 0
+                  ? Math.round(
+                      Number(game.minutesWatched) / game.airtimeMinutes,
+                    )
+                  : 0,
+              slug: gameInfo?.slug ?? null,
+              coverImageUrl: gameInfo?.coverImageUrl ?? null,
+              platforms: [...game.platforms].sort(),
+            };
+          });
+        }
+      }
+
+      // Fallback for creators without StreamHatchet rollups: aggregate current
+      // game fields from MetricSnapshot extendedMetrics.
       const snapshots = await ctx.prisma.metricSnapshot.findMany({
         where: {
           creatorProfileId: input.creatorProfileId,
@@ -271,13 +404,10 @@ export const snapshotRouter = router({
           totalViewers: number;
           name: string;
           twitchGameId: string | null;
+          platforms: Set<Platform>;
         }
       >();
 
-      const streamHatchetAccounts = await getStreamHatchetAccounts(
-        ctx.prisma,
-        input.creatorProfileId,
-      );
       const streamHatchetWhere = streamHatchetIdentityWhere(
         streamHatchetAccounts,
       );
@@ -322,6 +452,7 @@ export const snapshotRouter = router({
         const existing = gameMap.get(key);
         if (existing) {
           existing.count += 1;
+          existing.platforms.add(snap.platform);
           if (isLive) {
             existing.liveCount += 1;
             existing.totalViewers += viewers;
@@ -333,13 +464,15 @@ export const snapshotRouter = router({
             totalViewers: isLive ? viewers : 0,
             name: gameName,
             twitchGameId,
+            platforms: new Set([snap.platform]),
           });
         }
       }
 
       for (const session of streamHatchetSessions) {
         if (!session.primaryGameName) continue;
-        const key = `streamhatchet:${session.platform}:${session.primaryGameName}`;
+        const platform = internalPlatformForStreamHatchet(session.platform);
+        const key = `name:${normalizeGameName(session.primaryGameName)}`;
         const viewers =
           session.airtimeMinutes > 0
             ? Number(session.minutesWatched) / session.airtimeMinutes
@@ -349,6 +482,7 @@ export const snapshotRouter = router({
           existing.count += 1;
           existing.liveCount += 1;
           existing.totalViewers += viewers;
+          if (platform) existing.platforms.add(platform);
         } else {
           gameMap.set(key, {
             count: 1,
@@ -356,6 +490,7 @@ export const snapshotRouter = router({
             totalViewers: viewers,
             name: session.primaryGameName,
             twitchGameId: null,
+            platforms: platform ? new Set([platform]) : new Set(),
           });
         }
       }
@@ -395,7 +530,10 @@ export const snapshotRouter = router({
       const gameByName = new Map(games.map((g) => [g.name, g] as const));
 
       return sorted.map(
-        ([, { name, twitchGameId, count, liveCount, totalViewers }]) => {
+        ([
+          ,
+          { name, twitchGameId, count, liveCount, totalViewers, platforms },
+        ]) => {
           const gameInfo =
             (twitchGameId ? gameByTwitchId.get(twitchGameId) : undefined) ??
             gameByName.get(name);
@@ -406,6 +544,7 @@ export const snapshotRouter = router({
               liveCount > 0 ? Math.round(totalViewers / liveCount) : 0,
             slug: gameInfo?.slug ?? null,
             coverImageUrl: gameInfo?.coverImageUrl ?? null,
+            platforms: [...platforms].sort(),
           };
         },
       );
