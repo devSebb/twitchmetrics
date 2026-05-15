@@ -3,15 +3,18 @@
 import { FormEvent, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import type { OnboardingRole } from "@/components/onboarding";
 
 type RegisterFormProps = {
   callbackUrl?: string;
+  role: OnboardingRole;
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function RegisterForm({
   callbackUrl = "/dashboard/home",
+  role,
 }: RegisterFormProps) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -46,6 +49,7 @@ export function RegisterForm({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
+        role,
       }),
     });
 

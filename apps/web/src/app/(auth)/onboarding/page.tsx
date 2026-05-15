@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { prisma } from "@twitchmetrics/database";
 import { OnboardingWizard } from "@/components/onboarding";
 import { auth } from "@/lib/auth";
 
@@ -12,6 +13,16 @@ export default async function OnboardingPage() {
     redirect("/dashboard/home");
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, role: true, roleSelectedAt: true },
+  });
+
+  const dbRole = user?.role ?? session.user.role ?? "creator";
+  const initialRole: "creator" | "talent_manager" =
+    dbRole === "talent_manager" ? "talent_manager" : "creator";
+  const roleConfirmed = Boolean(user?.roleSelectedAt);
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-2 text-center">
@@ -23,12 +34,9 @@ export default async function OnboardingPage() {
         </p>
       </div>
       <OnboardingWizard
-        initialName={session.user.name ?? null}
-        initialRole={
-          (["creator", "talent_manager"].includes(session.user.role ?? "")
-            ? session.user.role
-            : "creator") as "creator" | "talent_manager"
-        }
+        initialName={user?.name ?? session.user.name ?? null}
+        initialRole={initialRole}
+        roleConfirmed={roleConfirmed}
       />
     </div>
   );

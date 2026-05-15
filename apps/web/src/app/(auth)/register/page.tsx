@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RegisterForm, SocialLoginButtons } from "@/components/auth";
+import { RegisterFlow } from "@/components/auth";
 import { getConfiguredSocialLoginProviders } from "@/lib/oauth-providers";
 
 type RegisterPageProps = {
@@ -59,22 +59,11 @@ export default async function RegisterPage({
         </div>
 
         <div className="mt-6">
-          <SocialLoginButtons
+          <RegisterFlow
             callbackUrl={callbackUrl}
-            enabledProviders={socialProviders}
-            mode="register"
+            socialProviders={socialProviders}
           />
         </div>
-
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-[#3F4147]" />
-          <span className="text-xs uppercase tracking-wide text-[#949BA4]">
-            or
-          </span>
-          <div className="h-px flex-1 bg-[#3F4147]" />
-        </div>
-
-        <RegisterForm callbackUrl={callbackUrl} />
 
         <p className="mt-6 text-sm text-[#949BA4]">
           Already have an account?{" "}

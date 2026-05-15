@@ -139,7 +139,7 @@ export const authRouter = router({
 
       const updated = await ctx.prisma.user.update({
         where: { id: ctx.user.id },
-        data: { role: input.role },
+        data: { role: input.role, roleSelectedAt: new Date() },
         select: { id: true, role: true },
       });
 
@@ -166,6 +166,7 @@ export const authRouter = router({
           data: {
             name: input.name,
             role: input.role,
+            roleSelectedAt: new Date(),
             hasCompletedOnboarding: true,
           },
           select: { id: true, name: true, role: true },

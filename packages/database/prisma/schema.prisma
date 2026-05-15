@@ -78,6 +78,7 @@ model User {
   name                   String?
   image                  String?
   role                   UserRole  @default(creator)
+  roleSelectedAt         DateTime?
   suspended              Boolean   @default(false)
   hasCompletedOnboarding Boolean   @default(false)
   createdAt              DateTime  @default(now())

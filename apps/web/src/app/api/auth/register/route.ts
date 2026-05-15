@@ -11,6 +11,7 @@ const registerSchema = z.object({
     .email()
     .transform((value) => value.toLowerCase()),
   password: z.string().min(8).max(128),
+  role: z.enum(["creator", "talent_manager"]),
 });
 
 export async function POST(request: Request) {
@@ -49,6 +50,8 @@ export async function POST(request: Request) {
       name: parsed.data.name,
       email: parsed.data.email,
       passwordHash,
+      role: parsed.data.role,
+      roleSelectedAt: new Date(),
     },
     select: { id: true },
   });
