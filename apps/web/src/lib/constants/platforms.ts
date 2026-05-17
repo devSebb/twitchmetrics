@@ -104,12 +104,12 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
     name: "Kick",
     color: "#53fc18",
     iconName: "play",
-    apiBaseUrl: "https://kick.com/api/v2",
+    apiBaseUrl: "https://api.kick.com",
     oauthSupported: false,
     oauthScopes: [],
     tier0Metrics: ["FOLLOWERS", "LIVE_VIEWER_COUNT"],
     requiresUserConsent: [],
-    adapterStatus: "unavailable",
+    adapterStatus: "beta",
   },
 };
 

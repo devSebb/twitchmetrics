@@ -5,6 +5,7 @@ import { youtubeAdapter } from "./youtube";
 import { instagramAdapter } from "./instagram";
 import { tiktokAdapter } from "./tiktok";
 import { xAdapter } from "./x";
+import { kickAdapter } from "./kick";
 
 const ADAPTER_MAP: Partial<Record<Platform, PlatformAdapter>> = {
   twitch: twitchAdapter,
@@ -12,6 +13,7 @@ const ADAPTER_MAP: Partial<Record<Platform, PlatformAdapter>> = {
   instagram: instagramAdapter,
   tiktok: tiktokAdapter,
   x: xAdapter,
+  kick: kickAdapter,
 };
 
 /**
