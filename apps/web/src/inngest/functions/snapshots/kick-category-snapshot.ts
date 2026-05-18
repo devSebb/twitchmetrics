@@ -3,13 +3,15 @@ import { inngest } from "../../client";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
 import { fetchKickCategories, type KickCategory } from "@/server/adapters/kick";
+import { AdapterError } from "@/server/adapters/types";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 const log = createLogger("kick-category-snapshot");
 
-const PAGE_LIMIT = 100;
-const MAX_SEARCH_PAGES = 2;
-const MAX_GAME_SEARCHES = 250;
+const PAGE_LIMIT = 20;
+const MAX_SEARCH_PAGES = 1;
+const MAX_GAME_SEARCHES = 40;
+const SEARCH_DELAY_MS = 750;
 const SNAPSHOT_BUCKET_MS = 30 * 60 * 1000;
 
 type GameMatch = {
@@ -41,20 +43,41 @@ function categoryTags(category: KickCategory): string[] {
   return Array.isArray(category.tags) ? category.tags.filter(Boolean) : [];
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchCategoriesForGames(
   games: GameSearchTarget[],
 ): Promise<KickCategory[]> {
   const categoriesById = new Map<string, KickCategory>();
 
-  for (const game of games.slice(0, MAX_GAME_SEARCHES)) {
+  for (const [index, game] of games.slice(0, MAX_GAME_SEARCHES).entries()) {
+    if (index > 0) await sleep(SEARCH_DELAY_MS);
+
     let cursor: string | null = null;
 
     for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
-      const result = await fetchKickCategories({
-        limit: PAGE_LIMIT,
-        cursor,
-        search: game.name,
-      });
+      let result: Awaited<ReturnType<typeof fetchKickCategories>>;
+      try {
+        result = await fetchKickCategories({
+          limit: PAGE_LIMIT,
+          cursor,
+          search: game.name,
+        });
+      } catch (error) {
+        if (error instanceof AdapterError && error.code === "rate_limited") {
+          log.warn(
+            {
+              searchedGames: index,
+              collectedCategories: categoriesById.size,
+            },
+            "KICK category search rate limited; using partial results",
+          );
+          return [...categoriesById.values()];
+        }
+        throw error;
+      }
 
       for (const category of result.categories) {
         const id = categoryId(category);
