@@ -21,7 +21,7 @@ export function PopularGamesWidget({ profile }: PopularGamesWidgetProps) {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <div className="flex-1 min-h-0 space-y-2 overflow-y-auto">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-12 animate-pulse rounded-lg bg-[#383A40]" />
         ))}
@@ -34,7 +34,7 @@ export function PopularGamesWidget({ profile }: PopularGamesWidgetProps) {
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1">
       {games.map((game) => (
         <GameCard key={game.gameName} game={game} />
       ))}

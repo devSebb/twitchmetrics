@@ -122,10 +122,10 @@ async function loadGameMatches() {
 
   return {
     games,
-    byName: new Map(games.map((game) => [normalizeName(game.name), game])),
-    byKickId: new Map(
-      existingMappings.map((mapping) => [mapping.platformGameId, mapping.game]),
-    ),
+    existingMappings: existingMappings.map((mapping) => ({
+      platformGameId: mapping.platformGameId,
+      game: mapping.game,
+    })),
   };
 }
 
@@ -256,6 +256,15 @@ export const kickCategorySnapshot = inngest.createFunction(
           "load-game-matches",
           loadGameMatches,
         )) as Awaited<ReturnType<typeof loadGameMatches>>;
+        const byName = new Map(
+          matches.games.map((game) => [normalizeName(game.name), game]),
+        );
+        const byKickId = new Map(
+          matches.existingMappings.map((mapping) => [
+            mapping.platformGameId,
+            mapping.game,
+          ]),
+        );
         const categories = (await step.run("fetch-kick-categories", () =>
           fetchCategoriesForGames(matches.games),
         )) as KickCategory[];
@@ -270,8 +279,8 @@ export const kickCategorySnapshot = inngest.createFunction(
             const id = categoryId(category);
             const name = category.name?.trim();
             const game =
-              (id ? matches.byKickId.get(id) : undefined) ??
-              (name ? matches.byName.get(normalizeName(name)) : undefined);
+              (id ? byKickId.get(id) : undefined) ??
+              (name ? byName.get(normalizeName(name)) : undefined);
 
             if (!game) {
               skipped++;

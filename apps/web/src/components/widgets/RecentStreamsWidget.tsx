@@ -63,7 +63,7 @@ export function RecentStreamsWidget({ profile }: Props) {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <div className="flex-1 min-h-0 space-y-2 overflow-y-auto">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="h-10 animate-pulse rounded-lg bg-[#383A40]" />
         ))}
@@ -78,10 +78,10 @@ export function RecentStreamsWidget({ profile }: Props) {
   const totalPages = Math.ceil(data.total / 10);
 
   return (
-    <div>
-      <div className="overflow-x-auto">
+    <div className="flex flex-1 min-h-0 flex-col">
+      <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full text-left text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-[#313338]">
             <tr className="border-b border-[#3F4147]">
               {COLUMNS.map((col) => (
                 <th
@@ -142,7 +142,7 @@ export function RecentStreamsWidget({ profile }: Props) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-3 flex shrink-0 items-center justify-between">
           <span className="text-xs text-[#949BA4]">
             Page {data.page} of {totalPages} ({data.total} streams)
           </span>

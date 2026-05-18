@@ -19,7 +19,7 @@ export function WidgetCard({ widgetId, children, className }: WidgetCardProps) {
   return (
     <div
       data-widget-id={widgetId}
-      className={`rounded-xl border border-[#3F4147] bg-[#313338] p-5 has-[[data-widget-empty]]:hidden ${className ?? ""}`}
+      className={`flex flex-col rounded-xl border border-[#3F4147] bg-[#313338] p-5 has-[[data-widget-empty]]:hidden ${className ?? ""}`}
     >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F2F3F5]">

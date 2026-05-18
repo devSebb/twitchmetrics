@@ -21,7 +21,6 @@ import {
   BrandSafetyWidget,
 } from "@/components/widgets";
 import { DashboardProfileHeader } from "./DashboardProfileHeader";
-import { CategoriesSection } from "./sections/CategoriesSection";
 import { FeaturedPostsSection } from "./sections/FeaturedPostsSection";
 import { InterestsSection } from "./sections/InterestsSection";
 import { StreamerQualitiesSection } from "./sections/StreamerQualitiesSection";
@@ -245,22 +244,25 @@ export function DashboardGrid({
             isClaimed,
             <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
           )}
+        </div>
+
+        {/* Row 3: Popular Games (35%) | Recent Streams (65%) — fixed height, scrollable */}
+        <div className="grid grid-cols-1 gap-4 empty:hidden lg:grid-cols-[35fr_65fr]">
           {renderGated(
             "popular_games",
             enabledSet,
             isClaimed,
             <PopularGamesWidget profile={profile} />,
+            "h-80",
           )}
-          <CategoriesSection />
+          {renderGated(
+            "recent_streams",
+            enabledSet,
+            isClaimed,
+            <RecentStreamsWidget profile={profile} />,
+            "h-80",
+          )}
         </div>
-
-        {/* Row 3: Recent Streams — full width */}
-        {renderGated(
-          "recent_streams",
-          enabledSet,
-          isClaimed,
-          <RecentStreamsWidget profile={profile} />,
-        )}
 
         {/* Row 4: Featured Clips — full width */}
         {renderGated(
@@ -270,14 +272,13 @@ export function DashboardGrid({
           <FeaturedClipsWidget profile={profile} />,
         )}
 
-        {/* Row 5: Follower Growth (2/3) | Viewer Count (1/3) */}
-        <div className="grid grid-cols-1 gap-4 empty:hidden lg:grid-cols-3">
+        {/* Row 5: Follower Growth (1/2) | Viewer Count (1/2) */}
+        <div className="grid grid-cols-1 gap-4 empty:hidden lg:grid-cols-2">
           {renderGated(
             "follower_growth",
             enabledSet,
             isClaimed,
             <FollowerGrowthWidget profile={profile} />,
-            "lg:col-span-2",
           )}
           {renderGated(
             "viewer_count",
