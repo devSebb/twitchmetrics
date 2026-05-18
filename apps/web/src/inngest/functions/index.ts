@@ -4,6 +4,11 @@ import { tier3Snapshot } from "./snapshots/tier3-snapshot";
 import { gameSnapshot } from "./snapshots/game-snapshot";
 import { kickChannelSnapshot } from "./snapshots/kick-channel-snapshot";
 import { kickCategorySnapshot } from "./snapshots/kick-category-snapshot";
+import {
+  streamHatchetGameDiscoverySnapshot,
+  streamHatchetLiveChannelsSnapshot,
+  streamHatchetLiveGamesSnapshot,
+} from "./snapshots/streamhatchet-game-snapshot";
 import { demoteInactiveCreators } from "./snapshots/demote-inactive";
 import { onConnectSnapshot } from "./snapshots/on-connect-snapshot";
 import { processClaim } from "./claims/process-claim";
@@ -24,6 +29,9 @@ export const functions = [
   gameSnapshot,
   kickChannelSnapshot,
   kickCategorySnapshot,
+  streamHatchetGameDiscoverySnapshot,
+  streamHatchetLiveChannelsSnapshot,
+  streamHatchetLiveGamesSnapshot,
   demoteInactiveCreators,
   onConnectSnapshot,
   processClaim,

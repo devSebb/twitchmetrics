@@ -1,13 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Platform } from "@twitchmetrics/database";
 import { TrendUp, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 import { formatNumber } from "@/lib/utils/format";
+import { PlatformIcon } from "@/components/shared";
 
 type TopChannel = {
   id: string;
+  platform?: Platform | null;
   channelName: string;
   avatarUrl: string | null;
   slug: string | null;
+  streamTitle?: string | null;
   category: string;
   avgViewers: number;
   airtime: number; // seconds
@@ -61,14 +65,32 @@ function ChannelRow({
           {channel.channelName}
         </p>
         {showViewerHours ? (
-          <p className="text-xs text-[#949BA4]">
-            {formatNumber(Number(channel.viewerHours))} live viewer hours
-          </p>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-[#949BA4]">
+            {channel.platform && (
+              <PlatformIcon
+                platform={channel.platform}
+                size="xs"
+                rounded="lg"
+              />
+            )}
+            <span className="truncate">
+              {formatNumber(Number(channel.viewerHours))} live viewer hours
+            </span>
+          </div>
         ) : (
-          <p className="text-xs text-[#949BA4]">
-            {formatNumber(channel.avgViewers)} current viewers &middot;{" "}
-            {Math.max(1, Math.round(channel.airtime / 3600))}h live
-          </p>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-[#949BA4]">
+            {channel.platform && (
+              <PlatformIcon
+                platform={channel.platform}
+                size="xs"
+                rounded="lg"
+              />
+            )}
+            <span className="truncate">
+              {formatNumber(channel.avgViewers)} current viewers &middot;{" "}
+              {Math.max(1, Math.round(channel.airtime / 3600))}h live
+            </span>
+          </div>
         )}
       </div>
     </div>

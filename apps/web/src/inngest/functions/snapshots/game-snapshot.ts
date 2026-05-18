@@ -84,7 +84,9 @@ async function refreshTopChannels(
   >["streams"],
   snapshotAt: Date,
 ) {
-  await prisma.gameTopChannel.deleteMany({ where: { gameId: game.id } });
+  await prisma.gameTopChannel.deleteMany({
+    where: { gameId: game.id, platform: "twitch", source: "twitch_api" },
+  });
 
   if (streams.length === 0) {
     return;
@@ -142,9 +144,14 @@ async function refreshTopChannels(
 
       return {
         gameId: game.id,
+        platform: "twitch" as const,
+        source: "twitch_api",
+        platformUserId: stream.userId,
         channelName: stream.userName,
         avatarUrl: null,
         slug: stream.userLogin.toLowerCase(),
+        language: stream.language || null,
+        startedAt: new Date(stream.startedAt),
         category,
         avgViewers: stream.viewerCount,
         airtime: liveDurationSeconds,

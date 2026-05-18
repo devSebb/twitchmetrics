@@ -238,9 +238,10 @@ async function persistCategorySnapshot(
     if (hasViewerCount) {
       await tx.gamePlatformViewerSnapshot.upsert({
         where: {
-          gameId_platform_bucketStartedAt: {
+          gameId_platform_source_bucketStartedAt: {
             gameId: game.id,
             platform: "kick",
+            source: "kick_api",
             bucketStartedAt,
           },
         },
@@ -284,14 +285,23 @@ async function persistCategorySnapshot(
       const airtime = streamAirtimeSeconds(stream, snapshotAt);
       await tx.gameTopChannel.upsert({
         where: {
-          gameId_channelName: {
+          gameId_platform_source_channelName: {
             gameId: game.id,
+            platform: "kick",
+            source: "kick_api",
             channelName: name,
           },
         },
         update: {
+          platformUserId:
+            stream.broadcaster_user_id === undefined
+              ? null
+              : String(stream.broadcaster_user_id),
           avatarUrl: stream.profile_picture ?? null,
           slug: null,
+          streamTitle: stream.stream_title ?? null,
+          language: stream.language ?? null,
+          startedAt: stream.started_at ? new Date(stream.started_at) : null,
           category: "most_watched",
           avgViewers:
             typeof stream.viewer_count === "number" ? stream.viewer_count : 0,
@@ -301,9 +311,18 @@ async function persistCategorySnapshot(
         },
         create: {
           gameId: game.id,
+          platform: "kick",
+          source: "kick_api",
+          platformUserId:
+            stream.broadcaster_user_id === undefined
+              ? null
+              : String(stream.broadcaster_user_id),
           channelName: name,
           avatarUrl: stream.profile_picture ?? null,
           slug: null,
+          streamTitle: stream.stream_title ?? null,
+          language: stream.language ?? null,
+          startedAt: stream.started_at ? new Date(stream.started_at) : null,
           category: "most_watched",
           avgViewers:
             typeof stream.viewer_count === "number" ? stream.viewer_count : 0,

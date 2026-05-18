@@ -484,20 +484,27 @@ model GameBroadcastLanguage {
 }
 
 model GameTopChannel {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gameId      String   @db.Uuid
-  game        Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  channelName String
-  avatarUrl   String?
-  slug        String?
-  category    String
-  avgViewers  Int      @default(0)
-  airtime     Int      @default(0)
-  viewerHours BigInt   @default(0)
-  updatedAt   DateTime @default(now()) @updatedAt
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gameId         String    @db.Uuid
+  game           Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  platform       Platform  @default(twitch)
+  source         String    @default("api")
+  platformUserId String?
+  channelName    String
+  avatarUrl      String?
+  slug           String?
+  streamTitle    String?
+  language       String?
+  startedAt      DateTime?
+  category       String
+  avgViewers     Int       @default(0)
+  airtime        Int       @default(0)
+  viewerHours    BigInt    @default(0)
+  updatedAt      DateTime  @default(now()) @updatedAt
 
-  @@unique([gameId, channelName])
+  @@unique([gameId, platform, source, channelName])
   @@index([gameId, category])
+  @@index([gameId, platform, category])
 }
 
 model GameClip {
@@ -576,7 +583,7 @@ model GamePlatformViewerSnapshot {
 
   createdAt DateTime @default(now())
 
-  @@unique([gameId, platform, bucketStartedAt])
+  @@unique([gameId, platform, source, bucketStartedAt])
   @@index([gameId, bucketStartedAt])
   @@index([platform, bucketStartedAt])
   @@index([platform, platformGameId])

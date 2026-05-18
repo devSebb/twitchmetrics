@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "GamePlatformViewerSnapshot_gameId_platform_source_bucketStarted" RENAME TO "GamePlatformViewerSnapshot_gameId_platform_source_bucketSta_key";

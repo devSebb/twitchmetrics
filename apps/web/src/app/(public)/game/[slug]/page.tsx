@@ -30,7 +30,10 @@ async function getGame(slug: string) {
         orderBy: { percent: "desc" },
         take: 5,
       },
-      topChannels: true,
+      topChannels: {
+        orderBy: [{ avgViewers: "desc" }, { updatedAt: "desc" }],
+        take: 50,
+      },
       clips: {
         orderBy: { viewCount: "desc" },
         take: 8,
@@ -40,6 +43,62 @@ async function getGame(slug: string) {
 
   if (!game) return null;
   return serializeBigInt(game);
+}
+
+function topChannelSourcePriority(source: string | null | undefined): number {
+  switch (source) {
+    case "twitch_api":
+    case "kick_api":
+      return 100;
+    case "streamhatchet_live":
+      return 80;
+    case "api":
+      return 50;
+    default:
+      return 10;
+  }
+}
+
+function selectDisplayTopChannels<
+  T extends {
+    platform?: string | null;
+    source?: string | null;
+    channelName: string;
+    category: string;
+    avgViewers: number;
+  },
+>(channels: T[]): T[] {
+  const byChannel = new Map<string, T>();
+
+  for (const channel of channels) {
+    const key = `${channel.platform ?? "unknown"}:${channel.channelName.toLowerCase()}`;
+    const existing = byChannel.get(key);
+    const shouldReplace =
+      !existing ||
+      topChannelSourcePriority(channel.source) >
+        topChannelSourcePriority(existing.source) ||
+      (topChannelSourcePriority(channel.source) ===
+        topChannelSourcePriority(existing.source) &&
+        channel.avgViewers > existing.avgViewers);
+
+    if (shouldReplace) byChannel.set(key, channel);
+  }
+
+  const deduped = [...byChannel.values()];
+  const mostWatched = deduped
+    .filter((channel) => channel.category === "most_watched")
+    .sort((left, right) => right.avgViewers - left.avgViewers)
+    .slice(0, 6);
+  const emerging = deduped
+    .filter(
+      (channel) =>
+        channel.category === "emerging" ||
+        channel.category === "fastest_growing",
+    )
+    .sort((left, right) => right.avgViewers - left.avgViewers)
+    .slice(0, 5);
+
+  return [...mostWatched, ...emerging];
 }
 
 export async function generateMetadata({
@@ -163,7 +222,7 @@ export default async function GamePage({ params }: PageProps) {
 
       <GameViewerChart slug={game.slug} initialData={chartData} />
 
-      <GameTopChannels channels={game.topChannels} />
+      <GameTopChannels channels={selectDisplayTopChannels(game.topChannels)} />
 
       <GameClips clips={game.clips} />
     </div>

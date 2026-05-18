@@ -51,6 +51,20 @@ function group(rows: GamePlatformMetricRow[]): GamePlatformMetricGroup {
   };
 }
 
+function sourcePriority(source: string): number {
+  switch (source) {
+    case "twitch_api":
+    case "kick_api":
+      return 100;
+    case "streamhatchet_live":
+      return 80;
+    case "api":
+      return 50;
+    default:
+      return 10;
+  }
+}
+
 export async function getGamePlatformMetrics(input: {
   gameId: string;
   fallbackTwitchViewers: number;
@@ -83,21 +97,35 @@ export async function getGamePlatformMetrics(input: {
         snapshotAt: true,
         viewers: true,
         channels: true,
+        source: true,
       },
     }),
   ]);
 
   const latestByPlatform = new Map<
     Platform,
-    { viewers: number; channels: number | null; snapshotAt: Date }
+    {
+      viewers: number;
+      channels: number | null;
+      snapshotAt: Date;
+      source: string;
+    }
   >();
 
   for (const snapshot of platformSnapshots) {
-    if (!latestByPlatform.has(snapshot.platform)) {
+    const existing = latestByPlatform.get(snapshot.platform);
+    const shouldReplace =
+      !existing ||
+      sourcePriority(snapshot.source) > sourcePriority(existing.source) ||
+      (sourcePriority(snapshot.source) === sourcePriority(existing.source) &&
+        snapshot.snapshotAt > existing.snapshotAt);
+
+    if (shouldReplace) {
       latestByPlatform.set(snapshot.platform, {
         viewers: snapshot.viewers,
         channels: snapshot.channels,
         snapshotAt: snapshot.snapshotAt,
+        source: snapshot.source,
       });
     }
   }
@@ -107,6 +135,7 @@ export async function getGamePlatformMetrics(input: {
       viewers: legacySnapshot.twitchViewers,
       channels: legacySnapshot.twitchChannels,
       snapshotAt: legacySnapshot.snapshotAt,
+      source: "twitch_api",
     });
 
     if (legacySnapshot.kickViewers > 0) {
@@ -114,6 +143,7 @@ export async function getGamePlatformMetrics(input: {
         viewers: legacySnapshot.kickViewers,
         channels: legacySnapshot.kickChannels,
         snapshotAt: legacySnapshot.snapshotAt,
+        source: "legacy_game_snapshot",
       });
     }
 
@@ -122,6 +152,7 @@ export async function getGamePlatformMetrics(input: {
         viewers: legacySnapshot.youtubeViewers,
         channels: legacySnapshot.youtubeChannels,
         snapshotAt: legacySnapshot.snapshotAt,
+        source: "legacy_game_snapshot",
       });
     }
   } else if (
@@ -132,6 +163,7 @@ export async function getGamePlatformMetrics(input: {
       viewers: input.fallbackTwitchViewers,
       channels: input.fallbackTwitchChannels,
       snapshotAt: new Date(),
+      source: "game_fallback",
     });
   }
 
