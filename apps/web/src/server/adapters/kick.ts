@@ -28,6 +28,21 @@ export type KickCategory = {
   viewer_count?: number | null;
 };
 
+export type KickLivestream = {
+  broadcaster_user_id?: number | string;
+  category?: KickCategory | null;
+  channel_id?: number | string;
+  custom_tags?: string[];
+  has_mature_content?: boolean;
+  language?: string | null;
+  profile_picture?: string | null;
+  slug?: string;
+  started_at?: string | null;
+  stream_title?: string | null;
+  thumbnail?: string | null;
+  viewer_count?: number | null;
+};
+
 type KickStream = {
   custom_tags?: string[];
   is_live?: boolean;
@@ -78,6 +93,16 @@ type KickCategoriesResponse =
       };
       message?: string;
     };
+
+type KickCategoryResponse = {
+  data?: KickCategory;
+  message?: string;
+};
+
+type KickLivestreamsResponse = {
+  data?: KickLivestream[];
+  message?: string;
+};
 
 type SnapshotExtendedMetrics = CreatorSnapshotData["extendedMetrics"] &
   Record<string, number | bigint | string | null>;
@@ -290,6 +315,40 @@ export async function fetchKickCategories(
       ("pagination" in response ? response.pagination?.next_cursor : null) ??
       null,
   };
+}
+
+export async function fetchKickCategoryById(
+  categoryId: string | number,
+): Promise<KickCategory | null> {
+  const response = await kickApiFetch<KickCategoryResponse>(
+    `/public/v1/categories/${categoryId}`,
+  );
+  return response.data ?? null;
+}
+
+export async function fetchKickLivestreams(input: {
+  broadcasterUserIds?: string[];
+  categoryId?: string | number;
+  language?: string;
+  limit?: number;
+  sort?: "viewer_count" | "started_at";
+}): Promise<KickLivestream[]> {
+  const params: Record<string, string | string[]> = {
+    limit: String(Math.min(Math.max(input.limit ?? 25, 1), 100)),
+  };
+  if (input.broadcasterUserIds?.length) {
+    params.broadcaster_user_id = input.broadcasterUserIds.slice(0, 50);
+  }
+  if (input.categoryId !== undefined)
+    params.category_id = String(input.categoryId);
+  if (input.language) params.language = input.language;
+  if (input.sort) params.sort = input.sort;
+
+  const response = await kickApiFetch<KickLivestreamsResponse>(
+    "/public/v1/livestreams",
+    params,
+  );
+  return response.data ?? [];
 }
 
 export function kickChannelToSnapshot(

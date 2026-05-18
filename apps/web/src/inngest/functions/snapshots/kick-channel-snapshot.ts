@@ -163,7 +163,7 @@ async function snapshotKickBatch(accounts: KickAccount[]) {
 
 export const kickChannelSnapshot = inngest.createFunction(
   { id: "kick-channel-snapshot", concurrency: { limit: 1 } },
-  [{ cron: "15 */6 * * *" }, { event: "snapshots/kick" }],
+  [{ cron: "15 */3 * * *" }, { event: "snapshots/kick" }],
   async ({ step }) => {
     return executeIngestionRun(
       {

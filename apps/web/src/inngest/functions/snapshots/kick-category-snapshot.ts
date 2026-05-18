@@ -2,7 +2,13 @@ import { Prisma, prisma } from "@twitchmetrics/database";
 import { inngest } from "../../client";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
-import { fetchKickCategories, type KickCategory } from "@/server/adapters/kick";
+import {
+  fetchKickCategories,
+  fetchKickCategoryById,
+  fetchKickLivestreams,
+  type KickCategory,
+  type KickLivestream,
+} from "@/server/adapters/kick";
 import { AdapterError } from "@/server/adapters/types";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
@@ -12,6 +18,7 @@ const PAGE_LIMIT = 20;
 const MAX_SEARCH_PAGES = 1;
 const MAX_GAME_SEARCHES = 40;
 const SEARCH_DELAY_MS = 750;
+const MAX_TOP_STREAMS = 10;
 const SNAPSHOT_BUCKET_MS = 30 * 60 * 1000;
 
 type GameMatch = {
@@ -41,6 +48,26 @@ function categoryId(category: KickCategory): string | null {
 
 function categoryTags(category: KickCategory): string[] {
   return Array.isArray(category.tags) ? category.tags.filter(Boolean) : [];
+}
+
+function streamName(stream: KickLivestream): string | null {
+  return stream.slug ?? null;
+}
+
+function streamAirtimeSeconds(stream: KickLivestream, now: Date): number {
+  if (!stream.started_at) return 0;
+  const startedAt = new Date(stream.started_at).getTime();
+  if (!Number.isFinite(startedAt)) return 0;
+  return Math.max(0, Math.floor((now.getTime() - startedAt) / 1000));
+}
+
+function streamViewerHours(
+  stream: KickLivestream,
+  airtimeSeconds: number,
+): bigint {
+  const viewers =
+    typeof stream.viewer_count === "number" ? stream.viewer_count : 0;
+  return BigInt(Math.max(0, Math.round((viewers * airtimeSeconds) / 3600)));
 }
 
 function sleep(ms: number): Promise<void> {
@@ -135,15 +162,50 @@ async function persistCategorySnapshot(
   snapshotAt: Date,
 ) {
   const id = categoryId(category);
-  if (!id || !category.name || typeof category.viewer_count !== "number") {
-    return false;
+  if (!id || !category.name) return null;
+  const categoryName = category.name;
+
+  let detail: KickCategory | null = null;
+  let livestreams: KickLivestream[] = [];
+
+  try {
+    [detail, livestreams] = await Promise.all([
+      fetchKickCategoryById(id),
+      fetchKickLivestreams({
+        categoryId: id,
+        limit: 100,
+        sort: "viewer_count",
+      }),
+    ]);
+  } catch (error) {
+    if (error instanceof AdapterError && error.code === "rate_limited") {
+      log.warn(
+        { categoryId: id, categoryName: category.name },
+        "KICK category metrics rate limited; writing mapping only",
+      );
+    } else {
+      throw error;
+    }
   }
 
+  const enrichedCategory = detail ?? category;
   const tags = categoryTags(category);
   const bucketStartedAt = snapshotBucket(snapshotAt);
+  const categoryViewerCount =
+    typeof enrichedCategory.viewer_count === "number"
+      ? enrichedCategory.viewer_count
+      : null;
+  const livestreamViewerCount = livestreams.reduce(
+    (sum, stream) =>
+      sum + (typeof stream.viewer_count === "number" ? stream.viewer_count : 0),
+    0,
+  );
+  const viewerCount = categoryViewerCount ?? livestreamViewerCount;
+  const hasViewerCount = viewerCount > 0 || categoryViewerCount !== null;
+  const channelCount = livestreams.length;
 
-  await prisma.$transaction([
-    prisma.platformGameMapping.upsert({
+  await prisma.$transaction(async (tx) => {
+    await tx.platformGameMapping.upsert({
       where: {
         platform_platformGameId: {
           platform: "kick",
@@ -152,8 +214,8 @@ async function persistCategorySnapshot(
       },
       update: {
         gameId: game.id,
-        platformGameName: category.name,
-        thumbnailUrl: category.thumbnail ?? null,
+        platformGameName: categoryName,
+        thumbnailUrl: enrichedCategory.thumbnail ?? category.thumbnail ?? null,
         tags,
         source: "kick_api",
         confidence: "exact_name",
@@ -163,52 +225,95 @@ async function persistCategorySnapshot(
         gameId: game.id,
         platform: "kick",
         platformGameId: id,
-        platformGameName: category.name,
-        thumbnailUrl: category.thumbnail ?? null,
+        platformGameName: categoryName,
+        thumbnailUrl: enrichedCategory.thumbnail ?? category.thumbnail ?? null,
         tags,
         source: "kick_api",
         confidence: "exact_name",
         firstSeenAt: snapshotAt,
         lastSeenAt: snapshotAt,
       },
-    }),
-    prisma.gamePlatformViewerSnapshot.upsert({
-      where: {
-        gameId_platform_bucketStartedAt: {
+    });
+
+    if (hasViewerCount) {
+      await tx.gamePlatformViewerSnapshot.upsert({
+        where: {
+          gameId_platform_bucketStartedAt: {
+            gameId: game.id,
+            platform: "kick",
+            bucketStartedAt,
+          },
+        },
+        update: {
+          platformGameId: id,
+          platformGameName: categoryName,
+          snapshotAt,
+          viewers: viewerCount,
+          channels: channelCount,
+          source: "kick_api",
+          metadata: {
+            tags,
+            thumbnail: enrichedCategory.thumbnail ?? category.thumbnail ?? null,
+            viewerCountSource:
+              categoryViewerCount === null ? "livestreams" : "category_detail",
+          } satisfies Prisma.InputJsonValue,
+        },
+        create: {
           gameId: game.id,
           platform: "kick",
+          platformGameId: id,
+          platformGameName: categoryName,
+          snapshotAt,
           bucketStartedAt,
+          viewers: viewerCount,
+          channels: channelCount,
+          source: "kick_api",
+          metadata: {
+            tags,
+            thumbnail: enrichedCategory.thumbnail ?? category.thumbnail ?? null,
+            viewerCountSource:
+              categoryViewerCount === null ? "livestreams" : "category_detail",
+          } satisfies Prisma.InputJsonValue,
         },
-      },
-      update: {
-        platformGameId: id,
-        platformGameName: category.name,
-        snapshotAt,
-        viewers: category.viewer_count,
-        channels: null,
-        source: "kick_api",
-        metadata: {
-          tags,
-          thumbnail: category.thumbnail ?? null,
-        } satisfies Prisma.InputJsonValue,
-      },
-      create: {
-        gameId: game.id,
-        platform: "kick",
-        platformGameId: id,
-        platformGameName: category.name,
-        snapshotAt,
-        bucketStartedAt,
-        viewers: category.viewer_count,
-        channels: null,
-        source: "kick_api",
-        metadata: {
-          tags,
-          thumbnail: category.thumbnail ?? null,
-        } satisfies Prisma.InputJsonValue,
-      },
-    }),
-  ]);
+      });
+    }
+
+    for (const stream of livestreams.slice(0, MAX_TOP_STREAMS)) {
+      const name = streamName(stream);
+      if (!name) continue;
+      const airtime = streamAirtimeSeconds(stream, snapshotAt);
+      await tx.gameTopChannel.upsert({
+        where: {
+          gameId_channelName: {
+            gameId: game.id,
+            channelName: name,
+          },
+        },
+        update: {
+          avatarUrl: stream.profile_picture ?? null,
+          slug: null,
+          category: "most_watched",
+          avgViewers:
+            typeof stream.viewer_count === "number" ? stream.viewer_count : 0,
+          airtime,
+          viewerHours: streamViewerHours(stream, airtime),
+          updatedAt: snapshotAt,
+        },
+        create: {
+          gameId: game.id,
+          channelName: name,
+          avatarUrl: stream.profile_picture ?? null,
+          slug: null,
+          category: "most_watched",
+          avgViewers:
+            typeof stream.viewer_count === "number" ? stream.viewer_count : 0,
+          airtime,
+          viewerHours: streamViewerHours(stream, airtime),
+          updatedAt: snapshotAt,
+        },
+      });
+    }
+  });
 
   try {
     await cacheInvalidate(`game:${game.slug}`);
@@ -217,7 +322,7 @@ async function persistCategorySnapshot(
     // Non-blocking.
   }
 
-  return true;
+  return { mapped: true, snapshotted: hasViewerCount };
 }
 
 export const kickCategorySnapshot = inngest.createFunction(
@@ -238,9 +343,11 @@ export const kickCategorySnapshot = inngest.createFunction(
             written: 0,
             skipped: 0,
             failed: 0,
-            reason: "KICK API credentials are not configured",
           };
-          log.warn(result, "Skipping KICK category snapshot");
+          log.warn(
+            { ...result, reason: "KICK API credentials are not configured" },
+            "Skipping KICK category snapshot",
+          );
           return {
             result,
             summary: {
@@ -271,6 +378,7 @@ export const kickCategorySnapshot = inngest.createFunction(
 
         const snapshotAt = new Date();
         let written = 0;
+        let snapshotted = 0;
         let skipped = 0;
         let failed = 0;
 
@@ -288,13 +396,14 @@ export const kickCategorySnapshot = inngest.createFunction(
             }
 
             try {
-              const didWrite = await persistCategorySnapshot(
+              const result = await persistCategorySnapshot(
                 category,
                 game,
                 snapshotAt,
               );
-              if (didWrite) {
+              if (result?.mapped) {
                 written++;
+                if (result.snapshotted) snapshotted++;
               } else {
                 skipped++;
               }
@@ -316,6 +425,7 @@ export const kickCategorySnapshot = inngest.createFunction(
         const result = {
           scanned: categories.length,
           written,
+          snapshotted,
           skipped,
           failed,
         };
