@@ -4,6 +4,7 @@ import { prisma } from "@twitchmetrics/database";
 import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { CreatorDetailView } from "@/components/manager/CreatorDetailView";
+import { ROSTER_ACTIVE_FILTER } from "@/server/services/roster-access";
 import type { Platform } from "@twitchmetrics/database";
 
 type PageProps = {
@@ -51,12 +52,14 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
 
   if (!profile) notFound();
 
-  // Verify the talent manager has access to this creator
+  // Verify the talent manager has ACTIVE access. Pending invites must not see
+  // the private detail view; ROSTER_ACTIVE_FILTER enforces the dual invariant
+  // (status === "active" && revokedAt === null).
   const access = await prisma.talentManagerAccess.findFirst({
     where: {
       managerId: session.user.id,
       creatorProfileId: profile.id,
-      revokedAt: null,
+      ...ROSTER_ACTIVE_FILTER,
     },
   });
 

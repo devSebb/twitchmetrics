@@ -344,6 +344,12 @@ model ClaimRequest {
 // TALENT MANAGER ACCESS
 // ============================================================
 
+enum RosterAccessStatus {
+  pending
+  active
+  declined
+}
+
 model TalentManagerAccess {
   id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   managerId        String         @db.Uuid
@@ -356,12 +362,21 @@ model TalentManagerAccess {
   canExportData    Boolean @default(false)
   canManageBrands  Boolean @default(false)
 
+  // Invite-only state machine: every row starts pending. Only rosterInvite.accept can flip to active.
+  status          RosterAccessStatus @default(pending)
+  inviteTokenHash String?            @unique
+  inviteExpiresAt DateTime?
+  acceptedAt      DateTime?
+  declinedAt      DateTime?
+
   grantedAt DateTime  @default(now())
   grantedBy String    @db.Uuid
   revokedAt DateTime?
 
   @@unique([managerId, creatorProfileId])
   @@index([managerId])
+  @@index([status, revokedAt])
+  @@index([inviteExpiresAt])
 }
 
 // ============================================================

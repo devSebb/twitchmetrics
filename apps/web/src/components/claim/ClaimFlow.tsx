@@ -26,6 +26,12 @@ type MethodChoice = "oauth" | "bio_challenge" | "manual_review";
 type ClaimFlowProps = {
   profile: ClaimableProfile;
   autoResumeOAuth?: boolean;
+  /**
+   * If present, after the claim is approved the user is redirected to
+   * /invite/roster/<rosterInvite> instead of the default dashboard. Also
+   * preserved through the OAuth callbackUrl round-trip.
+   */
+  rosterInvite?: string;
 };
 
 const PLATFORM_BIO_INSTRUCTIONS: Record<string, string> = {
@@ -76,7 +82,11 @@ function ProfileCard({ profile }: { profile: ClaimableProfile }) {
   );
 }
 
-export function ClaimFlow({ profile, autoResumeOAuth }: ClaimFlowProps) {
+export function ClaimFlow({
+  profile,
+  autoResumeOAuth,
+  rosterInvite,
+}: ClaimFlowProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(
     autoResumeOAuth ? "action" : "confirm",
@@ -475,9 +485,12 @@ export function ClaimFlow({ profile, autoResumeOAuth }: ClaimFlowProps) {
                   onClick={() => {
                     const provider =
                       connectionQuery.data?.provider ?? profile.primaryPlatform;
-                    void signIn(provider, {
-                      callbackUrl: `/claim?profile=${profile.id}&resume=oauth`,
-                    });
+                    const callbackUrl = `/claim?profile=${profile.id}&resume=oauth${
+                      rosterInvite
+                        ? `&rosterInvite=${encodeURIComponent(rosterInvite)}`
+                        : ""
+                    }`;
+                    void signIn(provider, { callbackUrl });
                   }}
                   className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors"
                 >
@@ -639,6 +652,16 @@ export function ClaimFlow({ profile, autoResumeOAuth }: ClaimFlowProps) {
   const resultMethod = status?.method ?? selectedMethod;
 
   if (resultStatus === "approved") {
+    const postClaimDestination = rosterInvite
+      ? `/invite/roster/${rosterInvite}`
+      : "/dashboard/home";
+    const ctaLabel = rosterInvite
+      ? "Continue to invitation"
+      : "Go to Dashboard";
+    const successCopy = rosterInvite
+      ? "Your claim was approved. Now accept the manager invitation."
+      : "Your claim was approved. Access creator tools and analytics from your dashboard.";
+
     return (
       <div className="rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 p-6">
         <div className="flex items-center gap-3 mb-3">
@@ -661,20 +684,17 @@ export function ClaimFlow({ profile, autoResumeOAuth }: ClaimFlowProps) {
             <h2 className="text-xl font-bold text-[#86efac]">
               You now manage {profile.displayName}!
             </h2>
-            <p className="text-sm text-[#DBDEE1]">
-              Your claim was approved. Access creator tools and analytics from
-              your dashboard.
-            </p>
+            <p className="text-sm text-[#DBDEE1]">{successCopy}</p>
           </div>
         </div>
         <button
           type="button"
-          onClick={() => router.push("/dashboard/home")}
+          onClick={() => router.push(postClaimDestination)}
           className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors"
         >
-          Go to Dashboard
+          {ctaLabel}
         </button>
-        <AutoRedirect to="/dashboard/home" delay={5000} />
+        <AutoRedirect to={postClaimDestination} delay={5000} />
       </div>
     );
   }

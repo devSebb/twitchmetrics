@@ -5,6 +5,7 @@ import { platformRouter } from "./platform";
 import { snapshotRouter } from "./snapshot";
 import { claimRouter } from "./claim";
 import { talentManagerRouter } from "./talentManager";
+import { rosterInviteRouter } from "./rosterInvite";
 import { adminRouter } from "./admin";
 import { gameRouter } from "./game";
 
@@ -17,6 +18,7 @@ export const appRouter = router({
   snapshot: snapshotRouter,
   claim: claimRouter,
   talentManager: talentManagerRouter,
+  rosterInvite: rosterInviteRouter,
   admin: adminRouter,
   game: gameRouter,
 });

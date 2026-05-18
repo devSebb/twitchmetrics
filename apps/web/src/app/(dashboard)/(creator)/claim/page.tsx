@@ -8,7 +8,11 @@ export const metadata: Metadata = {
 };
 
 type ClaimPageProps = {
-  searchParams: Promise<{ profile?: string; resume?: string }>;
+  searchParams: Promise<{
+    profile?: string;
+    resume?: string;
+    rosterInvite?: string;
+  }>;
 };
 
 export default async function ClaimProfilePage({
@@ -17,6 +21,7 @@ export default async function ClaimProfilePage({
   const params = await searchParams;
   const profileId = params.profile;
   const resumeOAuth = params.resume === "oauth";
+  const rosterInvite = params.rosterInvite;
 
   if (!profileId) {
     return (
@@ -77,6 +82,7 @@ export default async function ClaimProfilePage({
           totalFollowers: profile.totalFollowers.toString(),
         }}
         autoResumeOAuth={resumeOAuth}
+        {...(rosterInvite !== undefined ? { rosterInvite } : {})}
       />
     </div>
   );

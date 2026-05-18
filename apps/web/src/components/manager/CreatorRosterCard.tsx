@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
@@ -32,28 +33,53 @@ type Creator = {
   growthRollups: GrowthRollup[];
 };
 
+export type InviteState = "active" | "pending" | "expired";
+
 type CreatorRosterCardProps = {
   creator: Creator;
+  accessId: string;
+  inviteState: InviteState;
   grantedAt: string | Date;
+  inviteExpiresAt: string | Date | null;
   onRemove: () => void;
   isRemoving: boolean;
 };
 
 export function CreatorRosterCard({
   creator,
+  accessId,
+  inviteState,
   grantedAt,
+  inviteExpiresAt,
   onRemove,
   isRemoving,
 }: CreatorRosterCardProps) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [regeneratedUrl, setRegeneratedUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const avatarSrc = getSafeImageSrc(creator.avatarUrl);
   const primaryGrowth =
     creator.growthRollups.find((g) => g.platform === creator.primaryPlatform) ??
     creator.growthRollups[0];
 
-  // DB stores lowercase "up"/"down"/"flat"
   const trendUp = primaryGrowth?.trendDirection === "up";
   const trendDown = primaryGrowth?.trendDirection === "down";
+
+  const regenerateMutation = trpc.talentManager.regenerateInvite.useMutation({
+    onSuccess: (data) => {
+      setRegeneratedUrl(data.inviteUrl);
+    },
+  });
+
+  const isPending = inviteState === "pending";
+  const isExpired = inviteState === "expired";
+  const isActive = inviteState === "active";
+
+  // Click target: active rows go to the private manager detail page (gated by
+  // ROSTER_ACTIVE_FILTER server-side); pending/expired go to the public profile.
+  const profileHref = isActive
+    ? `/talent-manager/creator/${creator.slug}`
+    : `/creator/${creator.slug}`;
 
   const handleRemoveClick = () => {
     if (confirmingRemove) {
@@ -64,28 +90,68 @@ export function CreatorRosterCard({
     }
   };
 
+  const handleRegenerate = () => {
+    regenerateMutation.mutate({ accessId });
+  };
+
+  const handleCopyUrl = async () => {
+    if (!regeneratedUrl) return;
+    try {
+      await navigator.clipboard.writeText(regeneratedUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may be unavailable.
+    }
+  };
+
   return (
-    <Card className="flex flex-col transition-colors hover:border-[#4E5058]">
+    <Card
+      className={cn(
+        "flex flex-col transition-colors",
+        isActive && "hover:border-[#4E5058]",
+        isPending && "border-dashed border-[#3F4147] bg-[#1E1F22]/60",
+        isExpired &&
+          "border-dashed border-[#3F4147] bg-[#1E1F22]/40 opacity-90",
+      )}
+    >
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        {avatarSrc ? (
-          <Image
-            src={avatarSrc}
-            alt={creator.displayName}
-            width={48}
-            height={48}
-            className="rounded-full"
-          />
-        ) : (
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#383A40] text-lg font-bold text-[#F2F3F5]">
-            {creator.displayName.charAt(0).toUpperCase()}
-          </div>
-        )}
+        <Link href={profileHref} className="shrink-0">
+          {avatarSrc ? (
+            <Image
+              src={avatarSrc}
+              alt={creator.displayName}
+              width={48}
+              height={48}
+              className="rounded-full"
+            />
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#383A40] text-lg font-bold text-[#F2F3F5]">
+              {creator.displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </Link>
 
         <div className="flex-1 min-w-0">
-          <h3 className="truncate text-sm font-semibold text-[#F2F3F5]">
-            {creator.displayName}
-          </h3>
+          <div className="flex items-center gap-2">
+            <Link
+              href={profileHref}
+              className="truncate text-sm font-semibold text-[#F2F3F5] hover:underline"
+            >
+              {creator.displayName}
+            </Link>
+            {isPending && (
+              <span className="shrink-0 rounded-full bg-[#f59e0b]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#fcd34d]">
+                Pending
+              </span>
+            )}
+            {isExpired && (
+              <span className="shrink-0 rounded-full bg-[#ef4444]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#fca5a5]">
+                Expired
+              </span>
+            )}
+          </div>
           <p className="text-xs text-[#949BA4]">/{creator.slug}</p>
 
           {creator.primaryPlatform && (
@@ -100,7 +166,7 @@ export function CreatorRosterCard({
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Public stats — same for active/pending/expired */}
       <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[#3F4147] pt-3">
         <div>
           <p className="text-[10px] uppercase tracking-wider text-[#949BA4]">
@@ -161,20 +227,65 @@ export function CreatorRosterCard({
         </div>
       </div>
 
-      {/* Last synced */}
-      {creator.lastSnapshotAt && (
-        <p className="mt-2 text-[10px] text-[#949BA4]">
-          Synced {formatRelativeTime(creator.lastSnapshotAt)}
-        </p>
+      {/* Last synced / Expiry */}
+      <div className="mt-2 space-y-0.5">
+        {creator.lastSnapshotAt && (
+          <p className="text-[10px] text-[#949BA4]">
+            Synced {formatRelativeTime(creator.lastSnapshotAt)}
+          </p>
+        )}
+        {isPending && inviteExpiresAt && (
+          <p className="text-[10px] text-[#fcd34d]">
+            Expires {new Date(inviteExpiresAt).toLocaleDateString()}
+          </p>
+        )}
+        {isExpired && inviteExpiresAt && (
+          <p className="text-[10px] text-[#fca5a5]">
+            Expired {formatRelativeTime(inviteExpiresAt)}
+          </p>
+        )}
+      </div>
+
+      {/* Regenerated URL display */}
+      {regeneratedUrl && (
+        <div className="mt-3 rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/5 p-2">
+          <p className="mb-1 text-[10px] font-medium text-[#86efac]">
+            New link generated
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              readOnly
+              value={regeneratedUrl}
+              onFocus={(e) => e.currentTarget.select()}
+              className="flex-1 rounded border border-[#3F4147] bg-[#1E1F22] px-2 py-1 text-[10px] text-[#DBDEE1] outline-none focus:border-[#E32C19]/50"
+            />
+            <Button variant="ghost" size="sm" onClick={handleCopyUrl}>
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Actions */}
       <div className="mt-auto flex items-center gap-2 border-t border-[#3F4147] pt-3 mt-3">
-        <Link href={`/creator/${creator.slug}`} className="flex-1">
-          <Button variant="secondary" size="sm" className="w-full">
-            View Profile
+        {isActive ? (
+          <Link href={profileHref} className="flex-1">
+            <Button variant="secondary" size="sm" className="w-full">
+              Manage
+            </Button>
+          </Link>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="flex-1"
+            onClick={handleRegenerate}
+            disabled={regenerateMutation.isPending}
+          >
+            {regenerateMutation.isPending ? "…" : "Regenerate link"}
           </Button>
-        </Link>
+        )}
 
         {confirmingRemove ? (
           <div className="flex items-center gap-1">
@@ -204,7 +315,7 @@ export function CreatorRosterCard({
             disabled={isRemoving}
             className="text-[#949BA4] hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
           >
-            Remove
+            {isActive ? "Remove" : "Cancel"}
           </Button>
         )}
       </div>
