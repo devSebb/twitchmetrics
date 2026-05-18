@@ -99,7 +99,7 @@ export type StreamHatchetLiveGame = {
 };
 
 export class StreamHatchetError extends Error {
-  readonly code: "missing_token" | "rate_limited" | "api_error";
+  readonly code: "missing_token" | "rate_limited" | "api_error" | "timeout";
   readonly status: number | undefined;
   readonly retryAfterSeconds: number | undefined;
 
@@ -177,9 +177,21 @@ async function streamHatchetFetch<T>(
   path: string,
   params: Record<string, string | number | undefined> = {},
 ): Promise<T> {
-  const response = await fetch(url(path, params), {
-    headers: { accept: "application/json" },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url(path, params), {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new StreamHatchetError(
+        "timeout",
+        "StreamHatchet request timed out",
+      );
+    }
+    throw error;
+  }
 
   if (response.status === 429) {
     throw new StreamHatchetError("rate_limited", "StreamHatchet rate limited", {

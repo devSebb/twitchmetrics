@@ -18,9 +18,9 @@ const log = createLogger("streamhatchet-game-snapshot");
 
 const PLATFORMS = ["twitch", "ytg", "kick"] as const;
 const DISCOVERY_LIMIT = 100;
-const LIVE_CHANNEL_GAME_LIMIT = 25;
-const LIVE_CHANNEL_LIMIT = 25;
-const LIVE_CHANNEL_DELAY_MS = 2_500;
+const LIVE_CHANNEL_GAME_LIMIT = 10;
+const LIVE_CHANNEL_TARGET_POOL = 100;
+const LIVE_CHANNEL_LIMIT = 15;
 const LIVE_BUCKET_MS = 30 * 60 * 1000;
 const STREAMHATCHET_MAPPING_PREFIX = "streamhatchet:";
 
@@ -54,10 +54,6 @@ function normalizeName(value: string): string {
 
 function snapshotBucket(date: Date): Date {
   return new Date(Math.floor(date.getTime() / LIVE_BUCKET_MS) * LIVE_BUCKET_MS);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function roundMetric(value: number | null | undefined): number {
@@ -141,9 +137,9 @@ async function loadGames() {
 }
 
 async function loadTopLiveChannelTargets() {
-  return prisma.game.findMany({
+  const games = await prisma.game.findMany({
     orderBy: [{ currentViewers: "desc" }, { avgViewers7d: "desc" }],
-    take: LIVE_CHANNEL_GAME_LIMIT,
+    take: LIVE_CHANNEL_TARGET_POOL,
     select: {
       id: true,
       name: true,
@@ -155,6 +151,21 @@ async function loadTopLiveChannelTargets() {
       releaseDate: true,
     },
   });
+
+  const batchCount = Math.max(
+    1,
+    Math.ceil(games.length / LIVE_CHANNEL_GAME_LIMIT),
+  );
+  const batchIndex = Math.floor(Date.now() / (60 * 60 * 1000)) % batchCount;
+  const offset = batchIndex * LIVE_CHANNEL_GAME_LIMIT;
+
+  return {
+    games: games.slice(offset, offset + LIVE_CHANNEL_GAME_LIMIT),
+    batchIndex,
+    batchCount,
+    offset,
+    poolSize: games.length,
+  };
 }
 
 async function persistDiscoveryRow(
@@ -433,38 +444,59 @@ export const streamHatchetGameDiscoverySnapshot = inngest.createFunction(
           }),
         )) as StreamHatchetGameAggregate[];
 
-        const touchedGames: GameMatch[] = [];
-        let written = 0;
-        let skipped = 0;
         const snapshotAt = new Date();
 
-        await step.run("persist-game-discovery", async () => {
-          for (const row of rows) {
-            const match = matchDiscoveryGame(row, byName);
-            if (!match) {
-              skipped++;
-              continue;
+        const persistResult = (await step.run(
+          "persist-game-discovery",
+          async () => {
+            const touchedGamesById = new Map<string, Pick<GameMatch, "slug">>();
+            let written = 0;
+            let skipped = 0;
+
+            for (const row of rows) {
+              const match = matchDiscoveryGame(row, byName);
+              if (!match) {
+                skipped++;
+                continue;
+              }
+
+              await persistDiscoveryRow(
+                row,
+                match.game,
+                match.confidence,
+                snapshotAt,
+              );
+              touchedGamesById.set(match.game.id, { slug: match.game.slug });
+              written++;
             }
 
-            await persistDiscoveryRow(
-              row,
-              match.game,
-              match.confidence,
-              snapshotAt,
-            );
-            touchedGames.push(match.game);
-            written++;
-          }
-        });
+            return {
+              written,
+              skipped,
+              touchedGames: [...touchedGamesById.values()],
+            };
+          },
+        )) as {
+          written: number;
+          skipped: number;
+          touchedGames: Array<Pick<GameMatch, "slug">>;
+        };
 
-        await step.run("invalidate-games", () => invalidateGames(touchedGames));
+        await step.run("invalidate-games", () =>
+          invalidateGames(persistResult.touchedGames),
+        );
 
         return {
-          result: { scanned: rows.length, written, skipped, failed: 0 },
+          result: {
+            scanned: rows.length,
+            written: persistResult.written,
+            skipped: persistResult.skipped,
+            failed: 0,
+          },
           summary: {
             recordsScanned: rows.length,
-            recordsWritten: written,
-            recordsSkipped: skipped,
+            recordsWritten: persistResult.written,
+            recordsSkipped: persistResult.skipped,
             recordsFailed: 0,
           },
         };
@@ -495,10 +527,11 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
           return missingCredentialsResult();
         }
 
-        const games = (await step.run(
+        const targetBatch = (await step.run(
           "load-live-channel-targets",
           loadTopLiveChannelTargets,
-        )) as GameMatch[];
+        )) as Awaited<ReturnType<typeof loadTopLiveChannelTargets>>;
+        const games = targetBatch.games;
         const snapshotAt = new Date();
         const touchedGames: GameMatch[] = [];
         let scanned = 0;
@@ -508,7 +541,9 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
         let rateLimited = false;
 
         for (const [index, game] of games.entries()) {
-          if (index > 0) await sleep(LIVE_CHANNEL_DELAY_MS);
+          if (index > 0) {
+            await step.sleep(`streamhatchet-live-channel-pause-${index}`, "2s");
+          }
 
           try {
             const channels = (await step.run(
@@ -528,16 +563,27 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
             touchedGames.push(game);
             written += channels.length;
           } catch (error) {
-            if (
-              error instanceof StreamHatchetError &&
-              error.code === "rate_limited"
-            ) {
-              rateLimited = true;
-              log.warn(
-                { game: game.name, retryAfterSeconds: error.retryAfterSeconds },
-                "StreamHatchet live channels rate limited; stopping early",
-              );
-              break;
+            if (error instanceof StreamHatchetError) {
+              if (error.code === "rate_limited") {
+                rateLimited = true;
+                log.warn(
+                  {
+                    game: game.name,
+                    retryAfterSeconds: error.retryAfterSeconds,
+                  },
+                  "StreamHatchet live channels rate limited; stopping early",
+                );
+                break;
+              }
+
+              if (error.code === "timeout") {
+                skipped++;
+                log.warn(
+                  { game: game.name },
+                  "StreamHatchet live channels request timed out; skipping game",
+                );
+                continue;
+              }
             }
 
             failed++;
@@ -557,7 +603,14 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
             recordsWritten: written,
             recordsSkipped: skipped,
             recordsFailed: failed,
-            metadata: { rateLimited },
+            metadata: {
+              rateLimited,
+              batchIndex: targetBatch.batchIndex,
+              batchCount: targetBatch.batchCount,
+              offset: targetBatch.offset,
+              poolSize: targetBatch.poolSize,
+              requestedGames: games.map((game) => game.name),
+            },
           },
         };
       },
