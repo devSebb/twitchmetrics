@@ -59,15 +59,23 @@ type KickChannelsResponse = {
 
 type KickCategoriesResponse =
   | {
-      data?: {
-        categories?: KickCategory[];
-        cursor?: string | null;
+      data?:
+        | KickCategory[]
+        | {
+            categories?: KickCategory[];
+            cursor?: string | null;
+          };
+      pagination?: {
+        next_cursor?: string | null;
       };
       message?: string;
     }
   | {
       categories?: KickCategory[];
       cursor?: string | null;
+      pagination?: {
+        next_cursor?: string | null;
+      };
       message?: string;
     };
 
@@ -267,14 +275,20 @@ export async function fetchKickCategories(
   if ("categories" in response) {
     return {
       categories: response.categories ?? [],
-      cursor: response.cursor ?? null,
+      cursor: response.cursor ?? response.pagination?.next_cursor ?? null,
     };
   }
 
   const data = "data" in response ? response.data : undefined;
+  const categories = Array.isArray(data) ? data : (data?.categories ?? []);
+  const dataCursor = Array.isArray(data) ? null : (data?.cursor ?? null);
+
   return {
-    categories: data?.categories ?? [],
-    cursor: data?.cursor ?? null,
+    categories,
+    cursor:
+      dataCursor ??
+      ("pagination" in response ? response.pagination?.next_cursor : null) ??
+      null,
   };
 }
 

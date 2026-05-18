@@ -8,13 +8,19 @@ import { executeIngestionRun } from "@/server/services/ingestion/runs";
 const log = createLogger("kick-category-snapshot");
 
 const PAGE_LIMIT = 100;
-const MAX_PAGES = 20;
+const MAX_SEARCH_PAGES = 2;
+const MAX_GAME_SEARCHES = 250;
 const SNAPSHOT_BUCKET_MS = 30 * 60 * 1000;
 
 type GameMatch = {
   id: string;
   name: string;
   slug: string;
+};
+
+type GameSearchTarget = GameMatch & {
+  currentViewers: number;
+  avgViewers7d: number;
 };
 
 function normalizeName(value: string): string {
@@ -35,30 +41,45 @@ function categoryTags(category: KickCategory): string[] {
   return Array.isArray(category.tags) ? category.tags.filter(Boolean) : [];
 }
 
-async function fetchAllCategories(): Promise<KickCategory[]> {
-  const categories: KickCategory[] = [];
-  let cursor: string | null = null;
+async function fetchCategoriesForGames(
+  games: GameSearchTarget[],
+): Promise<KickCategory[]> {
+  const categoriesById = new Map<string, KickCategory>();
 
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const result = await fetchKickCategories({
-      limit: PAGE_LIMIT,
-      cursor,
-    });
-    categories.push(...result.categories);
-    if (!result.cursor) break;
-    cursor = result.cursor;
+  for (const game of games.slice(0, MAX_GAME_SEARCHES)) {
+    let cursor: string | null = null;
+
+    for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
+      const result = await fetchKickCategories({
+        limit: PAGE_LIMIT,
+        cursor,
+        search: game.name,
+      });
+
+      for (const category of result.categories) {
+        const id = categoryId(category);
+        if (id) categoriesById.set(id, category);
+      }
+
+      if (!result.cursor) break;
+      cursor = result.cursor;
+    }
   }
 
-  return categories;
+  return [...categoriesById.values()];
 }
 
 async function loadGameMatches() {
   const [games, existingMappings] = await Promise.all([
     prisma.game.findMany({
+      orderBy: [{ currentViewers: "desc" }, { avgViewers7d: "desc" }],
+      take: MAX_GAME_SEARCHES,
       select: {
         id: true,
         name: true,
         slug: true,
+        currentViewers: true,
+        avgViewers7d: true,
       },
     }),
     prisma.platformGameMapping.findMany({
@@ -77,6 +98,7 @@ async function loadGameMatches() {
   ]);
 
   return {
+    games,
     byName: new Map(games.map((game) => [normalizeName(game.name), game])),
     byKickId: new Map(
       existingMappings.map((mapping) => [mapping.platformGameId, mapping.game]),
@@ -207,10 +229,13 @@ export const kickCategorySnapshot = inngest.createFunction(
           };
         }
 
-        const [categories, matches] = (await Promise.all([
-          step.run("fetch-kick-categories", fetchAllCategories),
-          step.run("load-game-matches", loadGameMatches),
-        ])) as [KickCategory[], Awaited<ReturnType<typeof loadGameMatches>>];
+        const matches = (await step.run(
+          "load-game-matches",
+          loadGameMatches,
+        )) as Awaited<ReturnType<typeof loadGameMatches>>;
+        const categories = (await step.run("fetch-kick-categories", () =>
+          fetchCategoriesForGames(matches.games),
+        )) as KickCategory[];
 
         const snapshotAt = new Date();
         let written = 0;
