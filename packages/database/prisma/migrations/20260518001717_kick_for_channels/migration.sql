@@ -1,0 +1,8 @@
+-- RenameIndex
+ALTER INDEX "ChannelGameDailyRollup_platform_date_gameName_minutesWatched_id" RENAME TO "ChannelGameDailyRollup_platform_date_gameName_minutesWatche_idx";
+
+-- RenameIndex
+ALTER INDEX "ChannelGameDailyRollup_source_platform_date_platformUserId_game" RENAME TO "ChannelGameDailyRollup_source_platform_date_platformUserId__key";
+
+-- RenameIndex
+ALTER INDEX "StreamSessionFact_source_platform_platformUserId_streamBeginsAt" RENAME TO "StreamSessionFact_source_platform_platformUserId_streamBegi_key";

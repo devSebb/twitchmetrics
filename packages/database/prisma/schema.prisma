@@ -418,6 +418,8 @@ model Game {
   updatedAt DateTime @updatedAt
 
   viewerSnapshots    GameViewerSnapshot[]
+  platformMappings   PlatformGameMapping[]
+  platformSnapshots  GamePlatformViewerSnapshot[]
   broadcastLanguages GameBroadcastLanguage[]
   topChannels        GameTopChannel[]
   clips              GameClip[]
@@ -425,6 +427,32 @@ model Game {
   @@index([currentViewers(sort: Desc)])
   @@index([name])
   @@index([vertical, currentViewers(sort: Desc)])
+}
+
+model PlatformGameMapping {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  gameId String @db.Uuid
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  platform         Platform
+  platformGameId   String
+  platformGameName String
+  platformSlug     String?
+  thumbnailUrl     String?
+  tags             String[] @default([])
+
+  source     String @default("api")
+  confidence String @default("exact_name")
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([platform, platformGameId])
+  @@index([gameId, platform])
+  @@index([platform, platformGameName])
 }
 
 model GameBroadcastLanguage {
@@ -511,6 +539,32 @@ model GameViewerSnapshot {
 
   @@index([gameId, snapshotAt])
   @@index([snapshotAt])
+}
+
+model GamePlatformViewerSnapshot {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  gameId String @db.Uuid
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  platform         Platform
+  platformGameId   String?
+  platformGameName String?
+
+  snapshotAt      DateTime @default(now())
+  bucketStartedAt DateTime
+
+  viewers  Int
+  channels Int?
+  source   String @default("api")
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, platform, bucketStartedAt])
+  @@index([gameId, bucketStartedAt])
+  @@index([platform, bucketStartedAt])
+  @@index([platform, platformGameId])
 }
 
 // ============================================================

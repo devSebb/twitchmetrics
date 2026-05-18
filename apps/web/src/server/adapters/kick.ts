@@ -20,10 +20,12 @@ type KickTokenResponse = {
   token_type?: string;
 };
 
-type KickCategory = {
+export type KickCategory = {
   id?: number;
   name?: string;
   thumbnail?: string | null;
+  tags?: string[];
+  viewer_count?: number | null;
 };
 
 type KickStream = {
@@ -54,6 +56,20 @@ type KickChannelsResponse = {
   data?: KickChannel[];
   message?: string;
 };
+
+type KickCategoriesResponse =
+  | {
+      data?: {
+        categories?: KickCategory[];
+        cursor?: string | null;
+      };
+      message?: string;
+    }
+  | {
+      categories?: KickCategory[];
+      cursor?: string | null;
+      message?: string;
+    };
 
 type SnapshotExtendedMetrics = CreatorSnapshotData["extendedMetrics"] &
   Record<string, number | bigint | string | null>;
@@ -228,6 +244,38 @@ export async function fetchKickChannelsBySlugs(
     },
   );
   return response.data ?? [];
+}
+
+export async function fetchKickCategories(
+  input: {
+    limit?: number;
+    cursor?: string | null;
+    search?: string;
+  } = {},
+): Promise<{ categories: KickCategory[]; cursor: string | null }> {
+  const params: Record<string, string> = {
+    limit: String(Math.min(Math.max(input.limit ?? 100, 1), 100)),
+  };
+  if (input.cursor) params.cursor = input.cursor;
+  if (input.search) params.search = input.search;
+
+  const response = await kickApiFetch<KickCategoriesResponse>(
+    "/public/v2/categories",
+    params,
+  );
+
+  if ("categories" in response) {
+    return {
+      categories: response.categories ?? [],
+      cursor: response.cursor ?? null,
+    };
+  }
+
+  const data = "data" in response ? response.data : undefined;
+  return {
+    categories: data?.categories ?? [],
+    cursor: data?.cursor ?? null,
+  };
 }
 
 export function kickChannelToSnapshot(

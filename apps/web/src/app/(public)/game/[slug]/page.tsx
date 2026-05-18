@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
+import { getGamePlatformMetrics } from "@/server/services/game-platform-metrics";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
   GameHeader,
@@ -89,6 +90,12 @@ export default async function GamePage({ params }: PageProps) {
     notFound();
   }
 
+  const platformMetrics = await getGamePlatformMetrics({
+    gameId: game.id,
+    fallbackTwitchViewers: game.currentViewers,
+    fallbackTwitchChannels: game.currentChannels,
+  });
+
   // Shape header data
   const headerData = {
     name: game.name,
@@ -102,6 +109,7 @@ export default async function GamePage({ params }: PageProps) {
     peakViewers24h: game.peakViewers24h,
     avgViewers7d: game.avgViewers7d,
     avgLiveChannels: game.avgLiveChannels,
+    platformMetrics,
   };
 
   // Shape snapshot data for charts (reverse to chronological order)

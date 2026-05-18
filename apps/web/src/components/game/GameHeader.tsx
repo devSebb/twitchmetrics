@@ -1,6 +1,17 @@
 import Image from "next/image";
+import type { Platform } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { PlatformIcon } from "@/components/shared";
+
+type PlatformMetricRow = {
+  platform: Platform;
+  value: number;
+};
+
+type PlatformMetricGroup = {
+  rows: PlatformMetricRow[];
+  total: number;
+};
 
 type GameHeaderProps = {
   game: {
@@ -15,31 +26,69 @@ type GameHeaderProps = {
     peakViewers24h: number;
     avgViewers7d: number;
     avgLiveChannels: number;
+    platformMetrics: {
+      liveViewers: PlatformMetricGroup;
+      liveChannels: PlatformMetricGroup;
+    };
   };
 };
 
 function KpiCard({
   label,
   value,
+  platformRows,
   className,
 }: {
   label: string;
   value: number;
+  platformRows?: PlatformMetricRow[];
   className?: string;
 }) {
+  const rows = platformRows?.filter((row) => row.value > 0) ?? [];
+
   return (
     <div
-      className={`flex items-start justify-between gap-2 rounded-xl border border-[#3F4147] bg-[#313338] px-4 py-3 ${className ?? ""}`}
+      className={`relative flex min-h-[86px] flex-col justify-between gap-2 rounded-xl border border-[#3F4147] bg-[#313338] px-4 py-3 ${className ?? ""}`}
     >
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-col gap-1.5">
         <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
           {label}
         </span>
-        <span className="mt-1 text-xl font-bold text-[#F2F3F5]">
-          {formatNumber(value)}
-        </span>
+        {rows.length > 0 ? (
+          <div className="space-y-1">
+            {rows.map((row) => (
+              <div
+                key={row.platform}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="text-lg font-bold leading-tight text-[#F2F3F5]">
+                  {formatNumber(row.value)}
+                </span>
+                <PlatformIcon platform={row.platform} size="xs" rounded="lg" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xl font-bold text-[#F2F3F5]">
+            {formatNumber(value)}
+          </span>
+        )}
       </div>
-      <PlatformIcon platform="twitch" size="xs" rounded="lg" />
+      {rows.length > 1 && (
+        <div className="flex items-center justify-between border-t border-[#3F4147] pt-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
+            Total
+          </span>
+          <span className="text-sm font-bold text-[#DBDEE1]">
+            {formatNumber(value)}
+          </span>
+        </div>
+      )}
+      {rows.length === 0 && (
+        <div className="absolute right-4 top-3">
+          <PlatformIcon platform="twitch" size="xs" rounded="lg" />
+        </div>
+      )}
     </div>
   );
 }
@@ -131,8 +180,24 @@ export function GameHeader({ game }: GameHeaderProps) {
         <ProCtaCard className="sm:col-start-4 sm:row-start-1 sm:row-span-2 sm:h-full" />
 
         {/* Row 2 cols 1–3 (auto-fill around CTA) */}
-        <KpiCard label="Live Viewers" value={game.currentViewers} />
-        <KpiCard label="Live Channels" value={game.currentChannels} />
+        <KpiCard
+          label="Live Viewers"
+          value={
+            game.platformMetrics.liveViewers.total > 0
+              ? game.platformMetrics.liveViewers.total
+              : game.currentViewers
+          }
+          platformRows={game.platformMetrics.liveViewers.rows}
+        />
+        <KpiCard
+          label="Live Channels"
+          value={
+            game.platformMetrics.liveChannels.total > 0
+              ? game.platformMetrics.liveChannels.total
+              : game.currentChannels
+          }
+          platformRows={game.platformMetrics.liveChannels.rows}
+        />
         <KpiCard label="Avg Live Channels" value={game.avgLiveChannels} />
       </div>
     </div>
