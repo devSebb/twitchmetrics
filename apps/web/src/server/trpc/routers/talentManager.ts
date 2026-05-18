@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Platform } from "@twitchmetrics/database";
+import { Platform, Prisma } from "@twitchmetrics/database";
 import { TRPCError } from "@trpc/server";
 import { talentManagerProcedure } from "../middleware";
 import { router } from "../root";
@@ -41,55 +41,68 @@ export const talentManagerRouter = router({
   /**
    * Search creator profiles eligible for invitation.
    *
+   * Mirrors the navbar SearchBar (apps/web/src/app/api/search/route.ts) — uses
+   * pg_trgm similarity on CreatorProfile.searchText for fuzzy matching, plus
+   * ILIKE substring as a fallback. The prior `contains` on three columns
+   * missed creators the navbar finds easily.
+   *
+   * Bug fix: previously used Prisma's `NOT: { userId: ctx.user.id }`, which
+   * SQL three-valued logic turns into "exclude null userId too" — so every
+   * unclaimed profile got filtered out. The explicit `userId IS NULL OR
+   * userId != $self` predicate handles NULL correctly.
+   *
    * Returns `isClaimed: boolean` (computed server-side) instead of `userId` —
    * leaking another creator's user id to the client is unnecessary.
-   *
-   * Excludes the current user's own profile (defense-in-depth self-invite block,
-   * first of three layers). Excludes `pending_claim` because a claim is mid-flight.
    */
   searchCreators: talentManagerProcedure
     .input(z.object({ query: z.string().min(1).max(100) }))
     .query(async ({ ctx, input }) => {
       const q = input.query.trim();
-      const profiles = await ctx.prisma.creatorProfile.findMany({
-        where: {
-          state: { in: ["unclaimed", "claimed", "premium"] },
-          NOT: { userId: ctx.user.id },
-          OR: [
-            { displayName: { contains: q, mode: "insensitive" } },
-            { slug: { contains: q, mode: "insensitive" } },
-            {
-              platformAccounts: {
-                some: {
-                  platformUsername: { contains: q, mode: "insensitive" },
-                },
-              },
-            },
-          ],
-        },
-        select: {
-          id: true,
-          displayName: true,
-          slug: true,
-          avatarUrl: true,
-          state: true,
-          totalFollowers: true,
-          primaryPlatform: true,
-          userId: true,
-        },
-        take: 8,
-        orderBy: { totalFollowers: "desc" },
-      });
+      if (q.length === 0) return [];
 
-      return profiles.map((p) => ({
-        id: p.id,
-        displayName: p.displayName,
-        slug: p.slug,
-        avatarUrl: p.avatarUrl,
-        state: p.state,
-        totalFollowers: p.totalFollowers ? String(p.totalFollowers) : "0",
-        primaryPlatform: p.primaryPlatform,
-        isClaimed: p.userId !== null,
+      type Row = {
+        id: string;
+        displayName: string;
+        slug: string;
+        avatarUrl: string | null;
+        state: string;
+        totalFollowers: bigint;
+        primaryPlatform: Platform | null;
+        userId: string | null;
+        relevance: number;
+      };
+
+      const rows = await ctx.prisma.$queryRaw<Row[]>(Prisma.sql`
+        SELECT
+          cp.id,
+          cp."displayName",
+          cp.slug,
+          cp."avatarUrl",
+          cp.state::text AS state,
+          cp."totalFollowers",
+          cp."primaryPlatform",
+          cp."userId",
+          similarity(cp."searchText", ${q}) AS relevance
+        FROM "CreatorProfile" cp
+        WHERE cp.state IN ('unclaimed', 'claimed', 'premium')
+          AND (cp."userId" IS NULL OR cp."userId" != ${ctx.user.id}::uuid)
+          AND (
+            cp."searchText" % ${q}
+            OR cp."searchText" ILIKE '%' || ${q} || '%'
+          )
+        ORDER BY relevance DESC, cp."totalFollowers" DESC
+        LIMIT 8
+      `);
+
+      return rows.map((r) => ({
+        id: r.id,
+        displayName: r.displayName,
+        slug: r.slug,
+        avatarUrl: r.avatarUrl,
+        state: r.state,
+        totalFollowers: r.totalFollowers ? String(r.totalFollowers) : "0",
+        primaryPlatform: r.primaryPlatform,
+        isClaimed: r.userId !== null,
       }));
     }),
 
