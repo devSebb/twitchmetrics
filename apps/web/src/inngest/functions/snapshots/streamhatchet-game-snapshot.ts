@@ -18,7 +18,7 @@ const log = createLogger("streamhatchet-game-snapshot");
 
 const PLATFORMS = ["twitch", "ytg", "kick"] as const;
 const DISCOVERY_LIMIT = 100;
-const LIVE_CHANNEL_GAME_LIMIT = 10;
+const LIVE_CHANNEL_GAME_LIMIT = 5;
 const LIVE_CHANNEL_TARGET_POOL = 100;
 const LIVE_CHANNEL_LIMIT = 15;
 const LIVE_BUCKET_MS = 30 * 60 * 1000;
@@ -34,6 +34,24 @@ type GameMatch = {
   publisher: string | null;
   releaseDate: Date | null;
 };
+
+type LiveChannelsFetchResult =
+  | { ok: true; channels: StreamHatchetLiveChannel[] }
+  | {
+      ok: false;
+      code: "rate_limited" | "timeout" | "api_error";
+      message: string;
+      retryAfterSeconds?: number | undefined;
+    };
+
+type LiveGamesFetchResult =
+  | { ok: true; rows: StreamHatchetLiveGame[] }
+  | {
+      ok: false;
+      code: "rate_limited" | "timeout" | "api_error";
+      message: string;
+      retryAfterSeconds?: number | undefined;
+    };
 
 function missingCredentialsResult() {
   return {
@@ -166,6 +184,64 @@ async function loadTopLiveChannelTargets() {
     offset,
     poolSize: games.length,
   };
+}
+
+async function safeFetchLiveChannels(
+  game: GameMatch,
+): Promise<LiveChannelsFetchResult> {
+  try {
+    const channels = await fetchStreamHatchetLiveChannels({
+      game: game.name,
+      platforms: [...PLATFORMS],
+      limit: LIVE_CHANNEL_LIMIT,
+    });
+    return { ok: true, channels };
+  } catch (error) {
+    if (error instanceof StreamHatchetError) {
+      return {
+        ok: false,
+        code:
+          error.code === "rate_limited" || error.code === "timeout"
+            ? error.code
+            : "api_error",
+        message: error.message,
+        retryAfterSeconds: error.retryAfterSeconds,
+      };
+    }
+
+    return {
+      ok: false,
+      code: "api_error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function safeFetchLiveGames(): Promise<LiveGamesFetchResult> {
+  try {
+    const rows = await fetchStreamHatchetLiveGames({
+      platforms: [...PLATFORMS],
+    });
+    return { ok: true, rows };
+  } catch (error) {
+    if (error instanceof StreamHatchetError) {
+      return {
+        ok: false,
+        code:
+          error.code === "rate_limited" || error.code === "timeout"
+            ? error.code
+            : "api_error",
+        message: error.message,
+        retryAfterSeconds: error.retryAfterSeconds,
+      };
+    }
+
+    return {
+      ok: false,
+      code: "api_error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function persistDiscoveryRow(
@@ -542,56 +618,50 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
 
         for (const [index, game] of games.entries()) {
           if (index > 0) {
-            await step.sleep(`streamhatchet-live-channel-pause-${index}`, "2s");
+            await step.sleep(`streamhatchet-live-channel-pause-${index}`, "5s");
           }
 
-          try {
-            const channels = (await step.run(
-              `fetch-live-channels-${game.slug}`,
-              () =>
-                fetchStreamHatchetLiveChannels({
+          const fetchResult = (await step.run(
+            `fetch-live-channels-${game.slug}`,
+            () => safeFetchLiveChannels(game),
+          )) as LiveChannelsFetchResult;
+
+          if (!fetchResult.ok) {
+            if (fetchResult.code === "rate_limited") {
+              rateLimited = true;
+              log.warn(
+                {
                   game: game.name,
-                  platforms: [...PLATFORMS],
-                  limit: LIVE_CHANNEL_LIMIT,
-                }),
-            )) as StreamHatchetLiveChannel[];
+                  retryAfterSeconds: fetchResult.retryAfterSeconds,
+                },
+                "StreamHatchet live channels rate limited; stopping early",
+              );
+              break;
+            }
 
-            scanned += channels.length;
-            await step.run(`persist-live-channels-${game.slug}`, () =>
-              persistLiveChannels(game, channels, snapshotAt),
-            );
-            touchedGames.push(game);
-            written += channels.length;
-          } catch (error) {
-            if (error instanceof StreamHatchetError) {
-              if (error.code === "rate_limited") {
-                rateLimited = true;
-                log.warn(
-                  {
-                    game: game.name,
-                    retryAfterSeconds: error.retryAfterSeconds,
-                  },
-                  "StreamHatchet live channels rate limited; stopping early",
-                );
-                break;
-              }
-
-              if (error.code === "timeout") {
-                skipped++;
-                log.warn(
-                  { game: game.name },
-                  "StreamHatchet live channels request timed out; skipping game",
-                );
-                continue;
-              }
+            if (fetchResult.code === "timeout") {
+              skipped++;
+              log.warn(
+                { game: game.name },
+                "StreamHatchet live channels request timed out; skipping game",
+              );
+              continue;
             }
 
             failed++;
             log.warn(
-              { err: error, game: game.name },
+              { error: fetchResult.message, game: game.name },
               "Live channel fetch failed",
             );
+            continue;
           }
+
+          scanned += fetchResult.channels.length;
+          await step.run(`persist-live-channels-${game.slug}`, () =>
+            persistLiveChannels(game, fetchResult.channels, snapshotAt),
+          );
+          touchedGames.push(game);
+          written += fetchResult.channels.length;
         }
 
         await step.run("invalidate-games", () => invalidateGames(touchedGames));
@@ -641,23 +711,25 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         let rows: StreamHatchetLiveGame[] = [];
         let rateLimited = false;
 
-        try {
-          rows = (await step.run("fetch-live-games", () =>
-            fetchStreamHatchetLiveGames({ platforms: [...PLATFORMS] }),
-          )) as StreamHatchetLiveGame[];
-        } catch (error) {
-          if (
-            error instanceof StreamHatchetError &&
-            error.code === "rate_limited"
-          ) {
+        const fetchResult = (await step.run(
+          "fetch-live-games",
+          safeFetchLiveGames,
+        )) as LiveGamesFetchResult;
+
+        if (!fetchResult.ok) {
+          if (fetchResult.code === "rate_limited") {
             rateLimited = true;
             log.warn(
-              { retryAfterSeconds: error.retryAfterSeconds },
+              { retryAfterSeconds: fetchResult.retryAfterSeconds },
               "StreamHatchet live games rate limited; skipping run",
             );
+          } else if (fetchResult.code === "timeout") {
+            log.warn("StreamHatchet live games timed out; skipping run");
           } else {
-            throw error;
+            throw new Error(fetchResult.message);
           }
+        } else {
+          rows = fetchResult.rows;
         }
 
         const snapshotAt = new Date();
