@@ -5,6 +5,7 @@ import { SearchBar } from "@/components/search";
 import { getSession } from "@/server/auth-cache";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { HeaderUserMenu } from "./HeaderUserMenu";
+import { SolutionsDropdown } from "./SolutionsDropdown";
 
 const NAV_LINKS = [
   { label: "Channels", href: "/creators" },
@@ -48,6 +49,7 @@ export async function Header() {
               {link.label}
             </Link>
           ))}
+          <SolutionsDropdown />
         </nav>
 
         {/* Search — pushed right */}
