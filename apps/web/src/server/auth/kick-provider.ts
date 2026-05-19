@@ -33,6 +33,9 @@ export function KickProvider(options: {
     type: "oauth",
     clientId: options.clientId,
     clientSecret: options.clientSecret,
+    client: {
+      token_endpoint_auth_method: "client_secret_post",
+    },
     // Kick's /oauth/token returns JSON-shaped body but with a non-JSON
     // Content-Type header. oauth4webapi refuses to parse it. Wrap the fetch
     // so the token endpoint always advertises application/json.
