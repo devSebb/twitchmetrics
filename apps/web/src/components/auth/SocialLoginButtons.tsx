@@ -16,16 +16,19 @@ const PROVIDERS = [
     provider: "google",
     label: "YouTube",
     iconSrc: "/platform-icons/youtube.png",
+    bgColor: null,
   },
   {
     provider: "twitch",
     label: "Twitch",
     iconSrc: "/platform-icons/twitch.png",
+    bgColor: null,
   },
   {
     provider: "kick",
     label: "Kick",
     iconSrc: "/platform-icons/kick.png",
+    bgColor: "#53fc18",
   },
 ] as const;
 
@@ -65,14 +68,30 @@ export function SocialLoginButtons({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#313338]",
               )}
             >
-              <Image
-                src={item.iconSrc}
-                alt=""
-                width={LOGO_PX}
-                height={LOGO_PX}
-                className="h-[52px] w-[52px] shrink-0 object-contain"
-                aria-hidden
-              />
+              {item.bgColor ? (
+                <div
+                  className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: item.bgColor }}
+                  aria-hidden
+                >
+                  <Image
+                    src={item.iconSrc}
+                    alt=""
+                    width={LOGO_PX}
+                    height={LOGO_PX}
+                    className="h-[34px] w-[34px] object-contain"
+                  />
+                </div>
+              ) : (
+                <Image
+                  src={item.iconSrc}
+                  alt=""
+                  width={LOGO_PX}
+                  height={LOGO_PX}
+                  className="h-[52px] w-[52px] shrink-0 object-contain"
+                  aria-hidden
+                />
+              )}
               <span className="text-center text-sm font-bold tracking-tight text-[#F2F3F5]">
                 {item.label}
               </span>

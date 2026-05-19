@@ -1,5 +1,12 @@
 import type { OAuthConfig } from "next-auth/providers";
 
+type KickProfile = {
+  user_id: string;
+  name?: string;
+  email?: string;
+  profile_picture?: string;
+};
+
 type KickUserInfoResponse = {
   data?: Array<{
     user_id?: number | string;
@@ -7,13 +14,6 @@ type KickUserInfoResponse = {
     email?: string;
     profile_picture?: string;
   }>;
-};
-
-type KickProfile = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  profile_picture: string | null;
 };
 
 type OAuthRequestContext = {
@@ -36,44 +36,34 @@ export function KickProvider(options: {
       url: "https://id.kick.com/oauth/authorize",
       params: {
         scope: ["user:read", "channel:read"].join(" "),
-        response_type: "code",
       },
     },
     token: "https://id.kick.com/oauth/token",
-    checks: ["pkce", "state"],
     userinfo: {
-      async request(context: OAuthRequestContext): Promise<KickProfile> {
+      url: "https://api.kick.com/public/v1/users",
+      async request(context: OAuthRequestContext) {
         const response = await fetch("https://api.kick.com/public/v1/users", {
           headers: {
             Authorization: `Bearer ${context.tokens.access_token}`,
-            Accept: "application/json",
           },
         });
 
-        if (!response.ok) {
-          throw new Error(`Kick userinfo request failed: ${response.status}`);
-        }
-
         const json = (await response.json()) as KickUserInfoResponse;
         const entry = json.data?.[0];
-        if (!entry?.user_id) {
-          throw new Error("Kick userinfo response missing user_id");
-        }
-
         return {
-          id: String(entry.user_id),
-          name: entry.name ?? null,
-          email: entry.email ?? null,
-          profile_picture: entry.profile_picture ?? null,
+          user_id: entry?.user_id ? String(entry.user_id) : "",
+          name: entry?.name,
+          email: entry?.email,
+          profile_picture: entry?.profile_picture,
         };
       },
     },
     profile(profile) {
       return {
-        id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        image: profile.profile_picture,
+        id: profile.user_id,
+        name: profile.name ?? "Kick User",
+        email: profile.email ?? null,
+        image: profile.profile_picture ?? null,
       };
     },
   };

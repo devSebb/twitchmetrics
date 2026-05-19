@@ -64,6 +64,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma) as Adapter,
   ...(authSecret ? { secret: authSecret } : {}),
   trustHost: true,
+  debug: process.env.NODE_ENV === "development",
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
@@ -239,7 +240,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
 
-    // Kick — custom OAuth2 provider (PKCE required, no NextAuth built-in)
+    // Kick — custom OAuth2 provider
     ...(isOAuthProviderConfigured("kick")
       ? [
           KickProvider({
