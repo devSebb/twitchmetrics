@@ -61,7 +61,6 @@ const SESSION_PROTECTED = [
   "/connections",
   "/media-kit",
   "/brand-partnerships",
-  "/settings",
   "/roster",
   "/talent-manager",
   "/manage-creators",

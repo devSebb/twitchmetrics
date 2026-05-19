@@ -84,13 +84,37 @@ model User {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  accounts            Account[]
-  sessions            Session[]
-  passwordResetTokens PasswordResetToken[]
-  creatorProfile      CreatorProfile?
-  managedCreators     TalentManagerAccess[] @relation("ManagerToCreator")
-  claimRequests       ClaimRequest[]
-  auditLogs           AuditLog[]
+  accounts             Account[]
+  sessions             Session[]
+  passwordResetTokens  PasswordResetToken[]
+  creatorProfile       CreatorProfile?
+  talentManagerProfile TalentManagerProfile?
+  managedCreators      TalentManagerAccess[] @relation("ManagerToCreator")
+  claimRequests        ClaimRequest[]
+  auditLogs            AuditLog[]
+}
+
+// ============================================================
+// TALENT MANAGER PROFILE
+// ============================================================
+
+model TalentManagerProfile {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Semi-public — surfaced on /invite/roster
+  agencyName String?
+  bio        String? // app-layer max 280
+
+  // Private — manager-only
+  websiteUrl   String?
+  country      String?
+  languages    String[] @default([])
+  contactEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {

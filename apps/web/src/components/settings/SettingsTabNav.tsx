@@ -17,7 +17,7 @@ export function SettingsTabNav() {
       {TABS.map((tab) => {
         const isProfile = tab.href === "/dashboard/settings";
         const isActive = isProfile
-          ? pathname === "/dashboard/settings" || pathname === "/settings"
+          ? pathname === "/dashboard/settings"
           : pathname.endsWith("/security");
 
         return (

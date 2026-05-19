@@ -37,7 +37,91 @@ type InviteCreatorResult =
     }
   | { kind: "already_active"; accessId: string };
 
+// ─── Manager profile schemas ───
+//
+// Optional + nullable on every field: the form sends partial updates, and
+// clearing a field sends null (so the user can wipe a value). The mutation
+// only writes keys that are actually present in the input.
+
+const tmProfileUpdateSchema = z.object({
+  agencyName: z.string().trim().max(80).nullable().optional(),
+  bio: z.string().trim().max(280).nullable().optional(),
+  websiteUrl: z
+    .string()
+    .trim()
+    .url()
+    .max(200)
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
+  country: z.string().trim().max(60).nullable().optional(),
+  languages: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+  contactEmail: z
+    .string()
+    .trim()
+    .email()
+    .max(200)
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
+});
+
 export const talentManagerRouter = router({
+  /**
+   * Read the calling manager's profile. Upserts on read so a TM that
+   * predates the schema (or somehow missed the onboarding seed) always
+   * gets a row to edit.
+   */
+  getMyProfile: talentManagerProcedure.query(async ({ ctx }) => {
+    const profile = await ctx.prisma.talentManagerProfile.upsert({
+      where: { userId: ctx.user.id },
+      create: { userId: ctx.user.id },
+      update: {},
+    });
+    return profile;
+  }),
+
+  /**
+   * Update the calling manager's profile. Partial update — only writes
+   * keys present in the input. Suspended managers are blocked even though
+   * the route is read-mostly; consistent with other write paths in this
+   * router.
+   */
+  updateMyProfile: talentManagerProcedure
+    .input(tmProfileUpdateSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.suspended) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Your account is suspended.",
+        });
+      }
+
+      const data: Prisma.TalentManagerProfileUpdateInput = {};
+      if (input.agencyName !== undefined) data.agencyName = input.agencyName;
+      if (input.bio !== undefined) data.bio = input.bio;
+      if (input.websiteUrl !== undefined) data.websiteUrl = input.websiteUrl;
+      if (input.country !== undefined) data.country = input.country;
+      if (input.languages !== undefined) data.languages = input.languages;
+      if (input.contactEmail !== undefined)
+        data.contactEmail = input.contactEmail;
+
+      const updated = await ctx.prisma.talentManagerProfile.update({
+        where: { userId: ctx.user.id },
+        data,
+      });
+
+      logAudit({
+        userId: ctx.user.id,
+        action: "tmProfile.updated",
+        targetType: "talentManagerProfile",
+        targetId: updated.id,
+        metadata: { changedKeys: Object.keys(data) },
+      });
+
+      return updated;
+    }),
+
   /**
    * Search creator profiles eligible for invitation.
    *

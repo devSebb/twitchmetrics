@@ -199,13 +199,21 @@ export const authRouter = router({
               },
             });
           }
-        } else if (existingProfile) {
-          // Clean up auto-created profile from OAuth signIn (e.g. talent managers)
-          await tx.platformAccount.deleteMany({
-            where: { creatorProfileId: existingProfile.id },
-          });
-          await tx.creatorProfile.delete({
-            where: { id: existingProfile.id },
+        } else {
+          if (existingProfile) {
+            // Clean up auto-created profile from OAuth signIn (e.g. talent managers)
+            await tx.platformAccount.deleteMany({
+              where: { creatorProfileId: existingProfile.id },
+            });
+            await tx.creatorProfile.delete({
+              where: { id: existingProfile.id },
+            });
+          }
+          // Seed an empty TM profile so the settings page has a row to edit.
+          await tx.talentManagerProfile.upsert({
+            where: { userId: ctx.user.id },
+            create: { userId: ctx.user.id },
+            update: {},
           });
         }
 

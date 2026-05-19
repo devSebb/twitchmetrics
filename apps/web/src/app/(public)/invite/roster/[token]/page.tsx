@@ -18,7 +18,17 @@ type PageProps = {
 
 const inviteLookupArgs = {
   include: {
-    manager: { select: { id: true, name: true, image: true, suspended: true } },
+    manager: {
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        suspended: true,
+        talentManagerProfile: {
+          select: { agencyName: true, bio: true },
+        },
+      },
+    },
     creatorProfile: {
       select: {
         id: true,
@@ -112,12 +122,16 @@ function TerminalCard({
 function PendingHeader({
   managerName,
   managerAvatarUrl,
+  managerAgency,
+  managerBio,
   creatorName,
   creatorSlug,
   creatorAvatarUrl,
 }: {
   managerName: string;
   managerAvatarUrl: string | null;
+  managerAgency: string | null;
+  managerBio: string | null;
   creatorName: string;
   creatorSlug: string;
   creatorAvatarUrl: string | null;
@@ -156,8 +170,17 @@ function PendingHeader({
             </span>{" "}
             {creatorName}
           </h1>
+          {managerAgency && (
+            <p className="text-xs text-[#949BA4]">{managerAgency}</p>
+          )}
         </div>
       </div>
+
+      {managerBio && (
+        <p className="mt-3 text-sm italic text-[#DBDEE1]">
+          &ldquo;{managerBio}&rdquo;
+        </p>
+      )}
 
       <div className="mt-4 flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#1E1F22] p-3">
         {creatorAvatar ? (
@@ -208,6 +231,8 @@ function renderPendingBody({
     <PendingHeader
       managerName={managerName}
       managerAvatarUrl={access.manager.image}
+      managerAgency={access.manager.talentManagerProfile?.agencyName ?? null}
+      managerBio={access.manager.talentManagerProfile?.bio ?? null}
       creatorName={creatorName}
       creatorSlug={creatorSlug}
       creatorAvatarUrl={access.creatorProfile.avatarUrl}
