@@ -70,8 +70,8 @@ export function SocialLoginButtons({
             >
               {item.bgColor ? (
                 <div
-                  className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full"
-                  style={{ backgroundColor: item.bgColor }}
+                  className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-[3px]"
+                  style={{ borderColor: item.bgColor }}
                   aria-hidden
                 >
                   <Image
@@ -79,7 +79,7 @@ export function SocialLoginButtons({
                     alt=""
                     width={LOGO_PX}
                     height={LOGO_PX}
-                    className="h-[34px] w-[34px] object-contain"
+                    className="h-[30px] w-[30px] object-contain"
                   />
                 </div>
               ) : (
