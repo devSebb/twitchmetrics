@@ -164,23 +164,33 @@ export const youtubeAdapter: PlatformAdapter = {
   platform: "youtube" as Platform,
 
   async fetchProfile(platformUsername: string): Promise<CreatorProfileData> {
-    assertQuotaAvailable(3);
+    const normalized = platformUsername.trim();
+    const isChannelId = /^UC[A-Za-z0-9_-]{20,}$/.test(normalized);
 
-    // Try forHandle first (e.g. @MrBeast), fallback to forUsername
-    let data = await youtubeApiFetch<YouTubeChannelListResponse>("channels", {
-      part: "snippet,statistics",
-      forHandle: platformUsername.replace(/^@/, ""),
-    });
-    trackQuota(3);
+    assertQuotaAvailable(1);
 
-    if (!data.items || data.items.length === 0) {
-      // Fallback: try forUsername
-      assertQuotaAvailable(3);
+    let data = await youtubeApiFetch<YouTubeChannelListResponse>(
+      "channels",
+      isChannelId
+        ? {
+            part: "snippet,statistics",
+            id: normalized,
+          }
+        : {
+            part: "snippet,statistics",
+            forHandle: normalized.replace(/^@/, ""),
+          },
+    );
+    trackQuota(1);
+
+    if (!isChannelId && (!data.items || data.items.length === 0)) {
+      // Fallback: legacy YouTube usernames still exist for older channels.
+      assertQuotaAvailable(1);
       data = await youtubeApiFetch<YouTubeChannelListResponse>("channels", {
         part: "snippet,statistics",
-        forUsername: platformUsername.replace(/^@/, ""),
+        forUsername: normalized.replace(/^@/, ""),
       });
-      trackQuota(3);
+      trackQuota(1);
     }
 
     if (!data.items || data.items.length === 0) {
@@ -222,13 +232,13 @@ export const youtubeAdapter: PlatformAdapter = {
     platformUserId: string,
     _options: { isOAuthConnected: boolean; accessToken?: string },
   ): Promise<CreatorSnapshotData> {
-    assertQuotaAvailable(3);
+    assertQuotaAvailable(1);
 
     const data = await youtubeApiFetch<YouTubeChannelListResponse>("channels", {
       part: "statistics",
       id: platformUserId,
     });
-    trackQuota(3);
+    trackQuota(1);
 
     if (!data.items || data.items.length === 0) {
       throw new AdapterError(

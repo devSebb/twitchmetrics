@@ -11,6 +11,7 @@ import type { Platform } from "@twitchmetrics/database";
 import { getAdapter } from "@/server/adapters";
 import {
   extractSocialLinks,
+  extractLinksFromTwitchBio,
   extractLinksFromYouTubeChannel,
   filterByConfidence,
   type LinkSource,
@@ -75,8 +76,13 @@ export async function discoverLinksForCreator(
   const source: LinkSource =
     creator.primaryPlatform === "youtube" ? "youtube_about" : "twitch_bio";
 
-  // 2. Extract links from stored bio
-  const bioLinks = creator.bio ? extractSocialLinks(creator.bio, source) : [];
+  // 2. Extract links from stored bio. Twitch bios get extra YouTube
+  // "YouTube: handle" parsing because most imported creators are Twitch-first.
+  const bioLinks = creator.bio
+    ? source === "twitch_bio"
+      ? extractLinksFromTwitchBio(creator.bio)
+      : extractSocialLinks(creator.bio, source)
+    : [];
 
   // 3. For YouTube creators, also fetch fresh channel description (1 quota unit)
   let ytLinks: ReturnType<typeof extractSocialLinks> = [];
@@ -93,7 +99,7 @@ export async function discoverLinksForCreator(
   const seen = new Set<string>();
   const allLinks: typeof bioLinks = [];
   for (const link of [...bioLinks, ...ytLinks]) {
-    const key = `${link.platform}:${link.username}`;
+    const key = `${link.platform}:${link.username.toLowerCase()}`;
     if (!seen.has(key)) {
       seen.add(key);
       allLinks.push(link);
@@ -123,9 +129,13 @@ export async function discoverLinksForCreator(
     // 6. Attempt adapter verification to enrich the record
     let platformUserId = link.username;
     let followerCount: bigint | null = null;
+    let subscriberCount: bigint | null = null;
+    let totalViews: bigint | null = null;
+    let postCount: number | null = null;
     let platformDisplayName: string | null = null;
     let avatarUrl: string | null = null;
     let verifiedUrl: string | null = link.url;
+    let verified = false;
 
     const adapter = getAdapter(link.platform);
     if (adapter) {
@@ -133,15 +143,25 @@ export async function discoverLinksForCreator(
         const profile = await adapter.fetchProfile(link.username);
         platformUserId = profile.platformUserId;
         followerCount = profile.followerCount ?? null;
+        subscriberCount =
+          link.platform === "youtube" ? (profile.followerCount ?? null) : null;
+        totalViews = profile.totalViews ?? null;
+        postCount = profile.postCount ?? null;
         platformDisplayName = profile.platformDisplayName ?? null;
         avatarUrl = profile.platformAvatarUrl ?? null;
         verifiedUrl = profile.platformUrl ?? link.url;
+        verified = true;
       } catch (err) {
         log.warn(
           { platform: link.platform, username: link.username, err },
-          "Adapter verification failed — creating account from bio link only",
+          "Adapter verification failed during social-link discovery",
         );
       }
+    }
+
+    if (link.platform === "youtube" && !verified) {
+      skipped++;
+      continue;
     }
 
     // 7. Create PlatformAccount (skip on unique constraint violations)
@@ -156,6 +176,9 @@ export async function discoverLinksForCreator(
           platformUrl: verifiedUrl,
           platformAvatarUrl: avatarUrl,
           followerCount,
+          subscriberCount,
+          totalViews,
+          postCount,
           isOAuthConnected: false,
         },
       });

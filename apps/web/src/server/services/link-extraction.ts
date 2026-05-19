@@ -48,19 +48,20 @@ const PLATFORM_PATTERNS: PlatformPattern[] = [
   {
     platform: "youtube",
     patterns: [
-      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:c\/|channel\/|user\/|@)([\w-]+)/gi,
-      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/([\w-]+)/gi,
-      /(?:https?:\/\/)?youtu\.be\/([\w-]+)/gi,
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:c\/|channel\/|user\/|@)([\w.-]+)/gi,
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/([\w.-]+)/gi,
     ],
     usernameExtractor: (url: string): string | null => {
       const match =
-        url.match(/youtube\.com\/(?:c\/|channel\/|user\/|@)([\w-]+)/i) ??
-        url.match(/youtube\.com\/([\w-]+)/i);
+        url.match(/youtube\.com\/(?:c\/|channel\/|user\/|@)([\w.-]+)/i) ??
+        url.match(/youtube\.com\/([\w.-]+)/i);
       if (!match?.[1]) return null;
       const username = match[1];
       // Filter out common non-username paths
       const nonUsernames = [
         "watch",
+        "c",
+        "channel",
         "playlist",
         "feed",
         "results",
@@ -69,6 +70,10 @@ const PLATFORM_PATTERNS: PlatformPattern[] = [
         "gaming",
         "premium",
         "music",
+        "embed",
+        "clip",
+        "clips",
+        "user",
       ];
       return nonUsernames.includes(username.toLowerCase()) ? null : username;
     },
@@ -176,14 +181,88 @@ export function extractSocialLinks(
 
         const confidence = confidenceOverride ?? getSourceConfidence(source);
 
+        const normalizedUsername =
+          platformConfig.platform === "youtube"
+            ? username
+            : username.toLowerCase();
+
         links.push({
           platform: platformConfig.platform,
           url,
-          username: username.toLowerCase(),
+          username: normalizedUsername,
           confidence,
           source,
         });
       }
+    }
+  }
+
+  return links;
+}
+
+const YOUTUBE_REFERENCE_PATTERNS = [
+  /\b(?:youtube|yt)\s*[:：]\s*@?([A-Za-z0-9][\w.-]{2,40})/gi,
+  /\b(?:youtube|yt)\s+(?:channel|canal)\s*[:：-]\s*@?([A-Za-z0-9][\w.-]{2,40})/gi,
+  /\b(?:youtube|yt)\s+@([A-Za-z0-9][\w.-]{2,40})/gi,
+  /@([A-Za-z0-9][\w.-]{2,40})\s+(?:on|en)\s+(?:youtube|yt)\b/gi,
+];
+
+const YOUTUBE_REFERENCE_STOPWORDS = new Set([
+  "and",
+  "channel",
+  "canal",
+  "com",
+  "gaming",
+  "live",
+  "music",
+  "official",
+  "shorts",
+  "stream",
+  "streams",
+  "the",
+  "tv",
+  "video",
+  "videos",
+  "vod",
+  "vods",
+  "youtube",
+  "yt",
+]);
+
+function extractYouTubeHandleReferences(
+  text: string,
+  source: LinkSource,
+): SocialLink[] {
+  const links: SocialLink[] = [];
+  const seen = new Set<string>();
+
+  for (const pattern of YOUTUBE_REFERENCE_PATTERNS) {
+    pattern.lastIndex = 0;
+
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const username = match[1]?.trim().replace(/[.,;:!?)]$/, "");
+      if (!username) continue;
+
+      const normalized = username.replace(/^@/, "");
+      if (
+        normalized.length < 3 ||
+        YOUTUBE_REFERENCE_STOPWORDS.has(normalized.toLowerCase())
+      ) {
+        continue;
+      }
+
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      links.push({
+        platform: "youtube",
+        url: `https://youtube.com/@${normalized}`,
+        username: normalized,
+        confidence: "MEDIUM",
+        source,
+      });
     }
   }
 
@@ -215,7 +294,20 @@ export function extractLinksFromTwitchBio(
   bio: string | null | undefined,
 ): SocialLink[] {
   if (!bio) return [];
-  return extractSocialLinks(bio, "twitch_bio");
+  const links = extractSocialLinks(bio, "twitch_bio");
+  const seen = new Set(
+    links.map((link) => `${link.platform}:${link.username.toLowerCase()}`),
+  );
+
+  for (const link of extractYouTubeHandleReferences(bio, "twitch_bio")) {
+    const key = `${link.platform}:${link.username.toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      links.push(link);
+    }
+  }
+
+  return links;
 }
 
 // ============================================================

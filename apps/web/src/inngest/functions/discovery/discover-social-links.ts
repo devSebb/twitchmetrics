@@ -6,7 +6,7 @@ import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 const log = createLogger("discover-social-links");
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
@@ -16,7 +16,9 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
  * Runs daily at 7 AM UTC (1 hour after discover-creators).
  * Can also be triggered manually via the `creators/discover-links` event.
  *
- * Processes up to 200 creators per run, prioritising those never scanned.
+ * Processes up to 1,000 creators per run, prioritising those never scanned.
+ * Most creators only require local bio parsing; API verification is limited to
+ * discovered links that are strong enough to persist.
  */
 export const discoverSocialLinks = inngest.createFunction(
   { id: "discover-social-links", concurrency: { limit: 1 } },

@@ -37,7 +37,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
       "SUBSCRIBER_REVENUE",
       "CHEER_REVENUE",
     ],
-    adapterStatus: "planned",
+    adapterStatus: "stable",
   },
   youtube: {
     name: "YouTube",
