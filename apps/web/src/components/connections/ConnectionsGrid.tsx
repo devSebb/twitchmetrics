@@ -10,7 +10,7 @@ const PLATFORM_PROVIDER: Record<string, string | null> = {
   instagram: "instagram",
   tiktok: "tiktok",
   x: "twitter",
-  kick: null,
+  kick: "kick",
 };
 
 type ConnectionsGridProps = {

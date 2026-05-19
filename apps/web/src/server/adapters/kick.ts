@@ -279,6 +279,42 @@ export async function fetchKickChannelsBySlugs(
   return response.data ?? [];
 }
 
+/**
+ * Fetch the authenticated user's own channel using their OAuth user token
+ * (channel:read scope). Bypasses the app token entirely.
+ */
+export async function fetchKickChannelByUserToken(
+  userAccessToken: string,
+): Promise<KickChannel | null> {
+  const response = await fetch(`${KICK_API_BASE}/public/v1/channels`, {
+    headers: {
+      Authorization: `Bearer ${userAccessToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw new AdapterError(
+      "kick",
+      "auth_expired",
+      `KICK user token authorization failed: ${response.status}`,
+      false,
+    );
+  }
+
+  if (!response.ok) {
+    throw new AdapterError(
+      "kick",
+      "api_error",
+      `KICK user channel fetch failed: ${response.status}`,
+      response.status >= 500,
+    );
+  }
+
+  const json = (await response.json()) as KickChannelsResponse;
+  return json.data?.[0] ?? null;
+}
+
 export async function fetchKickCategories(
   input: {
     limit?: number;

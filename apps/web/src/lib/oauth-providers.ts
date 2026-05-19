@@ -9,6 +9,7 @@ export const OAUTH_PROVIDER_ENV = {
     ["INSTAGRAM_CLIENT_SECRET", "INSTAGRAM_APP_SECRET"],
   ],
   tiktok: [["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_ID"], ["TIKTOK_CLIENT_SECRET"]],
+  kick: ["KICK_CLIENT_ID", "KICK_CLIENT_SECRET"],
 } as const satisfies Record<string, readonly EnvRequirement[]>;
 
 export type OAuthProviderId = keyof typeof OAUTH_PROVIDER_ENV;
@@ -24,7 +25,9 @@ export function isOAuthProviderConfigured(provider: OAuthProviderId): boolean {
 }
 
 export function getConfiguredSocialLoginProviders(): Array<
-  "google" | "twitch"
+  "google" | "twitch" | "kick"
 > {
-  return (["google", "twitch"] as const).filter(isOAuthProviderConfigured);
+  return (["google", "twitch", "kick"] as const).filter(
+    isOAuthProviderConfigured,
+  );
 }

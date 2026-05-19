@@ -10,7 +10,7 @@ type SocialLoginButtonsProps = {
   enabledProviders?: readonly ProviderId[];
 };
 
-/** Login/register only — order: YouTube → Twitch (X added when credentials are configured). */
+/** Login/register only — order: YouTube → Twitch → Kick (each filtered by configured credentials). */
 const PROVIDERS = [
   {
     provider: "google",
@@ -21,6 +21,11 @@ const PROVIDERS = [
     provider: "twitch",
     label: "Twitch",
     iconSrc: "/platform-icons/twitch.png",
+  },
+  {
+    provider: "kick",
+    label: "Kick",
+    iconSrc: "/platform-icons/kick.png",
   },
 ] as const;
 

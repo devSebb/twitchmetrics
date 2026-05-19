@@ -36,6 +36,7 @@ const PROVIDER_PLATFORM_MAP: Record<string, Platform> = {
   twitter: "x",
   instagram: "instagram",
   tiktok: "tiktok",
+  kick: "kick",
 };
 
 function getStringProperty(value: unknown, property: string): string | null {
@@ -125,6 +126,18 @@ function resolvePlatformIdentity(
       displayName: getStringProperty(data, "name") ?? username,
       profileUrl: username ? `https://x.com/${username}` : null,
       avatarUrl: getStringProperty(data, "profile_image_url"),
+    };
+  }
+
+  if (platform === "kick") {
+    const username = getStringProperty(input.profile, "name");
+    const avatarUrl = getStringProperty(input.profile, "profile_picture");
+
+    return {
+      username,
+      displayName: username,
+      profileUrl: username ? `https://kick.com/${username}` : null,
+      avatarUrl,
     };
   }
 

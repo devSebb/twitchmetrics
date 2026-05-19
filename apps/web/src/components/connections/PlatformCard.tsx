@@ -46,9 +46,9 @@ export function PlatformCard({
   onDisconnect,
 }: PlatformCardProps) {
   const isConnected = Boolean(connection?.isConnected);
-  const isKick = platform === "kick";
-  const showBetaBadge = platform === "instagram" || platform === "tiktok";
-  const isUnavailable = isKick || !config.oauthSupported || !oauthProviderReady;
+  const showBetaBadge =
+    platform === "instagram" || platform === "tiktok" || platform === "kick";
+  const isUnavailable = !config.oauthSupported || !oauthProviderReady;
   const connectedUsername =
     isConnected && connection?.username ? connection.username : null;
   const connectedDisplayName =
@@ -177,7 +177,7 @@ export function PlatformCard({
                 : "bg-[#E32C19] text-white hover:bg-[#C72615]",
             )}
           >
-            {isKick ? "Coming Soon" : `Connect ${config.name}`}
+            {`Connect ${config.name}`}
           </button>
         )}
       </div>

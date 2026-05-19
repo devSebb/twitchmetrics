@@ -16,6 +16,7 @@ const PLATFORM_PROVIDER_MAP: Partial<Record<Platform, OAuthProviderId[]>> = {
   x: ["twitter"],
   instagram: ["instagram"],
   tiktok: ["tiktok"],
+  kick: ["kick"],
 };
 
 export const platformRouter = router({

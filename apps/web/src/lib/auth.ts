@@ -13,6 +13,7 @@ import { prisma } from "@twitchmetrics/database";
 import { isOAuthProviderConfigured } from "@/lib/oauth-providers";
 import { InstagramProvider } from "@/server/auth/instagram-provider";
 import { TikTokProvider } from "@/server/auth/tiktok-provider";
+import { KickProvider } from "@/server/auth/kick-provider";
 import { connectPlatform } from "@/server/services/platform-connection";
 
 const credentialsSchema = z.object({
@@ -238,7 +239,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
 
-    // TODO: Kick — Custom provider needed (no standard OAuth provider exists)
+    // Kick — custom OAuth2 provider (PKCE required, no NextAuth built-in)
+    ...(isOAuthProviderConfigured("kick")
+      ? [
+          KickProvider({
+            clientId: process.env.KICK_CLIENT_ID!,
+            clientSecret: process.env.KICK_CLIENT_SECRET!,
+          }),
+        ]
+      : []),
   ],
   callbacks: {
     jwt: async ({ token, user }) => {

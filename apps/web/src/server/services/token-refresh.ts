@@ -154,6 +154,32 @@ export async function refreshInstagramToken(
   return parseRefreshResult((await response.json()) as TokenJson, accessToken);
 }
 
+export async function refreshKickToken(
+  refreshToken: string,
+): Promise<RefreshResult> {
+  const clientId = getRequiredEnv("KICK_CLIENT_ID");
+  const clientSecret = getRequiredEnv("KICK_CLIENT_SECRET");
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  const response = await fetch("https://id.kick.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to refresh Kick token");
+  }
+
+  return parseRefreshResult((await response.json()) as TokenJson, refreshToken);
+}
+
 export async function refreshTikTokToken(
   refreshToken: string,
 ): Promise<RefreshResult> {
@@ -212,6 +238,8 @@ export async function refreshAccessTokenForPlatform(
         ? refreshTikTokToken(decryptedRefreshToken)
         : null;
     case "kick":
-      return null;
+      return decryptedRefreshToken
+        ? refreshKickToken(decryptedRefreshToken)
+        : null;
   }
 }
