@@ -1,7 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
+import { prisma } from "@twitchmetrics/database";
 import { SearchBar } from "@/components/search";
 import { getSession } from "@/server/auth-cache";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { HeaderUserMenu } from "./HeaderUserMenu";
 
 const NAV_LINKS = [
@@ -13,6 +15,12 @@ const NAV_LINKS = [
 export async function Header() {
   const session = await getSession();
   const user = session?.user ?? null;
+
+  // Roster invites are only fetched for users who own a creator profile.
+  // Cheap indexed count keyed on userId; skipped entirely when signed-out.
+  const hasCreatorProfile = user?.id
+    ? (await prisma.creatorProfile.count({ where: { userId: user.id } })) > 0
+    : false;
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
@@ -50,10 +58,16 @@ export async function Header() {
         {/* Auth section */}
         <div className="ml-auto flex items-center gap-2 sm:ml-0">
           {user ? (
-            <HeaderUserMenu
-              name={user.name ?? null}
-              image={user.image ?? null}
-            />
+            <>
+              <NotificationBell
+                userRole={user.role ?? "creator"}
+                hasCreatorProfile={hasCreatorProfile}
+              />
+              <HeaderUserMenu
+                name={user.name ?? null}
+                image={user.image ?? null}
+              />
+            </>
           ) : (
             <>
               <Link

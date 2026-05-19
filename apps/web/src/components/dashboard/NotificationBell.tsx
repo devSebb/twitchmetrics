@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Bell } from "@phosphor-icons/react";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { getSafeImageSrc } from "@/lib/safeImage";
@@ -83,21 +84,9 @@ export function NotificationBell({
         aria-label={`Notifications${totalCount > 0 ? ` (${totalCount})` : ""}`}
         className="relative rounded-md p-2 text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
       >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
+        <Bell size={20} weight="duotone" />
         {totalCount > 0 && (
-          <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#E32C19] px-1 text-[9px] font-bold text-white">
+          <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#E32C19] px-1 text-[9px] font-bold text-white">
             {totalCount > 9 ? "9+" : totalCount}
           </span>
         )}
