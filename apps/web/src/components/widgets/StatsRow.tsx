@@ -78,10 +78,10 @@ function StreamingStatCard({
   return (
     <div className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-lg border border-[#3F4147] bg-[#2B2D31] px-4 py-3">
       <div className="flex items-center gap-1.5">
+        <span className="truncate text-xs text-[#949BA4]">{label}</span>
         {platforms?.map((p) => (
           <PlatformDot key={p} platform={p} />
         ))}
-        <span className="truncate text-xs text-[#949BA4]">{label}</span>
       </div>
       <p className="text-xl font-bold text-[#F2F3F5]">{value}</p>
     </div>

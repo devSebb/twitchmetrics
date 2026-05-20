@@ -426,14 +426,28 @@ function DemographicsDisplay({
   analytics: NonNullable<AnalyticsData>;
 }) {
   const countryData = analytics.countryData as Record<string, number> | null;
-  const ageGenderData = analytics.ageGenderData as Record<
-    string,
-    number
-  > | null;
+  const ageGenderData = analytics.ageGenderData as
+    | Record<string, Record<string, number>>
+    | Record<string, number>
+    | null;
+  const ageGenderRows =
+    ageGenderData && Object.keys(ageGenderData).length > 0
+      ? Object.entries(ageGenderData)
+          .map(([label, value]) => {
+            const percentage =
+              typeof value === "number"
+                ? value
+                : Object.values(value).reduce<number>(
+                    (sum, next) => sum + (typeof next === "number" ? next : 0),
+                    0,
+                  );
+            return { label, percentage };
+          })
+          .sort((a, b) => b.percentage - a.percentage)
+      : [];
 
   const hasCountryData = countryData && Object.keys(countryData).length > 0;
-  const hasAgeGenderData =
-    ageGenderData && Object.keys(ageGenderData).length > 0;
+  const hasAgeGenderData = ageGenderRows.length > 0;
 
   if (!hasCountryData && !hasAgeGenderData) {
     return (
@@ -478,29 +492,24 @@ function DemographicsDisplay({
             Age & Gender
           </h3>
           <div className="space-y-2">
-            {Object.entries(ageGenderData)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 6)
-              .map(([label, value]) => (
-                <div key={label}>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#DBDEE1]">{label}</span>
-                    <span className="font-medium text-[#F2F3F5]">
-                      {typeof value === "number"
-                        ? `${(value * 100).toFixed(1)}%`
-                        : String(value)}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-[#2B2D31]">
-                    <div
-                      className="h-1.5 rounded-full bg-[#E32C19]"
-                      style={{
-                        width: `${typeof value === "number" ? Math.min(value * 100, 100) : 0}%`,
-                      }}
-                    />
-                  </div>
+            {ageGenderRows.slice(0, 6).map(({ label, percentage }) => (
+              <div key={label}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#DBDEE1]">{label}</span>
+                  <span className="font-medium text-[#F2F3F5]">
+                    {(percentage * 100).toFixed(1)}%
+                  </span>
                 </div>
-              ))}
+                <div className="mt-1 h-1.5 w-full rounded-full bg-[#2B2D31]">
+                  <div
+                    className="h-1.5 rounded-full bg-[#E32C19]"
+                    style={{
+                      width: `${Math.min(percentage * 100, 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       )}

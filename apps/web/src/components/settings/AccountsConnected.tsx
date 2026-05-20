@@ -50,6 +50,8 @@ export function AccountsConnected({ accounts }: AccountsConnectedProps) {
           const connected = connectedByPlatform.get(platform);
           const isConnected = Boolean(connected?.isOAuthConnected);
 
+          const needsOutline = platform === "kick";
+
           return (
             <li
               key={platform}
@@ -60,24 +62,40 @@ export function AccountsConnected({ accounts }: AccountsConnectedProps) {
                   : `${config.name}: Not connected`
               }
             >
-              <div
-                className={cn(
-                  "flex h-12 w-12 items-center justify-center rounded-full border-[3px] transition-all",
-                  !isConnected && "opacity-50 grayscale",
-                )}
-                style={{
-                  borderColor: isConnected ? config.color : DISCONNECTED_BORDER,
-                }}
-                aria-hidden
-              >
+              {needsOutline ? (
+                <div
+                  className={cn(
+                    "flex h-12 w-12 items-center justify-center rounded-full border-[3px] transition-all",
+                    !isConnected && "opacity-50 grayscale",
+                  )}
+                  style={{
+                    borderColor: isConnected
+                      ? config.color
+                      : DISCONNECTED_BORDER,
+                  }}
+                  aria-hidden
+                >
+                  <Image
+                    src={PLATFORM_ICON_SRC[platform]}
+                    alt=""
+                    width={28}
+                    height={28}
+                    className="h-7 w-7 object-contain"
+                  />
+                </div>
+              ) : (
                 <Image
                   src={PLATFORM_ICON_SRC[platform]}
                   alt=""
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 object-contain"
+                  width={48}
+                  height={48}
+                  className={cn(
+                    "h-12 w-12 object-contain transition-all",
+                    !isConnected && "opacity-50 grayscale",
+                  )}
+                  aria-hidden
                 />
-              </div>
+              )}
               <span className="text-[10px] text-[#949BA4]">{config.name}</span>
             </li>
           );

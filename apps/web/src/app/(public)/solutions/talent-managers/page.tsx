@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ChartLineUp,
   ShieldCheck,
   Export,
   ArrowRight,
+  ArrowSquareOut,
   Sparkle,
   Lightning,
 } from "@phosphor-icons/react/dist/ssr";
@@ -477,22 +479,44 @@ export default function TalentManagersSolutionsPage() {
         </div>
       </section>
 
-      {/* Final CTA */}
+      {/* Final CTA — Stream Hatchet upsell */}
       <section>
         <div className="mx-auto max-w-5xl px-4 py-20 sm:px-6">
-          <div className="overflow-hidden rounded-3xl border border-[#3F4147] bg-[#313338] p-10 text-center sm:p-14">
-            <h2 className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
-              Verified rosters. Pitch-ready exports. Free.
+          <div className="overflow-hidden rounded-3xl border border-[#3F4147] bg-gradient-to-br from-[#313338] via-[#2B2D31] to-[#1E1F22] p-10 text-center sm:p-14">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E32C19]">
+              Need more firepower?
+            </p>
+            <div className="mt-5 flex justify-center">
+              <Image
+                src="/brand/streamhatchet.png"
+                alt="Stream Hatchet"
+                width={240}
+                height={64}
+                className="h-12 w-auto object-contain sm:h-14"
+              />
+            </div>
+            <h2 className="mt-6 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+              Upgrade to enterprise-grade analytics.
             </h2>
-            <p className="mt-4 text-base text-[#DBDEE1]">
-              Onboard creators in minutes. Close deals faster.
+            <p className="mx-auto mt-4 max-w-2xl text-base text-[#DBDEE1]">
+              TwitchMetrics is powered by{" "}
+              <span className="font-semibold text-[#F2F3F5]">
+                Stream Hatchet
+              </span>
+              , the leading streaming intelligence platform trusted by gaming
+              publishers, brands, and agencies. If your team needs deeper
+              business analytics — full-market trend reports, campaign
+              attribution, sponsorship benchmarking, custom data feeds — Stream
+              Hatchet has it.
             </p>
             <Link
-              href="/register"
+              href="https://streamhatchet.com"
+              target="_blank"
+              rel="noopener noreferrer"
               className="mt-8 inline-flex items-center gap-2 rounded-lg bg-[#E32C19] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
             >
-              Build your free verified roster
-              <ArrowRight size={16} weight="bold" />
+              Explore Stream Hatchet
+              <ArrowSquareOut size={16} weight="bold" />
             </Link>
           </div>
         </div>

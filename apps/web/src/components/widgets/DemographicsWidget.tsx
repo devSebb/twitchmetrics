@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import type { EChartsOption } from "echarts";
-import { BaseChart } from "@/components/charts";
 import { EmptyState } from "@/components/widgets/EmptyState";
 import { trpc } from "@/lib/trpc";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
@@ -17,46 +15,137 @@ type GenderBreakdown = Record<string, Record<string, number>>;
 type CountryBreakdown = Record<string, number>;
 // e.g. { "US": 0.45, "DE": 0.12 }
 
+const GENDER_KEYS = new Set(["male", "female", "other", "unknown"]);
+const MAX_COUNTRIES = 5;
+
+function isGenderFirst(data: GenderBreakdown): boolean {
+  return Object.keys(data).some((key) => GENDER_KEYS.has(key.toLowerCase()));
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function normalizeLabel(value: string): string {
+  if (value.toLowerCase() === "unknown") return "Unknown";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function countryCodeToFlag(code: string): string | null {
+  const normalized = code.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(normalized)) return null;
+
+  return normalized
+    .split("")
+    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+    .join("");
+}
+
+function countryDisplayName(code: string): string {
+  const normalized = code.trim().toUpperCase();
+  if (normalized === "OTHER") return "Other";
+
+  try {
+    if (
+      typeof Intl !== "undefined" &&
+      "DisplayNames" in Intl &&
+      /^[A-Z]{2}$/.test(normalized)
+    ) {
+      return (
+        new Intl.DisplayNames(["en"], { type: "region" }).of(normalized) ??
+        normalized
+      );
+    }
+  } catch {
+    // Fall through to readable fallback.
+  }
+
+  return code
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map(normalizeLabel)
+    .join(" ");
+}
+
 // ----------------------------------------------------------------
 // Parsers — degrade gracefully
 // ----------------------------------------------------------------
 
 function parseGenderData(raw: unknown): {
-  genderSplit: { name: string; value: number }[];
+  genderSplit: { key: string; name: string; value: number }[];
   ageRanges: { range: string; percentage: number }[];
 } | null {
   if (!raw || typeof raw !== "object") return null;
 
   const data = raw as GenderBreakdown;
-  const genders = Object.keys(data);
+  const normalized: GenderBreakdown = {};
+
+  if (isGenderFirst(data)) {
+    for (const [gender, ageMap] of Object.entries(data)) {
+      normalized[gender] = ageMap;
+    }
+  } else {
+    // Enrichment stores age-first: { "18-24": { male: 0.3 } }. Normalize
+    // it for this compact widget, which renders gender split + age bars.
+    for (const [ageRange, genderMap] of Object.entries(data)) {
+      for (const [gender, pct] of Object.entries(genderMap)) {
+        normalized[gender] = normalized[gender] ?? {};
+        normalized[gender]![ageRange] = pct;
+      }
+    }
+  }
+
+  const genders = Object.keys(normalized);
   if (genders.length === 0) return null;
 
   // Gender split totals
-  const genderSplit = genders.map((gender) => {
-    const ageMap = data[gender]!;
-    const total = Object.values(ageMap).reduce((s, v) => s + v, 0);
-    return {
-      name: gender.charAt(0).toUpperCase() + gender.slice(1),
-      value: total,
-    };
-  });
+  const rawGenderSplit = genders
+    .map((gender) => {
+      const ageMap = normalized[gender]!;
+      const total = Object.values(ageMap).reduce((s, v) => s + v, 0);
+      return {
+        key: gender.toLowerCase(),
+        name: normalizeLabel(gender),
+        value: total,
+      };
+    })
+    .filter((gender) => gender.value > 0);
+  const genderTotal = rawGenderSplit.reduce(
+    (sum, gender) => sum + gender.value,
+    0,
+  );
+  const genderSplit =
+    genderTotal > 0
+      ? rawGenderSplit.map((gender) => ({
+          ...gender,
+          value: gender.value / genderTotal,
+        }))
+      : rawGenderSplit;
 
   // Aggregate age ranges across genders
   const ageMap = new Map<string, number>();
   for (const gender of genders) {
-    const ages = data[gender]!;
+    const ages = normalized[gender]!;
     for (const [range, pct] of Object.entries(ages)) {
       ageMap.set(range, (ageMap.get(range) ?? 0) + pct);
     }
   }
 
-  const ageRanges = [...ageMap.entries()]
+  const rawAgeRanges = [...ageMap.entries()]
     .map(([range, percentage]) => ({ range, percentage }))
     .sort((a, b) => {
       const numA = parseInt(a.range, 10) || 0;
       const numB = parseInt(b.range, 10) || 0;
       return numA - numB;
     });
+  const ageTotal = rawAgeRanges.reduce((sum, age) => sum + age.percentage, 0);
+  const ageRanges =
+    ageTotal > 0
+      ? rawAgeRanges.map((age) => ({
+          ...age,
+          percentage: age.percentage / ageTotal,
+        }))
+      : rawAgeRanges;
 
   return { genderSplit, ageRanges };
 }
@@ -67,134 +156,110 @@ function parseCountryData(
   if (!raw || typeof raw !== "object") return null;
 
   const data = raw as CountryBreakdown;
-  const entries = Object.entries(data)
+  const rawEntries = Object.entries(data)
     .map(([country, percentage]) => ({ country, percentage }))
     .sort((a, b) => b.percentage - a.percentage)
-    .slice(0, 5);
+    .slice(0, MAX_COUNTRIES);
+  const total = rawEntries.reduce((sum, entry) => sum + entry.percentage, 0);
+  const entries =
+    total > 1.01
+      ? rawEntries.map((entry) => ({
+          ...entry,
+          percentage: entry.percentage / 100,
+        }))
+      : rawEntries;
 
   return entries.length > 0 ? entries : null;
 }
 
 // ----------------------------------------------------------------
-// Chart builders
+// Presentation pieces
 // ----------------------------------------------------------------
 
-function buildGenderChart(
-  genderSplit: { name: string; value: number }[],
-): EChartsOption {
-  const GENDER_COLORS: Record<string, string> = {
-    Male: "#5B8DEF",
-    Female: "#E4405F",
-    Other: "#949BA4",
-  };
+function AudienceSummary({
+  genderSplit,
+}: {
+  genderSplit: { key: string; name: string; value: number }[];
+}) {
+  const visible = genderSplit
+    .filter((gender) => gender.value >= 0.01)
+    .sort((left, right) => {
+      const order = ["male", "female", "other", "unknown"];
+      return order.indexOf(left.key) - order.indexOf(right.key);
+    });
 
-  return {
-    tooltip: {
-      trigger: "item",
-      formatter: (params: unknown) => {
-        const p = params as { name: string; percent: number };
-        return `${p.name}: ${p.percent}%`;
-      },
-    },
-    series: [
-      {
-        type: "pie",
-        radius: ["50%", "70%"],
-        center: ["50%", "50%"],
-        avoidLabelOverlap: true,
-        label: {
-          show: true,
-          formatter: "{b}\n{d}%",
-          color: "#DBDEE1",
-          fontSize: 11,
-        },
-        itemStyle: { borderRadius: 4, borderColor: "#313338", borderWidth: 2 },
-        data: genderSplit.map((g) => ({
-          value: Math.round(g.value * 100),
-          name: g.name,
-          itemStyle: { color: GENDER_COLORS[g.name] ?? "#949BA4" },
-        })),
-      },
-    ],
-  };
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      {visible.map((gender) => (
+        <div key={gender.key} className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold leading-none text-[#F2F3F5]">
+            {formatPercent(gender.value)}
+          </span>
+          <span className="text-xs font-semibold text-[#949BA4]">
+            {gender.name}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-function buildAgeChart(
-  ageRanges: { range: string; percentage: number }[],
-): EChartsOption {
-  return {
-    grid: { left: 60, right: 20, top: 5, bottom: 5 },
-    xAxis: {
-      type: "value",
-      show: false,
-      max: Math.max(...ageRanges.map((a) => a.percentage)) * 1.2,
-    },
-    yAxis: {
-      type: "category",
-      data: ageRanges.map((a) => a.range),
-      inverse: true,
-      axisLabel: { color: "#949BA4", fontSize: 11 },
-      axisLine: { show: false },
-      axisTick: { show: false },
-    },
-    tooltip: { show: false },
-    series: [
-      {
-        type: "bar",
-        data: ageRanges.map((a) => ({
-          value: Math.round(a.percentage * 100),
-          itemStyle: { color: "#5B8DEF", borderRadius: [0, 4, 4, 0] },
-        })),
-        barWidth: 16,
-        label: {
-          show: true,
-          position: "right",
-          formatter: "{c}%",
-          color: "#DBDEE1",
-          fontSize: 11,
-        },
-      },
-    ],
-  };
+function AgeBars({
+  ageRanges,
+}: {
+  ageRanges: { range: string; percentage: number }[];
+}) {
+  return (
+    <div className="mt-4 space-y-2">
+      {ageRanges.map((age) => (
+        <div key={age.range}>
+          <div className="mb-1 flex items-center justify-between text-xs font-semibold">
+            <span className="text-[#F2F3F5]">{age.range}</span>
+            <span className="text-[#F2F3F5]">
+              {formatPercent(age.percentage)}
+            </span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-[#3F4147]">
+            <div
+              className="h-full rounded-full bg-[#E32C19]"
+              style={{ width: `${Math.min(age.percentage * 100, 100)}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-function buildCountryChart(
-  countries: { country: string; percentage: number }[],
-): EChartsOption {
-  return {
-    grid: { left: 50, right: 20, top: 5, bottom: 5 },
-    xAxis: {
-      type: "value",
-      show: false,
-      max: Math.max(...countries.map((c) => c.percentage)) * 1.2,
-    },
-    yAxis: {
-      type: "category",
-      data: countries.map((c) => c.country),
-      inverse: true,
-      axisLabel: { color: "#949BA4", fontSize: 11 },
-      axisLine: { show: false },
-      axisTick: { show: false },
-    },
-    tooltip: { show: false },
-    series: [
-      {
-        type: "bar",
-        data: countries.map((c) => ({
-          value: Math.round(c.percentage * 100),
-          itemStyle: { color: "#E32C19", borderRadius: [0, 4, 4, 0] },
-        })),
-        barWidth: 16,
-        label: {
-          show: true,
-          position: "right",
-          formatter: "{c}%",
-          color: "#DBDEE1",
-          fontSize: 11,
-        },
-      },
-    ],
-  };
+function CountryRows({
+  countries,
+}: {
+  countries: { country: string; percentage: number }[];
+}) {
+  return (
+    <div className="space-y-5">
+      {countries.map((country) => {
+        const flag = countryCodeToFlag(country.country);
+        const label = countryDisplayName(country.country);
+        return (
+          <div
+            key={country.country}
+            className="flex items-center justify-between gap-4"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-lg leading-none">{flag ?? "🌐"}</span>
+              <span className="truncate text-lg font-semibold text-[#F2F3F5]">
+                {label}
+              </span>
+            </div>
+            <span className="shrink-0 text-lg font-bold text-[#F2F3F5]">
+              {formatPercent(country.percentage)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ----------------------------------------------------------------
@@ -313,44 +378,20 @@ function DemographicsDataView({ profile }: { profile: SerializedProfile }) {
   }
 
   return (
-    <div className="space-y-3">
-      {/* Gender donut */}
-      {genderData && (
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <h4 className="text-xs font-medium text-[#949BA4]">Gender</h4>
+    <div className="space-y-4">
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
+        {(genderData || ageData) && (
+          <div>
+            {genderData && <AudienceSummary genderSplit={genderData} />}
+            {ageData && <AgeBars ageRanges={ageData} />}
           </div>
-          <BaseChart option={buildGenderChart(genderData)} height={140} />
-        </div>
-      )}
+        )}
 
-      {/* Age bars */}
-      {ageData && (
-        <div>
-          <h4 className="mb-1 text-xs font-medium text-[#949BA4]">Age Range</h4>
-          <BaseChart
-            option={buildAgeChart(ageData)}
-            height={ageData.length * 28 + 10}
-          />
-        </div>
-      )}
+        {countryData && <CountryRows countries={countryData} />}
+      </div>
 
-      {/* Top countries */}
-      {countryData && (
-        <div>
-          <h4 className="mb-1 text-xs font-medium text-[#949BA4]">
-            Top Countries
-          </h4>
-          <BaseChart
-            option={buildCountryChart(countryData)}
-            height={countryData.length * 28 + 10}
-          />
-        </div>
-      )}
-
-      {/* Source attribution */}
       {sourcePlatform && (
-        <p className="text-center text-[10px] text-[#949BA4]">
+        <p className="text-right text-[10px] text-[#949BA4]">
           via {sourcePlatform.charAt(0).toUpperCase() + sourcePlatform.slice(1)}{" "}
           Analytics
         </p>

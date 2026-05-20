@@ -5,6 +5,7 @@ import Image from "next/image";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { computeProfileCompletion } from "@/lib/profile-completion";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { PlatformIcon } from "@/components/shared";
 import type { SerializedProfile } from "./DashboardGrid";
 
 type Props = {
@@ -156,10 +157,11 @@ export function DashboardProfileHeader({ profile, isOwner }: Props) {
           {profile.platformAccounts.map((acct) => {
             const config = PLATFORM_CONFIG[acct.platform];
             return (
-              <div key={acct.platform} className="flex items-center gap-2">
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: config.color }}
+              <div key={acct.platform} className="flex items-center gap-2.5">
+                <PlatformIcon
+                  platform={acct.platform}
+                  size="lg"
+                  rounded="none"
                 />
                 <div>
                   <p className="text-sm font-semibold text-[#F2F3F5]">

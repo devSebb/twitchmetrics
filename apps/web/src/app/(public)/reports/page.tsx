@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
@@ -113,6 +114,13 @@ export default function ReportsPage() {
       <div className="mb-10 grid gap-6 lg:grid-cols-2">
         <Card className="flex flex-col justify-between p-6">
           <div>
+            <Image
+              src="/brand/streamhatchet.png"
+              alt="Stream Hatchet"
+              width={200}
+              height={56}
+              className="mb-4 h-10 w-auto object-contain object-left"
+            />
             <div className="mb-3 flex items-center gap-2">
               <span className="rounded bg-[#E32C19]/20 px-2.5 py-1 text-xs font-semibold text-[#E32C19]">
                 Premium
