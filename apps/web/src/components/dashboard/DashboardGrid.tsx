@@ -294,7 +294,7 @@ export function DashboardGrid({
 
         {/* Row 7: Interests (1/2) | Streamer Qualities (1/2) */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <InterestsSection />
+          <InterestsSection interests={profile.interests ?? []} />
           <StreamerQualitiesSection />
         </div>
 
