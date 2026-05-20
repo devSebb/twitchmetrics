@@ -108,6 +108,9 @@ model TalentManagerProfile {
   bio        String? // app-layer max 280
   avatarUrl  String? // user-uploaded; canonical for TMs (no platform accounts)
 
+  // PDF export branding
+  brandColor String? // hex like "#E32C19"; null falls back to app brand red
+
   // Private — manager-only
   websiteUrl   String?
   country      String?

@@ -11,6 +11,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { downloadFile } from "@/lib/download";
 import { cn } from "@/lib/utils";
+import { ExportPdfSettingsModal } from "./ExportPdfSettingsModal";
 
 type ExportRosterButtonProps = {
   disabled?: boolean;
@@ -20,6 +21,7 @@ export function ExportRosterButton({
   disabled = false,
 }: ExportRosterButtonProps) {
   const [open, setOpen] = useState(false);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -112,20 +114,21 @@ export function ExportRosterButton({
                 <p className="text-xs text-[#949BA4]">Spreadsheet (.csv)</p>
               </div>
             </button>
-            <div
+            <button
+              type="button"
               role="menuitem"
-              aria-disabled
-              className="flex w-full cursor-not-allowed items-center gap-3 border-t border-[#3F4147] px-4 py-3 opacity-60"
+              onClick={() => {
+                setOpen(false);
+                setPdfModalOpen(true);
+              }}
+              className="flex w-full items-center gap-3 border-t border-[#3F4147] px-4 py-3 text-left transition-colors hover:bg-[#383A40]"
             >
               <FilePdf size={18} weight="duotone" className="text-[#ef4444]" />
-              <div className="flex-1">
+              <div>
                 <p className="text-sm font-semibold text-[#F2F3F5]">PDF</p>
                 <p className="text-xs text-[#949BA4]">Pitch-ready report</p>
               </div>
-              <span className="rounded-full bg-[#383A40] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#DBDEE1]">
-                Soon
-              </span>
-            </div>
+            </button>
           </div>
         </div>
       )}
@@ -135,6 +138,11 @@ export function ExportRosterButton({
           {error}
         </p>
       )}
+
+      <ExportPdfSettingsModal
+        open={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+      />
     </div>
   );
 }

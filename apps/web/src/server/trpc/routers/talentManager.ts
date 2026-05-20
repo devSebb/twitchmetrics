@@ -12,6 +12,10 @@ import {
 } from "@/server/services/roster-invite";
 import { logAudit } from "@/server/services/audit";
 import { buildCsv, isoOrEmpty } from "@/server/utils/csv";
+import { renderRosterPdf } from "@/server/services/pdf/render";
+import type { RosterReportCreator } from "@/server/services/pdf/roster-report";
+import { resolveAvatar } from "@/lib/avatar";
+import { THEME } from "@/lib/constants/theme";
 
 const permissionsSchema = z
   .object({
@@ -66,6 +70,200 @@ const tmProfileUpdateSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => null)),
 });
+
+// PDF safety cap. Above this we throw PAYLOAD_TOO_LARGE — the renderer would
+// otherwise drift into Vercel's function timeout territory on large rosters.
+const PDF_CREATOR_CAP = 100;
+
+const exportRosterInclude = {
+  creatorProfile: {
+    select: {
+      displayName: true,
+      slug: true,
+      avatarUrl: true,
+      customAvatarUrl: true,
+      primaryPlatform: true,
+      primaryGameName: true,
+      totalFollowers: true,
+      totalViews: true,
+      state: true,
+      lastSnapshotAt: true,
+      platformAccounts: {
+        select: {
+          platform: true,
+          platformUsername: true,
+          platformAvatarUrl: true,
+          followerCount: true,
+        },
+      },
+      growthRollups: {
+        select: {
+          platform: true,
+          delta7d: true,
+          pct7d: true,
+          trendDirection: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.TalentManagerAccessInclude;
+
+type ExportRow = Prisma.TalentManagerAccessGetPayload<{
+  include: typeof exportRosterInclude;
+}>;
+
+async function generatePdfExport(args: {
+  ctx: {
+    prisma: typeof import("@twitchmetrics/database").prisma;
+    user: { id: string };
+  };
+  rows: ExportRow[];
+  brandColor: string | undefined;
+}) {
+  const { ctx, rows, brandColor } = args;
+
+  if (rows.length > PDF_CREATOR_CAP) {
+    throw new TRPCError({
+      code: "PAYLOAD_TOO_LARGE",
+      message: `PDF export is limited to ${PDF_CREATOR_CAP} active creators. Trim the roster or export CSV.`,
+    });
+  }
+
+  const [user, profile] = await Promise.all([
+    ctx.prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      select: { name: true, image: true },
+    }),
+    ctx.prisma.talentManagerProfile.upsert({
+      where: { userId: ctx.user.id },
+      create: { userId: ctx.user.id },
+      update: {},
+      select: {
+        agencyName: true,
+        bio: true,
+        avatarUrl: true,
+        brandColor: true,
+      },
+    }),
+  ]);
+
+  if (!user) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  const resolvedBrandColor =
+    brandColor ?? profile.brandColor ?? THEME.colors.brandRed;
+
+  // Persist the chosen color so it pre-fills next export. Fire-and-forget —
+  // a write failure must not block the PDF response.
+  if (brandColor && brandColor !== profile.brandColor) {
+    ctx.prisma.talentManagerProfile
+      .update({
+        where: { userId: ctx.user.id },
+        data: { brandColor },
+      })
+      .catch((err: unknown) => {
+        console.error("[exportRoster] Failed to persist brandColor", err);
+      });
+  }
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    process.env.NEXTAUTH_URL ??
+    "https://twitchmetrics.net";
+
+  const creators: RosterReportCreator[] = rows.map((access) => {
+    const creator = access.creatorProfile;
+    const platforms = creator.platformAccounts;
+
+    const avatarUrl = resolveAvatar("creator", {
+      user: null,
+      creator: {
+        avatarUrl: creator.avatarUrl,
+        customAvatarUrl: creator.customAvatarUrl,
+        platformAccounts: platforms.map((acct) => ({
+          platformAvatarUrl: acct.platformAvatarUrl,
+        })),
+      },
+    });
+
+    const primaryAccount = creator.primaryPlatform
+      ? platforms.find((acct) => acct.platform === creator.primaryPlatform)
+      : platforms[0];
+
+    const primaryRollup = creator.primaryPlatform
+      ? creator.growthRollups.find(
+          (r) => r.platform === creator.primaryPlatform,
+        )
+      : creator.growthRollups[0];
+
+    return {
+      slug: creator.slug,
+      displayName: creator.displayName,
+      avatarUrl,
+      primaryPlatform: creator.primaryPlatform,
+      primaryUsername: primaryAccount?.platformUsername ?? null,
+      connectedPlatforms: platforms.map((acct) => acct.platform),
+      totalFollowers: Number(creator.totalFollowers ?? 0),
+      growth7dPct: primaryRollup?.pct7d ?? null,
+      topGame: creator.primaryGameName,
+      profileUrl: `${baseUrl}/creators/${creator.slug}`,
+    };
+  });
+
+  const totalFollowers = creators.reduce((sum, c) => sum + c.totalFollowers, 0);
+  const growthValues = creators
+    .map((c) => c.growth7dPct)
+    .filter((v): v is number => v !== null);
+  const avgGrowthPct =
+    growthValues.length > 0
+      ? growthValues.reduce((s, v) => s + v, 0) / growthValues.length
+      : 0;
+
+  const managerAvatar = resolveAvatar("talent_manager", {
+    user: { image: user.image },
+    manager: { avatarUrl: profile.avatarUrl },
+  });
+
+  const buffer = await renderRosterPdf({
+    manager: {
+      displayName: user.name ?? "Talent Manager",
+      agencyName: profile.agencyName,
+      bio: profile.bio,
+      avatarUrl: managerAvatar,
+    },
+    brandColor: resolvedBrandColor,
+    generatedAt: new Date(),
+    summary: {
+      totalCreators: creators.length,
+      totalFollowers,
+      avgGrowthPct,
+    },
+    creators,
+    siteUrl: baseUrl,
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const filename = `twitchmetrics-roster-${today}.pdf`;
+
+  logAudit({
+    action: "talent_manager.export_roster",
+    userId: ctx.user.id,
+    metadata: {
+      format: "pdf",
+      rowCount: creators.length,
+      brandColor: resolvedBrandColor,
+    },
+  });
+
+  return {
+    filename,
+    mimeType: "application/pdf",
+    content: buffer.toString("base64"),
+    encoding: "base64" as const,
+    rowCount: creators.length,
+  };
+}
 
 export const talentManagerRouter = router({
   /**
@@ -296,52 +494,47 @@ export const talentManagerRouter = router({
   }),
 
   /**
-   * Export the manager's full roster (active + pending + expired) as a
-   * downloadable file. CSV today; PDF planned.
+   * Export the manager's roster as a downloadable file.
    *
-   * Public-data-only schema, one row per creator, with per-platform columns
-   * for the six supported platforms so the file opens cleanly in Excel/Sheets.
+   * - CSV: active + pending + expired (record-keeping, wide-schema for Excel).
+   * - PDF: active only (pitch-ready overview). Capped at PDF_CREATOR_CAP.
+   *
    * Filename embeds the UTC date so repeat downloads don't collide.
    */
   exportRoster: talentManagerProcedure
-    .input(z.object({ format: z.literal("csv") }))
+    .input(
+      z.discriminatedUnion("format", [
+        z.object({ format: z.literal("csv") }),
+        z.object({
+          format: z.literal("pdf"),
+          brandColor: z
+            .string()
+            .regex(/^#[0-9A-Fa-f]{6}$/)
+            .optional(),
+        }),
+      ]),
+    )
     .mutation(async ({ ctx, input }) => {
+      // Both formats include active + pending. PDF surfaces public data only
+      // so the invite state doesn't matter for what's displayed; brands viewing
+      // the deck just see the creator and their public metrics.
       const rows = await ctx.prisma.talentManagerAccess.findMany({
         where: {
           managerId: ctx.user.id,
           revokedAt: null,
           status: { in: ["active", "pending"] },
         },
-        include: {
-          creatorProfile: {
-            select: {
-              displayName: true,
-              slug: true,
-              primaryPlatform: true,
-              totalFollowers: true,
-              totalViews: true,
-              state: true,
-              lastSnapshotAt: true,
-              platformAccounts: {
-                select: {
-                  platform: true,
-                  platformUsername: true,
-                  followerCount: true,
-                },
-              },
-              growthRollups: {
-                select: {
-                  platform: true,
-                  delta7d: true,
-                  pct7d: true,
-                  trendDirection: true,
-                },
-              },
-            },
-          },
-        },
+        include: exportRosterInclude,
         orderBy: { grantedAt: "desc" },
       });
+
+      if (input.format === "pdf") {
+        return generatePdfExport({
+          ctx,
+          rows,
+          brandColor: input.brandColor,
+        });
+      }
 
       const now = Date.now();
       const platformOrder: Platform[] = [
