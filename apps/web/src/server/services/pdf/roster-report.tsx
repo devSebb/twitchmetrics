@@ -142,7 +142,6 @@ const styles = StyleSheet.create({
   coverBio: {
     fontSize: 10,
     color: COLORS.ink,
-    fontStyle: "italic",
     marginTop: 28,
     paddingLeft: 12,
     borderLeftWidth: 2,

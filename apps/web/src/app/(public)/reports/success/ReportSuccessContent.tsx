@@ -7,6 +7,12 @@ import Link from "next/link";
 type State =
   | { status: "loading" }
   | { status: "ready"; purchaseId: string; templateName: string }
+  | {
+      status: "downloaded";
+      purchaseId: string;
+      templateName: string;
+      filename: string;
+    }
   | { status: "quote" }
   | { status: "error"; message: string };
 
@@ -14,6 +20,7 @@ export function ReportSuccessContent() {
   const params = useSearchParams();
   const [state, setState] = useState<State>({ status: "loading" });
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     const mode = params.get("mode");
@@ -67,10 +74,12 @@ export function ReportSuccessContent() {
 
   async function handleDownload() {
     if (state.status !== "ready") return;
+    const { purchaseId, templateName } = state;
     setDownloading(true);
+    setDownloadError(null);
     try {
       const res = await fetch(
-        `/api/reports/download?purchase_id=${state.purchaseId}`,
+        `/api/reports/download?purchase_id=${purchaseId}`,
       );
       if (!res.ok) throw new Error("Download failed");
 
@@ -84,6 +93,14 @@ export function ReportSuccessContent() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      setState({ status: "downloaded", purchaseId, templateName, filename });
+    } catch (err) {
+      setDownloadError(
+        err instanceof Error && err.message
+          ? err.message
+          : "We couldn't generate the report. Please try again.",
+      );
     } finally {
       setDownloading(false);
     }
@@ -226,9 +243,63 @@ export function ReportSuccessContent() {
               )}
             </button>
 
+            {downloadError && (
+              <p className="mt-4 text-xs text-[#ef4444]">{downloadError}</p>
+            )}
+
             <p className="mt-6 text-xs text-[#4E5058]">
               You can re-download this report at any time using this page link.
             </p>
+          </>
+        )}
+
+        {state.status === "downloaded" && (
+          <>
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#22c55e]/10">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="mb-1 text-xl font-bold text-[#F2F3F5]">
+              Report Downloaded
+            </h2>
+            <p className="mb-2 text-sm font-medium text-[#DBDEE1]">
+              {state.templateName}
+            </p>
+            <p className="mb-8 text-sm text-[#949BA4]">
+              <span className="font-mono text-[#DBDEE1]">{state.filename}</span>{" "}
+              has been saved to your device.
+            </p>
+
+            <Link
+              href="/reports"
+              className="inline-block w-full rounded-lg bg-[#383A40] px-6 py-3 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            >
+              Back to Reports
+            </Link>
+
+            <button
+              type="button"
+              onClick={() =>
+                setState({
+                  status: "ready",
+                  purchaseId: state.purchaseId,
+                  templateName: state.templateName,
+                })
+              }
+              className="mt-3 text-xs text-[#949BA4] underline-offset-2 hover:underline"
+            >
+              Download again
+            </button>
           </>
         )}
       </div>

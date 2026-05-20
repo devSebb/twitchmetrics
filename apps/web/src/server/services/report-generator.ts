@@ -1,4 +1,5 @@
-import { prisma } from "@twitchmetrics/database";
+import { Prisma, prisma } from "@twitchmetrics/database";
+import { csvRow, escapeCsvField } from "@/server/utils/csv";
 import type {
   MetricKey,
   TemplateConfig,
@@ -9,62 +10,38 @@ type GenerateArgs = {
   selectedMetrics?: string[];
 };
 
-const HALF_HOUR_MS = 30 * 60 * 1000;
+const SNAPSHOT_INTERVAL_SECONDS = 30 * 60;
 const MIN_GOOD_COVERAGE_PERCENT = 80;
 
-// ─── CSV helpers ─────────────────────────────────────────────────────────────
-
-function esc(v: unknown): string {
-  const s = String(v ?? "");
-  return s.includes(",") || s.includes('"') || s.includes("\n")
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
-}
-
-function row(...cells: unknown[]): string {
-  return cells.map(esc).join(",");
-}
+// ─── Formatting ────────────────────────────────────────────────
 
 function fmt(n: number): string {
   return n.toLocaleString("en-US");
 }
-
 function fmtHours(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
-
 function fmtPercent(n: number): string {
   return `${n.toFixed(1)}%`;
 }
-
 function fmtDateTime(d: Date | null): string {
   return d ? d.toISOString() : "N/A";
 }
 
-function selectedMetricsFor(
-  config: TemplateConfig,
-  requested: string[] | undefined,
-): MetricKey[] {
-  if (!requested || requested.length === 0) return config.allowedMetrics;
-  const allowed = new Set(config.allowedMetrics);
-  return requested.filter((m): m is MetricKey => allowed.has(m as MetricKey));
-}
-
-// ─── Period helpers ───────────────────────────────────────────────────────────
+// ─── Period helpers ────────────────────────────────────────────
 
 function periodStart(timePeriod: string, end: Date): Date {
-  switch (timePeriod) {
-    case "30d":
-      return new Date(end.getTime() - 30 * 86400_000);
-    case "90d":
-      return new Date(end.getTime() - 90 * 86400_000);
-    case "6m":
-      return new Date(end.getTime() - 183 * 86400_000);
-    case "12m":
-      return new Date(end.getTime() - 365 * 86400_000);
-    default:
-      return new Date(end.getTime() - 30 * 86400_000);
-  }
+  const days =
+    timePeriod === "30d"
+      ? 30
+      : timePeriod === "90d"
+        ? 90
+        : timePeriod === "6m"
+          ? 183
+          : timePeriod === "12m"
+            ? 365
+            : 30;
+  return new Date(end.getTime() - days * 86_400_000);
 }
 
 function periodLabel(timePeriod: string): string {
@@ -80,165 +57,208 @@ function periodLabel(timePeriod: string): string {
 function expectedSnapshotCount(start: Date, end: Date): number {
   return Math.max(
     1,
-    Math.ceil((end.getTime() - start.getTime()) / HALF_HOUR_MS),
+    Math.ceil(
+      (end.getTime() - start.getTime()) / (SNAPSHOT_INTERVAL_SECONDS * 1000),
+    ),
   );
 }
 
-type GameSnapshot = {
-  snapshotAt: Date;
-  twitchViewers: number;
+function selectedMetricsFor(
+  config: TemplateConfig,
+  requested: string[] | undefined,
+): MetricKey[] {
+  if (!requested || requested.length === 0) return config.allowedMetrics;
+  const allowed = new Set(config.allowedMetrics);
+  return requested.filter((m): m is MetricKey => allowed.has(m as MetricKey));
+}
+
+type DataQuality = "Good" | "Partial" | "Low" | "No data";
+
+function dataQualityFor(
+  snapshotCount: number,
+  coveragePercent: number,
+): DataQuality {
+  if (snapshotCount === 0) return "No data";
+  if (coveragePercent >= MIN_GOOD_COVERAGE_PERCENT) return "Good";
+  if (coveragePercent >= 50) return "Partial";
+  return "Low";
+}
+
+// ─── Games: SQL aggregation ────────────────────────────────────
+//
+// Single-pass aggregation over GameViewerSnapshot. LEAD() over each game's
+// snapshots yields the time gap to the next snapshot, capped at 30 minutes
+// and clamped to the period end — identical math to the previous in-memory
+// algorithm, but executed in Postgres so only the result rows cross the wire.
+
+type GameAggregateRow = {
+  game_id: string;
+  hours_watched: Prisma.Decimal;
+  observed_hours: Prisma.Decimal;
+  peak_viewers: number;
+  snapshot_count: bigint;
+  first_snapshot: Date;
+  last_snapshot: Date;
 };
 
-type GamePeriodMetrics = {
-  hoursWatched: number;
-  observedHours: number;
-  avgViewers: number | null;
-  peakViewers: number | null;
-  snapshotCount: number;
-  expectedSnapshots: number;
-  coveragePercent: number;
-  firstSnapshot: Date | null;
-  lastSnapshot: Date | null;
-  dataQuality: "Good" | "Partial" | "Low" | "No data";
-};
-
-function computeGamePeriodMetrics(
-  snapshots: GameSnapshot[],
+async function aggregateGames(
   start: Date,
   end: Date,
-): GamePeriodMetrics {
-  const ordered = [...snapshots].sort(
-    (a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime(),
-  );
-  const expected = expectedSnapshotCount(start, end);
-  const snapshotCount = ordered.length;
-  const coveragePercent = Math.min(100, (snapshotCount / expected) * 100);
+  filter:
+    | { byId: true; entityIds: string[] }
+    | { byId: false; topCount: number },
+): Promise<GameAggregateRow[]> {
+  const gameFilter = filter.byId
+    ? Prisma.sql`AND "gameId" = ANY(${filter.entityIds}::uuid[])`
+    : Prisma.empty;
+  const limitClause = filter.byId
+    ? Prisma.empty
+    : Prisma.sql`LIMIT ${filter.topCount}`;
 
-  let hoursWatched = 0;
-  let observedMs = 0;
-  let peakViewers: number | null = null;
-
-  for (let i = 0; i < ordered.length; i++) {
-    const current = ordered[i]!;
-    const next = ordered[i + 1];
-    const intervalStart = Math.max(
-      current.snapshotAt.getTime(),
-      start.getTime(),
-    );
-    const naturalEnd = next
-      ? next.snapshotAt.getTime()
-      : current.snapshotAt.getTime() + HALF_HOUR_MS;
-    const intervalEnd = Math.min(naturalEnd, end.getTime());
-    const intervalMs = Math.max(
-      0,
-      Math.min(HALF_HOUR_MS, intervalEnd - intervalStart),
-    );
-
-    if (intervalMs > 0) {
-      hoursWatched += current.twitchViewers * (intervalMs / 3_600_000);
-      observedMs += intervalMs;
-    }
-
-    peakViewers =
-      peakViewers === null
-        ? current.twitchViewers
-        : Math.max(peakViewers, current.twitchViewers);
-  }
-
-  const observedHours = observedMs / 3_600_000;
-  const avgViewers =
-    observedHours > 0 ? Math.round(hoursWatched / observedHours) : null;
-
-  const dataQuality =
-    snapshotCount === 0
-      ? "No data"
-      : coveragePercent >= MIN_GOOD_COVERAGE_PERCENT
-        ? "Good"
-        : coveragePercent >= 50
-          ? "Partial"
-          : "Low";
-
-  return {
-    hoursWatched,
-    observedHours,
-    avgViewers,
-    peakViewers,
-    snapshotCount,
-    expectedSnapshots: expected,
-    coveragePercent,
-    firstSnapshot: ordered[0]?.snapshotAt ?? null,
-    lastSnapshot: ordered[ordered.length - 1]?.snapshotAt ?? null,
-    dataQuality,
-  };
+  return prisma.$queryRaw<GameAggregateRow[]>(Prisma.sql`
+    WITH ordered AS (
+      SELECT
+        "gameId" AS game_id,
+        "snapshotAt" AS snapshot_at,
+        "twitchViewers" AS twitch_viewers,
+        LEAD("snapshotAt") OVER (
+          PARTITION BY "gameId" ORDER BY "snapshotAt"
+        ) AS next_at
+      FROM "GameViewerSnapshot"
+      WHERE "snapshotAt" >= ${start}
+        AND "snapshotAt" <= ${end}
+        ${gameFilter}
+    ),
+    intervals AS (
+      SELECT
+        game_id,
+        snapshot_at,
+        twitch_viewers,
+        GREATEST(
+          0,
+          LEAST(
+            ${SNAPSHOT_INTERVAL_SECONDS}::numeric,
+            EXTRACT(EPOCH FROM (
+              LEAST(
+                ${end}::timestamptz,
+                COALESCE(next_at, snapshot_at + INTERVAL '30 minutes')
+              ) - snapshot_at
+            ))
+          )
+        ) AS interval_seconds
+      FROM ordered
+    )
+    SELECT
+      game_id,
+      SUM(twitch_viewers * interval_seconds / 3600.0)::numeric AS hours_watched,
+      SUM(interval_seconds / 3600.0)::numeric AS observed_hours,
+      MAX(twitch_viewers)::int AS peak_viewers,
+      COUNT(*)::bigint AS snapshot_count,
+      MIN(snapshot_at) AS first_snapshot,
+      MAX(snapshot_at) AS last_snapshot
+    FROM intervals
+    GROUP BY game_id
+    ORDER BY hours_watched DESC
+    ${limitClause}
+  `);
 }
 
-// ─── Games report ─────────────────────────────────────────────────────────────
+// ─── Games: report ────────────────────────────────────────────
 
 async function generateGamesReport(
   config: TemplateConfig,
   reportName: string,
-  args: GenerateArgs = {},
+  args: GenerateArgs,
 ): Promise<string> {
   const generatedAt = new Date();
   const since = periodStart(config.timePeriod, generatedAt);
   const metrics = selectedMetricsFor(config, args.selectedMetrics);
   const byId = config.topCount === "byId";
   const entityIds = args.entityIds ?? [];
+  const expectedSnapshots = expectedSnapshotCount(since, generatedAt);
 
-  const rawGames = byId
-    ? await prisma.game.findMany({
-        where: { id: { in: entityIds } },
-        include: {
-          viewerSnapshots: {
-            where: { snapshotAt: { gte: since, lte: generatedAt } },
-            orderBy: { snapshotAt: "asc" },
-          },
-          topChannels: { orderBy: { viewerHours: "desc" }, take: 5 },
-        },
-      })
-    : await prisma.game.findMany({
-        where: {
-          viewerSnapshots: {
-            some: { snapshotAt: { gte: since, lte: generatedAt } },
-          },
-        },
-        include: {
-          viewerSnapshots: {
-            where: { snapshotAt: { gte: since, lte: generatedAt } },
-            orderBy: { snapshotAt: "asc" },
-          },
-          topChannels: { orderBy: { viewerHours: "desc" }, take: 5 },
-        },
+  // 1. SQL aggregation: ranks + computes metrics in one pass
+  const aggregates = byId
+    ? entityIds.length > 0
+      ? await aggregateGames(since, generatedAt, {
+          byId: true,
+          entityIds,
+        })
+      : []
+    : await aggregateGames(since, generatedAt, {
+        byId: false,
+        topCount: typeof config.topCount === "number" ? config.topCount : 50,
       });
 
-  const gamesWithMetrics = rawGames.map((game) => ({
-    game,
-    period: computeGamePeriodMetrics(game.viewerSnapshots, since, generatedAt),
-  }));
-
-  if (byId) {
-    const order = new Map(entityIds.map((id, i) => [id, i] as const));
-    gamesWithMetrics.sort(
-      (a, b) => (order.get(a.game.id) ?? 0) - (order.get(b.game.id) ?? 0),
-    );
-  } else {
-    gamesWithMetrics.sort((a, b) => {
-      if (b.period.hoursWatched !== a.period.hoursWatched) {
-        return b.period.hoursWatched - a.period.hoursWatched;
-      }
-      if ((b.period.avgViewers ?? 0) !== (a.period.avgViewers ?? 0)) {
-        return (b.period.avgViewers ?? 0) - (a.period.avgViewers ?? 0);
-      }
-      return (b.period.peakViewers ?? 0) - (a.period.peakViewers ?? 0);
-    });
-  }
+  // 2. Hydrate detail rows only for the chosen game IDs
+  const needsTopChannels = metrics.includes("topCreators");
+  const chosenIds = byId ? entityIds : aggregates.map((a) => a.game_id);
 
   const games =
-    !byId && typeof config.topCount === "number"
-      ? gamesWithMetrics.slice(0, config.topCount)
-      : gamesWithMetrics;
+    chosenIds.length > 0
+      ? await prisma.game.findMany({
+          where: { id: { in: chosenIds } },
+          ...(needsTopChannels
+            ? {
+                include: {
+                  topChannels: {
+                    orderBy: { viewerHours: "desc" },
+                    take: 5,
+                  },
+                },
+              }
+            : {}),
+        })
+      : [];
 
-  // ── Build column list ──────────────────────────────────────────────────────
+  const gameById = new Map(games.map((g) => [g.id, g] as const));
+  const aggById = new Map(aggregates.map((a) => [a.game_id, a] as const));
+
+  // byId preserves user-selected order; non-byId follows SQL hours-watched rank
+  const orderedIds = byId ? entityIds : aggregates.map((a) => a.game_id);
+
+  type GameRow = (typeof games)[number];
+  type RenderRow = {
+    game: GameRow;
+    hoursWatched: number;
+    observedHours: number;
+    avgViewers: number | null;
+    peakViewers: number | null;
+    snapshotCount: number;
+    coveragePercent: number;
+    firstSnapshot: Date | null;
+    lastSnapshot: Date | null;
+    dataQuality: DataQuality;
+  };
+
+  const rows: RenderRow[] = orderedIds
+    .map((id) => gameById.get(id))
+    .filter((g): g is GameRow => Boolean(g))
+    .map((game) => {
+      const agg = aggById.get(game.id);
+      const snapshotCount = Number(agg?.snapshot_count ?? 0n);
+      const hoursWatched = Number(agg?.hours_watched ?? 0);
+      const observedHours = Number(agg?.observed_hours ?? 0);
+      const coveragePercent = Math.min(
+        100,
+        (snapshotCount / expectedSnapshots) * 100,
+      );
+      return {
+        game,
+        hoursWatched,
+        observedHours,
+        avgViewers:
+          observedHours > 0 ? Math.round(hoursWatched / observedHours) : null,
+        peakViewers: agg?.peak_viewers ?? null,
+        snapshotCount,
+        coveragePercent,
+        firstSnapshot: agg?.first_snapshot ?? null,
+        lastSnapshot: agg?.last_snapshot ?? null,
+        dataQuality: dataQualityFor(snapshotCount, coveragePercent),
+      };
+    });
+
+  // 3. Build column list
   const cols: string[] = ["Rank", "Game"];
   if (metrics.includes("hoursWatched")) cols.push("Hours Watched (est.)");
   if (metrics.includes("avgViewers")) cols.push("Avg Viewers");
@@ -254,19 +274,18 @@ async function generateGamesReport(
     "Data Quality",
   );
 
+  // 4. Header block + methodology
   const lines: string[] = [];
-
-  // ── Report header ──────────────────────────────────────────────────────────
-  lines.push(row("Report", reportName));
-  lines.push(row("Period", periodLabel(config.timePeriod)));
-  lines.push(row("Period Start", since.toISOString()));
-  lines.push(row("Period End", generatedAt.toISOString()));
-  lines.push(row("Platforms", config.platforms.join(" + ")));
-  lines.push(row("Generated", generatedAt.toISOString()));
-  lines.push(row("Source", "Twitch API via TwitchMetrics game snapshots"));
-  lines.push(row("Snapshot Cadence", "Every 30 minutes"));
+  lines.push(csvRow("Report", reportName));
+  lines.push(csvRow("Period", periodLabel(config.timePeriod)));
+  lines.push(csvRow("Period Start", since.toISOString()));
+  lines.push(csvRow("Period End", generatedAt.toISOString()));
+  lines.push(csvRow("Platforms", config.platforms.join(" + ")));
+  lines.push(csvRow("Generated", generatedAt.toISOString()));
+  lines.push(csvRow("Source", "Twitch API via TwitchMetrics game snapshots"));
+  lines.push(csvRow("Snapshot Cadence", "Every 30 minutes"));
   lines.push(
-    row(
+    csvRow(
       "Ranking Basis",
       byId
         ? "User-selected games, preserving selected order"
@@ -274,71 +293,74 @@ async function generateGamesReport(
     ),
   );
   lines.push(
-    row(
+    csvRow(
       "Methodology",
       "Hours watched and average viewers are computed from observed Twitch game viewer snapshots inside the period. Average viewers is time-weighted by observed snapshot intervals.",
     ),
   );
   lines.push(
-    row(
+    csvRow(
       "Data Quality",
       `Good means at least ${MIN_GOOD_COVERAGE_PERCENT}% snapshot coverage for the period. Lower coverage is still exported but flagged per row.`,
     ),
   );
   if (metrics.includes("topCreators")) {
     lines.push(
-      row(
+      csvRow(
         "Top Channels Note",
         "Top Channels reflects the latest stored live-channel snapshot for each game, not a full-period channel ranking.",
       ),
     );
   }
   lines.push("");
+  lines.push(cols.map(escapeCsvField).join(","));
 
-  // ── Column headers ─────────────────────────────────────────────────────────
-  lines.push(cols.join(","));
-
-  // ── Data rows ──────────────────────────────────────────────────────────────
+  // 5. Data rows
   let totalHours = 0;
   let totalObservedHours = 0;
   let maxPeak = 0;
   let lowCoverageRows = 0;
 
-  games.forEach(({ game, period }, i) => {
-    totalHours += period.hoursWatched;
-    totalObservedHours += period.observedHours;
-    if (period.peakViewers !== null && period.peakViewers > maxPeak) {
-      maxPeak = period.peakViewers;
+  rows.forEach((r, i) => {
+    totalHours += r.hoursWatched;
+    totalObservedHours += r.observedHours;
+    if (r.peakViewers !== null && r.peakViewers > maxPeak) {
+      maxPeak = r.peakViewers;
     }
-    if (period.coveragePercent < MIN_GOOD_COVERAGE_PERCENT) lowCoverageRows++;
+    if (r.coveragePercent < MIN_GOOD_COVERAGE_PERCENT) lowCoverageRows++;
 
-    const cells: unknown[] = [i + 1, game.name];
-    if (metrics.includes("hoursWatched"))
-      cells.push(fmtHours(period.hoursWatched));
+    const cells: unknown[] = [i + 1, r.game.name];
+    if (metrics.includes("hoursWatched")) cells.push(fmtHours(r.hoursWatched));
     if (metrics.includes("avgViewers"))
-      cells.push(period.avgViewers !== null ? fmt(period.avgViewers) : "N/A");
+      cells.push(r.avgViewers !== null ? fmt(r.avgViewers) : "N/A");
     if (metrics.includes("peakViewers"))
-      cells.push(period.peakViewers !== null ? fmt(period.peakViewers) : "N/A");
+      cells.push(r.peakViewers !== null ? fmt(r.peakViewers) : "N/A");
     if (metrics.includes("topCreators")) {
-      const topCh = game.topChannels
-        .slice(0, 3)
-        .map((c) => c.channelName)
-        .join(" | ");
-      cells.push(topCh);
+      const topChannels =
+        "topChannels" in r.game
+          ? (r.game as GameRow & { topChannels: { channelName: string }[] })
+              .topChannels
+          : [];
+      cells.push(
+        topChannels
+          .slice(0, 3)
+          .map((c) => c.channelName)
+          .join(" | "),
+      );
     }
     cells.push(
-      period.snapshotCount,
-      period.expectedSnapshots,
-      fmtPercent(period.coveragePercent),
-      fmtDateTime(period.firstSnapshot),
-      fmtDateTime(period.lastSnapshot),
-      period.dataQuality,
+      r.snapshotCount,
+      expectedSnapshots,
+      fmtPercent(r.coveragePercent),
+      fmtDateTime(r.firstSnapshot),
+      fmtDateTime(r.lastSnapshot),
+      r.dataQuality,
     );
 
-    lines.push(cells.map(esc).join(","));
+    lines.push(cells.map(escapeCsvField).join(","));
   });
 
-  // ── Summary row ────────────────────────────────────────────────────────────
+  // 6. Summary block
   lines.push("");
   const sumCells: unknown[] = ["", "TOTALS / AVERAGES"];
   if (metrics.includes("hoursWatched")) sumCells.push(fmtHours(totalHours));
@@ -352,179 +374,189 @@ async function generateGamesReport(
   if (metrics.includes("peakViewers")) sumCells.push(fmt(maxPeak));
   if (metrics.includes("topCreators")) sumCells.push("");
   sumCells.push("", "", "", "", "", "");
-  lines.push(sumCells.map(esc).join(","));
+  lines.push(sumCells.map(escapeCsvField).join(","));
 
   lines.push("");
   lines.push(
-    row(
+    csvRow(
       "",
-      `Data covers ${games.length} games over ${periodLabel(config.timePeriod)}.`,
+      `Data covers ${rows.length} games over ${periodLabel(config.timePeriod)}.`,
     ),
   );
   if (lowCoverageRows > 0) {
     lines.push(
-      row(
+      csvRow(
         "",
         `${lowCoverageRows} row(s) are below ${MIN_GOOD_COVERAGE_PERCENT}% snapshot coverage and are flagged in the Data Quality column.`,
       ),
     );
   }
-  lines.push(row("", "© TwitchMetrics — twitchmetrics.vercel.app"));
+  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.vercel.app"));
 
   return lines.join("\n");
 }
 
-// ─── Channels report ──────────────────────────────────────────────────────────
+// ─── Channels: SQL aggregation ──────────────────────────────────
+//
+// extendedMetrics is JSON, so Prisma's groupBy can't reach into it. A single
+// CTE ranks each creator's snapshots by recency (rn), then in the outer
+// query we aggregate viewer stats across the whole window AND pluck the
+// latest follower count from rn=1. Same fallback chain as the previous JS:
+// AVG_VIEWERS → LIVE_VIEWER_COUNT for averages; PEAK_VIEWERS →
+// LIVE_VIEWER_COUNT for peaks.
 
-// Pulls AVG_VIEWERS / PEAK_VIEWERS from extendedMetrics, falling back to
-// LIVE_VIEWER_COUNT when the adapter didn't stash the dedicated fields.
-// Returns null when the channel was never observed live in the period.
-function aggregateViewerStats(snaps: { extendedMetrics: unknown }[]): {
-  avgViewers: number | null;
-  peakViewers: number | null;
-  observations: number;
-} {
-  let peakViewers: number | null = null;
-  const avgSamples: number[] = [];
-  let observations = 0;
+type ChannelAggregateRow = {
+  creator_profile_id: string;
+  latest_followers: bigint | null;
+  avg_viewers: Prisma.Decimal | null;
+  peak_viewers: number | null;
+  observations: bigint;
+};
 
-  for (const s of snaps) {
-    const ext = s.extendedMetrics as Record<string, unknown> | null;
-    if (!ext) continue;
+async function aggregateChannels(
+  creatorIds: string[],
+  since: Date,
+): Promise<ChannelAggregateRow[]> {
+  if (creatorIds.length === 0) return [];
 
-    const peak =
-      typeof ext.PEAK_VIEWERS === "number"
-        ? ext.PEAK_VIEWERS
-        : typeof ext.LIVE_VIEWER_COUNT === "number"
-          ? ext.LIVE_VIEWER_COUNT
-          : null;
-
-    const avg =
-      typeof ext.AVG_VIEWERS === "number" && ext.AVG_VIEWERS > 0
-        ? ext.AVG_VIEWERS
-        : typeof ext.LIVE_VIEWER_COUNT === "number" && ext.LIVE_VIEWER_COUNT > 0
-          ? ext.LIVE_VIEWER_COUNT
-          : null;
-
-    if (peak !== null) {
-      if (peakViewers === null || peak > peakViewers) peakViewers = peak;
-      observations++;
-    }
-    if (avg !== null) avgSamples.push(avg);
-  }
-
-  const avgViewers =
-    avgSamples.length > 0
-      ? Math.round(avgSamples.reduce((a, b) => a + b, 0) / avgSamples.length)
-      : null;
-
-  return { avgViewers, peakViewers, observations };
+  return prisma.$queryRaw<ChannelAggregateRow[]>(Prisma.sql`
+    WITH ranked AS (
+      SELECT
+        "creatorProfileId",
+        "snapshotAt",
+        "followerCount",
+        "extendedMetrics",
+        ROW_NUMBER() OVER (
+          PARTITION BY "creatorProfileId" ORDER BY "snapshotAt" DESC
+        ) AS rn
+      FROM "MetricSnapshot"
+      WHERE "creatorProfileId" = ANY(${creatorIds}::uuid[])
+        AND platform = 'twitch'::"Platform"
+        AND "snapshotAt" >= ${since}
+    )
+    SELECT
+      "creatorProfileId" AS creator_profile_id,
+      MAX("followerCount") FILTER (WHERE rn = 1) AS latest_followers,
+      AVG(
+        CASE
+          WHEN jsonb_typeof("extendedMetrics"->'AVG_VIEWERS') = 'number'
+            AND ("extendedMetrics"->>'AVG_VIEWERS')::numeric > 0
+            THEN ("extendedMetrics"->>'AVG_VIEWERS')::numeric
+          WHEN jsonb_typeof("extendedMetrics"->'LIVE_VIEWER_COUNT') = 'number'
+            AND ("extendedMetrics"->>'LIVE_VIEWER_COUNT')::numeric > 0
+            THEN ("extendedMetrics"->>'LIVE_VIEWER_COUNT')::numeric
+          ELSE NULL
+        END
+      ) AS avg_viewers,
+      MAX(
+        CASE
+          WHEN jsonb_typeof("extendedMetrics"->'PEAK_VIEWERS') = 'number'
+            THEN ("extendedMetrics"->>'PEAK_VIEWERS')::int
+          WHEN jsonb_typeof("extendedMetrics"->'LIVE_VIEWER_COUNT') = 'number'
+            THEN ("extendedMetrics"->>'LIVE_VIEWER_COUNT')::int
+          ELSE NULL
+        END
+      ) AS peak_viewers,
+      COUNT(*) FILTER (
+        WHERE jsonb_typeof("extendedMetrics"->'PEAK_VIEWERS') = 'number'
+           OR jsonb_typeof("extendedMetrics"->'LIVE_VIEWER_COUNT') = 'number'
+      ) AS observations
+    FROM ranked
+    GROUP BY "creatorProfileId"
+  `);
 }
+
+// ─── Channels: report ────────────────────────────────────────────
 
 async function generateChannelsReport(
   config: TemplateConfig,
   reportName: string,
-  args: GenerateArgs = {},
+  args: GenerateArgs,
 ): Promise<string> {
-  const since = periodStart(config.timePeriod, new Date());
+  const generatedAt = new Date();
+  const since = periodStart(config.timePeriod, generatedAt);
   const metrics = config.allowedMetrics;
   const byId = config.topCount === "byId";
   const entityIds = args.entityIds ?? [];
 
+  // 1. Pick the creator set — same selection logic as before
   const creators = byId
-    ? await prisma.creatorProfile.findMany({
-        where: { id: { in: entityIds } },
-      })
+    ? entityIds.length > 0
+      ? await prisma.creatorProfile.findMany({
+          where: { id: { in: entityIds } },
+        })
+      : []
     : await prisma.creatorProfile.findMany({
         take: typeof config.topCount === "number" ? config.topCount : 500,
         where: { primaryPlatform: "twitch" },
         orderBy: { totalFollowers: "desc" },
       });
 
+  // Preserve byId order
   if (byId) {
     const order = new Map(entityIds.map((id, i) => [id, i] as const));
     creators.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
 
-  // Bulk-fetch all in-window Twitch snapshots for the selected creators in a
-  // single query. Grouping happens in memory — cheaper than N per-creator
-  // includes, and we only need three columns.
+  // 2. Aggregate snapshots in a single SQL pass
   const creatorIds = creators.map((c) => c.id);
+  const aggregates = await aggregateChannels(creatorIds, since);
+  const aggById = new Map(
+    aggregates.map((a) => [a.creator_profile_id, a] as const),
+  );
+
   const needsViewerStats =
     metrics.includes("avgViewers") || metrics.includes("peakViewers");
 
-  const snapshots =
-    creatorIds.length > 0
-      ? await prisma.metricSnapshot.findMany({
-          where: {
-            creatorProfileId: { in: creatorIds },
-            platform: "twitch",
-            snapshotAt: { gte: since },
-          },
-          select: {
-            creatorProfileId: true,
-            snapshotAt: true,
-            followerCount: true,
-            extendedMetrics: true,
-          },
-          orderBy: { snapshotAt: "desc" },
-        })
-      : [];
-
-  const snapsByCreator = new Map<string, typeof snapshots>();
-  for (const s of snapshots) {
-    const arr = snapsByCreator.get(s.creatorProfileId) ?? [];
-    arr.push(s);
-    snapsByCreator.set(s.creatorProfileId, arr);
-  }
-
+  // 3. Columns
   const cols: string[] = ["Rank", "Channel", "Followers"];
   if (metrics.includes("avgViewers")) cols.push("Avg Viewers");
   if (metrics.includes("peakViewers")) cols.push("Peak Viewers");
-  if (metrics.includes("avgViewers") || metrics.includes("peakViewers")) {
-    cols.push("Live Observations");
-  }
+  if (needsViewerStats) cols.push("Live Observations");
   if (metrics.includes("gender")) cols.push("Gender (if available)");
   if (metrics.includes("country")) cols.push("Primary Country");
 
+  // 4. Header block
   const lines: string[] = [];
-
-  lines.push(row("Report", reportName));
-  lines.push(row("Period", periodLabel(config.timePeriod)));
-  lines.push(row("Platforms", config.platforms.join(" + ")));
-  lines.push(row("Generated", new Date().toISOString().split("T")[0]));
-  lines.push(row("Source", "TwitchMetrics"));
+  lines.push(csvRow("Report", reportName));
+  lines.push(csvRow("Period", periodLabel(config.timePeriod)));
+  lines.push(csvRow("Platforms", config.platforms.join(" + ")));
+  lines.push(csvRow("Generated", generatedAt.toISOString().split("T")[0]));
+  lines.push(csvRow("Source", "TwitchMetrics"));
   if (needsViewerStats) {
     lines.push(
-      row(
+      csvRow(
         "Note",
         "Viewer metrics aggregated from live-stream snapshots. 'N/A' means the channel was not observed live during this period.",
       ),
     );
   }
   lines.push("");
+  lines.push(cols.map(escapeCsvField).join(","));
 
-  lines.push(cols.join(","));
-
+  // 5. Data rows
   let totalFollowers = 0n;
   let observedChannels = 0;
   const runningAvgSum: number[] = [];
   let runningPeakMax = 0;
 
   creators.forEach((creator, i) => {
-    const snaps = snapsByCreator.get(creator.id) ?? [];
-    const latestSnap = snaps[0]; // snapshots ordered desc
-    const followers = latestSnap?.followerCount ?? creator.totalFollowers;
+    const agg = aggById.get(creator.id);
+    const followers =
+      agg?.latest_followers != null
+        ? agg.latest_followers
+        : creator.totalFollowers;
     totalFollowers += BigInt(Number(followers));
 
-    const stats = needsViewerStats
-      ? aggregateViewerStats(snaps)
-      : { avgViewers: null, peakViewers: null, observations: 0 };
+    const avgViewers =
+      agg?.avg_viewers != null ? Math.round(Number(agg.avg_viewers)) : null;
+    const peakViewers = agg?.peak_viewers ?? null;
+    const observations = Number(agg?.observations ?? 0n);
 
-    if (stats.observations > 0) observedChannels++;
-    if (stats.avgViewers !== null) runningAvgSum.push(stats.avgViewers);
-    if (stats.peakViewers !== null && stats.peakViewers > runningPeakMax) {
-      runningPeakMax = stats.peakViewers;
+    if (observations > 0) observedChannels++;
+    if (avgViewers !== null) runningAvgSum.push(avgViewers);
+    if (peakViewers !== null && peakViewers > runningPeakMax) {
+      runningPeakMax = peakViewers;
     }
 
     const cells: unknown[] = [
@@ -533,19 +565,19 @@ async function generateChannelsReport(
       fmt(Number(followers)),
     ];
     if (metrics.includes("avgViewers")) {
-      cells.push(stats.avgViewers !== null ? fmt(stats.avgViewers) : "N/A");
+      cells.push(avgViewers !== null ? fmt(avgViewers) : "N/A");
     }
     if (metrics.includes("peakViewers")) {
-      cells.push(stats.peakViewers !== null ? fmt(stats.peakViewers) : "N/A");
+      cells.push(peakViewers !== null ? fmt(peakViewers) : "N/A");
     }
-    if (needsViewerStats) cells.push(stats.observations);
+    if (needsViewerStats) cells.push(observations);
     if (metrics.includes("gender")) cells.push(creator.gender ?? "N/A");
     if (metrics.includes("country")) cells.push(creator.country ?? "N/A");
 
-    lines.push(cells.map(esc).join(","));
+    lines.push(cells.map(escapeCsvField).join(","));
   });
 
-  // ── Summary row ──────────────────────────────────────────────────────────
+  // 6. Summary
   lines.push("");
   const sumCells: unknown[] = ["", "TOTALS / AVERAGES"];
   sumCells.push(fmt(Number(totalFollowers)));
@@ -566,29 +598,29 @@ async function generateChannelsReport(
   if (needsViewerStats) sumCells.push("");
   if (metrics.includes("gender")) sumCells.push("");
   if (metrics.includes("country")) sumCells.push("");
-  lines.push(sumCells.map(esc).join(","));
+  lines.push(sumCells.map(escapeCsvField).join(","));
 
   lines.push("");
   if (needsViewerStats) {
     lines.push(
-      row(
+      csvRow(
         "",
         `Observed ${observedChannels} of ${creators.length} channels live during ${periodLabel(config.timePeriod)}.`,
       ),
     );
   }
   lines.push(
-    row(
+    csvRow(
       "",
       `Total followers across ${creators.length} channels: ${fmt(Number(totalFollowers))}`,
     ),
   );
-  lines.push(row("", "© TwitchMetrics — twitchmetrics.vercel.app"));
+  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.vercel.app"));
 
   return lines.join("\n");
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
+// ─── Entry point ────────────────────────────────────────────────
 
 export async function generateReportCsv(
   config: TemplateConfig,

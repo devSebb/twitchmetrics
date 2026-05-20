@@ -3,6 +3,12 @@ import { prisma, type Prisma } from "@twitchmetrics/database";
 import { generateReportCsv } from "@/server/services/report-generator";
 import type { TemplateConfig } from "@/lib/constants/report-templates";
 
+// CSV generation reads a window of snapshots and runs SQL aggregation; the
+// optimized generator should finish in seconds, but we keep an explicit cap
+// well above the expected time so a rogue query can't sit at the platform
+// default forever.
+export const maxDuration = 60;
+
 type StoredReportArtifact = {
   csv?: string;
   filename?: string;
