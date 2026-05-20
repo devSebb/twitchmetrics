@@ -11,6 +11,7 @@ import {
   inviteCreationLimiter,
 } from "@/server/services/roster-invite";
 import { logAudit } from "@/server/services/audit";
+import { buildCsv, isoOrEmpty } from "@/server/utils/csv";
 
 const permissionsSchema = z
   .object({
@@ -293,6 +294,162 @@ export const talentManagerRouter = router({
 
     return mapped;
   }),
+
+  /**
+   * Export the manager's full roster (active + pending + expired) as a
+   * downloadable file. CSV today; PDF planned.
+   *
+   * Public-data-only schema, one row per creator, with per-platform columns
+   * for the six supported platforms so the file opens cleanly in Excel/Sheets.
+   * Filename embeds the UTC date so repeat downloads don't collide.
+   */
+  exportRoster: talentManagerProcedure
+    .input(z.object({ format: z.literal("csv") }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.prisma.talentManagerAccess.findMany({
+        where: {
+          managerId: ctx.user.id,
+          revokedAt: null,
+          status: { in: ["active", "pending"] },
+        },
+        include: {
+          creatorProfile: {
+            select: {
+              displayName: true,
+              slug: true,
+              primaryPlatform: true,
+              totalFollowers: true,
+              totalViews: true,
+              state: true,
+              lastSnapshotAt: true,
+              platformAccounts: {
+                select: {
+                  platform: true,
+                  platformUsername: true,
+                  followerCount: true,
+                },
+              },
+              growthRollups: {
+                select: {
+                  platform: true,
+                  delta7d: true,
+                  pct7d: true,
+                  trendDirection: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { grantedAt: "desc" },
+      });
+
+      const now = Date.now();
+      const platformOrder: Platform[] = [
+        Platform.twitch,
+        Platform.youtube,
+        Platform.tiktok,
+        Platform.instagram,
+        Platform.x,
+        Platform.kick,
+      ];
+
+      const headers = [
+        "displayName",
+        "slug",
+        "profileUrl",
+        "inviteState",
+        "acceptedAt",
+        "creatorState",
+        "primaryPlatform",
+        "totalFollowers",
+        "totalViews",
+        "lastSnapshotAt",
+        ...platformOrder.flatMap((p) => [`${p}_username`, `${p}_followers`]),
+        "growth_7d_delta_primary",
+        "growth_7d_pct_primary",
+        "trend_direction_primary",
+      ];
+
+      const baseUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ??
+        process.env.NEXTAUTH_URL ??
+        "https://twitchmetrics.net";
+
+      const data = rows.map((access) => {
+        const isActive = access.status === "active";
+        const isExpired =
+          !isActive &&
+          access.inviteExpiresAt !== null &&
+          access.inviteExpiresAt.getTime() < now;
+        const inviteState = isActive
+          ? "active"
+          : isExpired
+            ? "expired"
+            : "pending";
+
+        const creator = access.creatorProfile;
+
+        const accountByPlatform = new Map(
+          creator.platformAccounts.map((acct) => [acct.platform, acct]),
+        );
+        const rollupByPlatform = new Map(
+          creator.growthRollups.map((rollup) => [rollup.platform, rollup]),
+        );
+
+        const platformColumns = platformOrder.flatMap((p) => {
+          const acct = accountByPlatform.get(p);
+          return [
+            acct?.platformUsername ?? "",
+            acct?.followerCount !== undefined && acct.followerCount !== null
+              ? Number(acct.followerCount).toString()
+              : "",
+          ];
+        });
+
+        const primaryRollup = creator.primaryPlatform
+          ? rollupByPlatform.get(creator.primaryPlatform)
+          : undefined;
+
+        return [
+          creator.displayName,
+          creator.slug,
+          `${baseUrl}/creators/${creator.slug}`,
+          inviteState,
+          isoOrEmpty(access.acceptedAt),
+          creator.state,
+          creator.primaryPlatform ?? "",
+          Number(creator.totalFollowers ?? 0).toString(),
+          Number(creator.totalViews ?? 0).toString(),
+          isoOrEmpty(creator.lastSnapshotAt),
+          ...platformColumns,
+          primaryRollup?.delta7d !== undefined &&
+          primaryRollup?.delta7d !== null
+            ? Number(primaryRollup.delta7d).toString()
+            : "",
+          primaryRollup?.pct7d !== undefined && primaryRollup?.pct7d !== null
+            ? primaryRollup.pct7d.toString()
+            : "",
+          primaryRollup?.trendDirection ?? "",
+        ];
+      });
+
+      const content = buildCsv(headers, data);
+      const today = new Date().toISOString().slice(0, 10);
+      const filename = `twitchmetrics-roster-${today}.csv`;
+
+      logAudit({
+        action: "talent_manager.export_roster",
+        userId: ctx.user.id,
+        metadata: { format: input.format, rowCount: data.length },
+      });
+
+      return {
+        filename,
+        mimeType: "text/csv;charset=utf-8",
+        content,
+        rowCount: data.length,
+      };
+    }),
 
   /**
    * Single invite mutation for all eligible profiles (unclaimed/claimed/premium).

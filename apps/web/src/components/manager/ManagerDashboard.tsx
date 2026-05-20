@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { CreatorRosterCard, type InviteState } from "./CreatorRosterCard";
 import { RosterListView } from "./RosterListView";
 import { AddCreatorModal } from "./AddCreatorModal";
+import { ExportRosterButton } from "./ExportRosterButton";
 import { formatNumber, formatPercent } from "@/lib/utils/format";
 
 type ViewMode = "grid" | "list";
@@ -191,6 +192,7 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
               </svg>
             </button>
           </div>
+          <ExportRosterButton disabled={(roster?.length ?? 0) === 0} />
           <Button onClick={() => setAddModalOpen(true)}>Invite Creator</Button>
         </div>
       </div>
