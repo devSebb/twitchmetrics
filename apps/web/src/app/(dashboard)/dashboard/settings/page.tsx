@@ -37,6 +37,7 @@ export default async function SettingsPage() {
         select: {
           agencyName: true,
           bio: true,
+          avatarUrl: true,
           websiteUrl: true,
           country: true,
           languages: true,
@@ -80,6 +81,7 @@ export default async function SettingsPage() {
           age: true,
           interests: true,
           avatarUrl: true,
+          customAvatarUrl: true,
           platformAccounts: {
             select: {
               platform: true,
@@ -130,6 +132,7 @@ export default async function SettingsPage() {
               age: profile.age,
               interests,
               avatarUrl: profile.avatarUrl,
+              customAvatarUrl: profile.customAvatarUrl,
             }
           : null
       }

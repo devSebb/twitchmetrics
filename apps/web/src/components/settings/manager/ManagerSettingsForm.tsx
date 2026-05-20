@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import Image from "next/image";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui";
-import { getSafeImageSrc } from "@/lib/safeImage";
+import { EditableAvatar } from "@/components/avatar/EditableAvatar";
+import { resolveAvatar } from "@/lib/avatar";
 import { ManagerProfileCompletionBar } from "./ManagerProfileCompletionBar";
 import { InvitePreviewCard } from "./InvitePreviewCard";
 
@@ -45,6 +45,7 @@ export type ManagerSettingsFormProps = {
   profile: {
     agencyName: string | null;
     bio: string | null;
+    avatarUrl: string | null;
     websiteUrl: string | null;
     country: string | null;
     languages: string[];
@@ -96,7 +97,13 @@ export function ManagerSettingsForm({
     message: string;
   } | null>(null);
 
-  const avatarSrc = getSafeImageSrc(user.image);
+  const [avatarOverride, setAvatarOverride] = useState<string | null>(
+    profile.avatarUrl,
+  );
+  const resolvedAvatar = resolveAvatar("talent_manager", {
+    user,
+    manager: { avatarUrl: avatarOverride ?? profile.avatarUrl },
+  });
 
   const utils = trpc.useUtils();
 
@@ -286,23 +293,15 @@ export function ManagerSettingsForm({
 
             {/* Column 3 — avatar sidebar */}
             <div className="flex flex-col items-center gap-2">
-              {avatarSrc ? (
-                <div className="relative h-20 w-20 overflow-hidden rounded-full border-2 border-[#3F4147]">
-                  <Image
-                    src={avatarSrc}
-                    alt="Avatar"
-                    fill
-                    sizes="80px"
-                    className="object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-[#3F4147] bg-[#383A40] text-2xl font-bold text-[#949BA4]">
-                  {(name || "?").charAt(0).toUpperCase()}
-                </div>
-              )}
+              <EditableAvatar
+                src={resolvedAvatar}
+                displayName={name || "?"}
+                size={80}
+                canEdit={true}
+                onUpdated={setAvatarOverride}
+              />
               <p className="text-center text-[10px] text-[#949BA4]">
-                Avatar comes from your sign-in account.
+                Click the pencil to update.
               </p>
             </div>
           </div>
@@ -339,7 +338,7 @@ export function ManagerSettingsForm({
 
       <InvitePreviewCard
         managerName={name || null}
-        managerImage={user.image}
+        managerImage={resolvedAvatar}
         agencyName={agencyName || null}
         bio={bio || null}
       />

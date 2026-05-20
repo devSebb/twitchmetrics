@@ -106,6 +106,7 @@ model TalentManagerProfile {
   // Semi-public — surfaced on /invite/roster
   agencyName String?
   bio        String? // app-layer max 280
+  avatarUrl  String? // user-uploaded; canonical for TMs (no platform accounts)
 
   // Private — manager-only
   websiteUrl   String?
@@ -179,7 +180,8 @@ model CreatorProfile {
 
   displayName String
   slug        String  @unique
-  avatarUrl   String?
+  avatarUrl   String? // populated by enrichment from platform CDN
+  customAvatarUrl String? // user-uploaded; last-resort fallback for creators with no platforms
   bannerUrl   String?
   bio         String?
   country     String?

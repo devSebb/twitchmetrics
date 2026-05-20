@@ -2,6 +2,18 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { compare, hash } from "bcryptjs";
 import { logAudit } from "@/server/services/audit";
+import { avatarUploadLimiter } from "@/lib/redis";
+import {
+  AVATAR_ALLOWED_TYPES,
+  AVATAR_MAX_BYTES,
+  canUserUploadAvatar,
+  commitAvatar,
+  isAllowedAvatarContentType,
+  isKeyOwnedBy,
+  presignAvatarUpload,
+  removeAvatar,
+} from "@/server/services/avatar";
+import { isStorageConfigured } from "@/server/services/storage/r2";
 import { protectedProcedure } from "../middleware";
 import { router } from "../root";
 
@@ -228,4 +240,107 @@ export const authRouter = router({
 
       return result;
     }),
+
+  /**
+   * Whether the calling user should see the avatar edit affordance. TMs
+   * always can; creators only when they have zero connected platforms.
+   */
+  canEditAvatar: protectedProcedure.query(async ({ ctx }) => {
+    if (!isStorageConfigured()) {
+      return { canEdit: false };
+    }
+    const canEdit = await canUserUploadAvatar(ctx.user.id, ctx.user.role);
+    return { canEdit };
+  }),
+
+  presignAvatarUpload: protectedProcedure
+    .input(
+      z.object({
+        contentType: z.string(),
+        sizeBytes: z.number().int().positive().max(AVATAR_MAX_BYTES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!isStorageConfigured()) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Avatar uploads are not configured.",
+        });
+      }
+
+      if (!isAllowedAvatarContentType(input.contentType)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Unsupported file type. Use one of: ${AVATAR_ALLOWED_TYPES.join(", ")}.`,
+        });
+      }
+
+      const allowed = await canUserUploadAvatar(ctx.user.id, ctx.user.role);
+      if (!allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Avatar uploads are not available for this account.",
+        });
+      }
+
+      // Advisory rate limit — fail open if Upstash is unreachable so a Redis
+      // outage doesn't block a legitimate user from updating their avatar.
+      try {
+        const rate = await avatarUploadLimiter.limit(ctx.user.id);
+        if (!rate.success) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many avatar uploads — try again later.",
+          });
+        }
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.warn("[avatar] rate limiter unavailable, allowing upload", {
+          userId: ctx.user.id,
+          error,
+        });
+      }
+
+      return presignAvatarUpload({
+        userId: ctx.user.id,
+        contentType: input.contentType,
+        contentLength: input.sizeBytes,
+      });
+    }),
+
+  commitAvatar: protectedProcedure
+    .input(z.object({ key: z.string().min(1).max(256) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!isKeyOwnedBy(input.key, ctx.user.id)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Invalid key.",
+        });
+      }
+
+      const result = await commitAvatar({
+        userId: ctx.user.id,
+        role: ctx.user.role,
+        key: input.key,
+      });
+
+      logAudit({
+        userId: ctx.user.id,
+        action: "auth.commitAvatar",
+        metadata: { key: input.key },
+      });
+
+      return result;
+    }),
+
+  removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
+    await removeAvatar({ userId: ctx.user.id, role: ctx.user.role });
+
+    logAudit({
+      userId: ctx.user.id,
+      action: "auth.removeAvatar",
+    });
+
+    return { ok: true };
+  }),
 });

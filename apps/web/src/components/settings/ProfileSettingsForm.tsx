@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import Image from "next/image";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui";
+import { EditableAvatar } from "@/components/avatar/EditableAvatar";
+import { resolveAvatar } from "@/lib/avatar";
 import { ProfileCompletionBar } from "./ProfileCompletionBar";
 import { AccountsConnected } from "./AccountsConnected";
 import { InterestsCard } from "./InterestsCard";
 import { PastPartnershipsCard } from "./PastPartnershipsCard";
-import { getSafeImageSrc } from "@/lib/safeImage";
 import type { Platform } from "@twitchmetrics/database";
 
 // ─── Constants ───
@@ -97,6 +97,7 @@ export type ProfileSettingsFormProps = {
     age: number | null;
     interests: string[];
     avatarUrl: string | null;
+    customAvatarUrl: string | null;
   } | null;
   platformAccounts: PlatformAccountInfo[];
   partnerships: Partnership[];
@@ -150,8 +151,20 @@ export function ProfileSettingsForm({
     message: string;
   } | null>(null);
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
-  const avatarSrc =
-    getSafeImageSrc(profile?.avatarUrl) ?? getSafeImageSrc(user.image);
+  const [customAvatarOverride, setCustomAvatarOverride] = useState<
+    string | null
+  >(profile?.customAvatarUrl ?? null);
+  const canUploadAvatar = platformAccounts.length === 0;
+  const resolvedAvatar = resolveAvatar("creator", {
+    user,
+    creator: {
+      avatarUrl: profile?.avatarUrl ?? null,
+      customAvatarUrl: customAvatarOverride,
+      platformAccounts: platformAccounts.map((a) => ({
+        platformAvatarUrl: a.avatarUrl,
+      })),
+    },
+  });
 
   // User tag from primary connected platform
   const primaryAccount = platformAccounts[0];
@@ -230,7 +243,7 @@ export function ProfileSettingsForm({
       <ProfileCompletionBar
         displayName={displayName || null}
         email={user.email}
-        avatarUrl={profile?.avatarUrl ?? user.image}
+        avatarUrl={resolvedAvatar}
         country={country || null}
         language={language || null}
         gender={gender || null}
@@ -371,20 +384,17 @@ export function ProfileSettingsForm({
             <div className="space-y-4">
               {/* Avatar */}
               <div className="flex flex-col items-center gap-2">
-                {avatarSrc ? (
-                  <div className="relative h-20 w-20 overflow-hidden rounded-full border-2 border-[#3F4147]">
-                    <Image
-                      src={avatarSrc}
-                      alt="Avatar"
-                      fill
-                      sizes="80px"
-                      className="object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-[#3F4147] bg-[#383A40] text-2xl font-bold text-[#949BA4]">
-                    {(displayName || "?").charAt(0).toUpperCase()}
-                  </div>
+                <EditableAvatar
+                  src={resolvedAvatar}
+                  displayName={displayName || "?"}
+                  size={80}
+                  canEdit={canUploadAvatar}
+                  onUpdated={setCustomAvatarOverride}
+                />
+                {!canUploadAvatar && (
+                  <p className="text-center text-[10px] text-[#949BA4]">
+                    Your platform avatar is used automatically.
+                  </p>
                 )}
               </div>
               {/* Connected Accounts */}

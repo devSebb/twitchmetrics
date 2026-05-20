@@ -3,6 +3,7 @@ import Image from "next/image";
 import { prisma } from "@twitchmetrics/database";
 import { SearchBar } from "@/components/search";
 import { getSession } from "@/server/auth-cache";
+import { resolveAvatar } from "@/lib/avatar";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { HeaderUserMenu } from "./HeaderUserMenu";
 import { SolutionsDropdown } from "./SolutionsDropdown";
@@ -22,6 +23,21 @@ export async function Header() {
   const hasCreatorProfile = user?.id
     ? (await prisma.creatorProfile.count({ where: { userId: user.id } })) > 0
     : false;
+
+  // Resolve canonical avatar — for TMs this includes their custom upload.
+  let headerAvatar: string | null = user?.image ?? null;
+  if (user?.id) {
+    if (user.role === "talent_manager") {
+      const tm = await prisma.talentManagerProfile.findUnique({
+        where: { userId: user.id },
+        select: { avatarUrl: true },
+      });
+      headerAvatar = resolveAvatar("talent_manager", {
+        user: { image: user.image ?? null },
+        manager: { avatarUrl: tm?.avatarUrl ?? null },
+      });
+    }
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
@@ -65,10 +81,7 @@ export async function Header() {
                 userRole={user.role ?? "creator"}
                 hasCreatorProfile={hasCreatorProfile}
               />
-              <HeaderUserMenu
-                name={user.name ?? null}
-                image={user.image ?? null}
-              />
+              <HeaderUserMenu name={user.name ?? null} image={headerAvatar} />
             </>
           ) : (
             <>

@@ -6,6 +6,7 @@ import { getSession } from "@/server/auth-cache";
 import { hashInviteToken } from "@/server/services/roster-invite";
 import { RosterInviteActions } from "@/components/invite/RosterInviteActions";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { resolveAvatar } from "@/lib/avatar";
 
 export const metadata: Metadata = {
   title: "Roster Invitation",
@@ -25,7 +26,7 @@ const inviteLookupArgs = {
         image: true,
         suspended: true,
         talentManagerProfile: {
-          select: { agencyName: true, bio: true },
+          select: { agencyName: true, bio: true, avatarUrl: true },
         },
       },
     },
@@ -226,11 +227,17 @@ function renderPendingBody({
   const creatorName = access.creatorProfile.displayName;
   const creatorSlug = access.creatorProfile.slug;
   const profileOwnerId = access.creatorProfile.userId;
+  const managerAvatar = resolveAvatar("talent_manager", {
+    user: { image: access.manager.image },
+    manager: {
+      avatarUrl: access.manager.talentManagerProfile?.avatarUrl ?? null,
+    },
+  });
 
   const header = (
     <PendingHeader
       managerName={managerName}
-      managerAvatarUrl={access.manager.image}
+      managerAvatarUrl={managerAvatar}
       managerAgency={access.manager.talentManagerProfile?.agencyName ?? null}
       managerBio={access.manager.talentManagerProfile?.bio ?? null}
       creatorName={creatorName}
