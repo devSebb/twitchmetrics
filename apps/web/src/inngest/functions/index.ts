@@ -3,7 +3,10 @@ import { tier2Snapshot } from "./snapshots/tier2-snapshot";
 import { tier3Snapshot } from "./snapshots/tier3-snapshot";
 import { gameSnapshot } from "./snapshots/game-snapshot";
 import { kickChannelSnapshot } from "./snapshots/kick-channel-snapshot";
-import { kickCategorySnapshot } from "./snapshots/kick-category-snapshot";
+import {
+  kickCategoryDiscovery,
+  kickCategorySnapshot,
+} from "./snapshots/kick-category-snapshot";
 import {
   streamHatchetGameDiscoverySnapshot,
   streamHatchetLiveChannelsSnapshot,
@@ -29,6 +32,7 @@ export const functions = [
   tier3Snapshot,
   gameSnapshot,
   kickChannelSnapshot,
+  kickCategoryDiscovery,
   kickCategorySnapshot,
   streamHatchetGameDiscoverySnapshot,
   streamHatchetLiveChannelsSnapshot,
