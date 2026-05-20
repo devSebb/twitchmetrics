@@ -120,16 +120,16 @@ function ProCtaCard({ className }: { className?: string }) {
 
 export function GameHeader({ game }: GameHeaderProps) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch lg:gap-[60px]">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
       {/* Cover Art (portrait, preserved) */}
-      <div className="relative h-52 w-40 flex-shrink-0 overflow-hidden rounded-lg bg-[#383A40] sm:h-56 sm:w-44">
+      <div className="relative aspect-[3/4] w-[220px] max-w-full flex-shrink-0 overflow-hidden rounded-lg bg-[#383A40]">
         {game.coverImageUrl ? (
           <Image
             src={game.coverImageUrl}
             alt={game.name}
             fill
             className="object-cover"
-            sizes="176px"
+            sizes="220px"
             priority
           />
         ) : (
