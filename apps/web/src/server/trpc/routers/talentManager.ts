@@ -195,7 +195,7 @@ async function generatePdfExport(args: {
           "extendedMetrics"->>'CURRENT_GAME' AS game_name,
           COUNT(*) AS cnt
         FROM "MetricSnapshot"
-        WHERE "creatorProfileId" IN (${Prisma.join(creatorIds)})
+        WHERE "creatorProfileId" = ANY(ARRAY[${Prisma.join(creatorIds)}]::uuid[])
           AND "snapshotAt" >= ${sinceDays30}
           AND "extendedMetrics"->>'CURRENT_GAME' IS NOT NULL
           AND (

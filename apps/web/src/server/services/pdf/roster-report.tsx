@@ -93,7 +93,6 @@ export type RosterReportProps = {
   siteUrl: string;
 };
 
-const CREATORS_PER_PAGE = 6;
 const MAX_BREAKDOWN_ROWS = 4;
 
 const styles = StyleSheet.create({
@@ -195,7 +194,8 @@ const styles = StyleSheet.create({
     fontFamily: PDF_DISPLAY_FONT_FAMILY,
     fontSize: 16,
     color: COLORS.ink,
-    marginBottom: 16,
+    marginTop: 28,
+    marginBottom: 12,
   },
 
   // Roster grid
@@ -380,13 +380,9 @@ function chunk<T>(arr: readonly T[], size: number): T[][] {
 function Footer({
   brandColor,
   siteUrl,
-  pageNumber,
-  pageCount,
 }: {
   brandColor: string;
   siteUrl: string;
-  pageNumber: number;
-  pageCount: number;
 }) {
   return (
     <>
@@ -398,9 +394,11 @@ function Footer({
         <Link src={siteUrl} style={styles.footerBrand}>
           Powered by TwitchMetrics
         </Link>
-        <Text>
-          Page {pageNumber} of {pageCount}
-        </Text>
+        <Text
+          render={({ pageNumber, totalPages }) =>
+            `Page ${pageNumber} of ${totalPages}`
+          }
+        />
       </View>
     </>
   );
@@ -557,9 +555,8 @@ function CreatorCard({
 }
 
 export function RosterReport(props: RosterReportProps) {
-  const pages = chunk(props.creators, CREATORS_PER_PAGE);
-  const totalPages = 1 + Math.max(pages.length, 1);
   const managerLabel = props.manager.agencyName ?? props.manager.displayName;
+  const rows = chunk(props.creators, 2);
 
   return (
     <Document
@@ -568,7 +565,9 @@ export function RosterReport(props: RosterReportProps) {
       creator="TwitchMetrics"
       producer="TwitchMetrics"
     >
-      {/* Cover */}
+      {/* Single flowing page — @react-pdf paginates automatically when the
+          content overflows. Rows declare wrap={false} so the grid never splits
+          a row of cards across pages. */}
       <Page size="A4" style={styles.page}>
         <View
           style={[styles.brandBarTop, { backgroundColor: props.brandColor }]}
@@ -615,34 +614,32 @@ export function RosterReport(props: RosterReportProps) {
           <Text style={styles.coverBio}>“{props.manager.bio}”</Text>
         ) : null}
 
-        <Footer
-          brandColor={props.brandColor}
-          siteUrl={props.siteUrl}
-          pageNumber={1}
-          pageCount={totalPages}
-        />
-      </Page>
-
-      {/* Roster pages */}
-      {pages.length === 0 ? (
-        <Page size="A4" style={styles.page}>
-          <Text style={styles.sectionHeading}>Roster</Text>
-          <Text style={styles.cardHandle}>No active creators to display.</Text>
-          <Footer
-            brandColor={props.brandColor}
-            siteUrl={props.siteUrl}
-            pageNumber={2}
-            pageCount={totalPages}
-          />
-        </Page>
-      ) : (
-        pages.map((pageCreators, pageIndex) => (
-          <Page key={pageIndex} size="A4" style={styles.page}>
-            <Text style={styles.sectionHeading}>
-              Roster{pageIndex > 0 ? " (continued)" : ""}
+        {/* Roster heading + first row stay glued together so the heading
+            never lands alone at the bottom of a page. */}
+        {rows.length === 0 ? (
+          <View wrap={false}>
+            <Text style={styles.sectionHeading}>Roster</Text>
+            <Text style={styles.cardHandle}>
+              No active creators to display.
             </Text>
-            {chunk(pageCreators, 2).map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.gridRow}>
+          </View>
+        ) : (
+          <>
+            <View wrap={false}>
+              <Text style={styles.sectionHeading}>Roster</Text>
+              <View style={styles.gridRow}>
+                {rows[0]!.map((creator) => (
+                  <CreatorCard
+                    key={creator.slug}
+                    creator={creator}
+                    brandColor={props.brandColor}
+                  />
+                ))}
+                {rows[0]!.length === 1 ? <View style={{ flex: 1 }} /> : null}
+              </View>
+            </View>
+            {rows.slice(1).map((row, rowIndex) => (
+              <View key={rowIndex} style={styles.gridRow} wrap={false}>
                 {row.map((creator) => (
                   <CreatorCard
                     key={creator.slug}
@@ -653,15 +650,11 @@ export function RosterReport(props: RosterReportProps) {
                 {row.length === 1 ? <View style={{ flex: 1 }} /> : null}
               </View>
             ))}
-            <Footer
-              brandColor={props.brandColor}
-              siteUrl={props.siteUrl}
-              pageNumber={pageIndex + 2}
-              pageCount={totalPages}
-            />
-          </Page>
-        ))
-      )}
+          </>
+        )}
+
+        <Footer brandColor={props.brandColor} siteUrl={props.siteUrl} />
+      </Page>
     </Document>
   );
 }
