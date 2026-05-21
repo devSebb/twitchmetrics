@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ChartLineUp,
@@ -6,7 +7,6 @@ import {
   Handshake,
   ArrowRight,
   Sparkle,
-  LinkSimple,
 } from "@phosphor-icons/react/dist/ssr";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { FaqAccordion } from "@/components/marketing/FaqAccordion";
@@ -295,39 +295,20 @@ export default function CreatorsSolutionsPage() {
                 <ArrowRight size={16} weight="bold" />
               </Link>
             </div>
-            <div className="rounded-2xl border border-[#3F4147] bg-[#313338] p-6 shadow-2xl shadow-black/40">
-              <div className="flex items-center gap-3 border-b border-[#3F4147] pb-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#E32C19]/20 text-[#E32C19]">
-                  <LinkSimple size={22} weight="bold" />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#F2F3F5]">
-                    twitchmetrics.net/yourname
-                  </p>
-                  <p className="text-xs text-[#949BA4]">
-                    Live stats · Always up to date
-                  </p>
-                </div>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                {[
-                  { label: "Total reach", value: "1.2M" },
-                  { label: "Avg viewers", value: "8.4K" },
-                  { label: "Platforms", value: "5" },
-                  { label: "Growth (90d)", value: "+18%" },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-xl border border-[#3F4147] bg-[#2B2D31] p-4"
-                  >
-                    <p className="text-xs uppercase tracking-wider text-[#949BA4]">
-                      {stat.label}
-                    </p>
-                    <p className="mt-1 text-xl font-semibold text-[#F2F3F5]">
-                      {stat.value}
-                    </p>
-                  </div>
-                ))}
+            <div className="relative">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-4 rounded-3xl bg-[radial-gradient(ellipse_at_center,rgba(227,44,25,0.2),transparent_60%)] blur-2xl"
+              />
+              <div className="relative overflow-hidden rounded-2xl border border-[#3F4147] bg-[#313338] shadow-2xl shadow-black/40">
+                <Image
+                  src="/brand/TM_Creator_SS.png"
+                  alt="TwitchMetrics creator media kit — verified, multi-platform stats in one shareable profile."
+                  width={1600}
+                  height={1000}
+                  sizes="(min-width: 1024px) 480px, 100vw"
+                  className="h-auto w-full object-contain"
+                />
               </div>
             </div>
           </div>

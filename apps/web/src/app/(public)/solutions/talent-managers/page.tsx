@@ -317,54 +317,20 @@ export default function TalentManagersSolutionsPage() {
                 <ArrowRight size={16} weight="bold" />
               </Link>
             </div>
-            <div className="rounded-2xl border border-[#3F4147] bg-[#313338] p-6 shadow-2xl shadow-black/40">
-              <div className="flex items-center justify-between border-b border-[#3F4147] pb-4">
-                <p className="text-sm font-semibold text-[#F2F3F5]">
-                  Roster preview
-                </p>
-                <span className="rounded-full bg-[#4ade80]/15 px-2.5 py-0.5 text-xs font-semibold text-[#4ade80]">
-                  Live
-                </span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {[
-                  {
-                    name: "Pokimane",
-                    handle: "@pokimane",
-                    reach: "9.2M",
-                    growth: "+4.1%",
-                  },
-                  {
-                    name: "Tarik",
-                    handle: "@tarik",
-                    reach: "3.1M",
-                    growth: "+11.4%",
-                  },
-                  {
-                    name: "Valkyrae",
-                    handle: "@valkyrae",
-                    reach: "5.6M",
-                    growth: "+2.8%",
-                  },
-                ].map((creator) => (
-                  <div
-                    key={creator.handle}
-                    className="flex items-center justify-between rounded-xl border border-[#3F4147] bg-[#2B2D31] p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-[#F2F3F5]">
-                        {creator.name}
-                      </p>
-                      <p className="text-xs text-[#949BA4]">{creator.handle}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-[#F2F3F5]">
-                        {creator.reach}
-                      </p>
-                      <p className="text-xs text-[#4ade80]">{creator.growth}</p>
-                    </div>
-                  </div>
-                ))}
+            <div className="relative">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-4 rounded-3xl bg-[radial-gradient(ellipse_at_center,rgba(227,44,25,0.2),transparent_60%)] blur-2xl"
+              />
+              <div className="relative overflow-hidden rounded-2xl border border-[#3F4147] bg-[#313338] shadow-2xl shadow-black/40">
+                <Image
+                  src="/brand/TM_Manager_SS.png"
+                  alt="TwitchMetrics talent manager dashboard — every creator, every platform, in one verified roster."
+                  width={1600}
+                  height={1000}
+                  sizes="(min-width: 1024px) 480px, 100vw"
+                  className="h-auto w-full object-contain"
+                />
               </div>
             </div>
           </div>
