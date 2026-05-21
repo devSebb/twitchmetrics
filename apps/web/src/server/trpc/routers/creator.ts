@@ -127,7 +127,7 @@ export const creatorRouter = router({
     .query(async ({ ctx, input }) => {
       const profile = await ctx.prisma.creatorProfile.findUnique({
         where: { userId: ctx.user.id },
-        select: { id: true, state: true },
+        select: { id: true, slug: true, state: true },
       });
 
       if (!profile) {
@@ -147,13 +147,30 @@ export const creatorRouter = router({
       const since = new Date();
       since.setUTCDate(since.getUTCDate() - input.periodDays);
 
-      return ctx.prisma.creatorAnalytics.findMany({
+      const analytics = await ctx.prisma.creatorAnalytics.findMany({
         where: {
           creatorProfileId: profile.id,
           ...(input.platform ? { platform: input.platform } : {}),
           periodStart: { gte: since },
         },
         orderBy: { periodStart: "desc" },
+      });
+
+      const hasDemographics = analytics.some(
+        (entry) => entry.ageGenderData !== null || entry.countryData !== null,
+      );
+
+      if (hasDemographics || profile.slug !== "demo-creator") {
+        return analytics;
+      }
+
+      return ctx.prisma.creatorAnalytics.findMany({
+        where: {
+          creatorProfileId: profile.id,
+          ...(input.platform ? { platform: input.platform } : {}),
+        },
+        orderBy: [{ periodEnd: "desc" }, { periodStart: "desc" }],
+        take: 10,
       });
     }),
 
