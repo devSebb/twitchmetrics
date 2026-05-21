@@ -50,7 +50,7 @@ function TrendIndicator({
       {formatNumber(deltaNum)}
       <span className="text-[#949BA4]">
         ({pct > 0 ? "+" : ""}
-        {(pct * 100).toFixed(1)}%)
+        {pct.toFixed(1)}%)
       </span>
     </span>
   );

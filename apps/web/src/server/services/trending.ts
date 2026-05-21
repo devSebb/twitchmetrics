@@ -1,3 +1,4 @@
+import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { cacheGet, cacheSet, CACHE_TTL } from "./cache";
 import { createLogger } from "@/lib/logger";
@@ -11,90 +12,75 @@ export type TrendingCreator = {
   slug: string;
   displayName: string;
   avatarUrl: string | null;
-  totalFollowers: string; // Serialized BigInt
-  trendScore: number;
+  totalFollowers: string;
+  delta7d: string;
   followerPct7d: number;
   trendDirection: string;
   primaryPlatform: string;
 };
 
+type Row = {
+  id: string;
+  slug: string;
+  displayName: string;
+  avatarUrl: string | null;
+  totalFollowers: bigint;
+  primaryPlatform: string;
+  delta7d: bigint;
+  pct7d: number | null;
+  trendDirection: string | null;
+};
+
 /**
- * Returns trending creators sorted by a composite trend score.
+ * Returns trending creators ordered by absolute 7-day follower gain on their
+ * primary platform — mirrors the `/api/creators?sort=trending` ranking so the
+ * landing card matches what users see in the browse "Trending" filter.
  *
- * Score formula:
- *   trendScore = pct7d * 0.7 + (delta7d weight) * 0.3
- *
- * Uses the pre-computed CreatorGrowthRollup (never computes from raw snapshots).
+ * Floors: delta7d > 100 and totalFollowers > 500 to keep tiny-base outliers out.
  * Results are cached for 10 minutes.
  */
 export async function getTrendingCreators(
-  limit = 20,
+  limit = 9,
 ): Promise<TrendingCreator[]> {
-  // Check cache first
   const cached = await cacheGet<TrendingCreator[]>(CACHE_KEY);
   if (cached) return cached;
 
-  // Query rollups with meaningful positive growth, deduplicated by creator.
-  // Guards:
-  //   delta7d > 100  — must have gained at least 100 absolute followers (filters near-zero base explosion)
-  //   pct7d   > 0    — positive trend only
-  //   creatorProfile.totalFollowers > 500 — must be a real creator with some audience
-  const rollups = await db.creatorGrowthRollup.findMany({
-    where: {
-      pct7d: { gt: 0 },
-      delta7d: { gt: 100 },
-      creatorProfile: {
-        totalFollowers: { gt: 500 },
-      },
-    },
-    include: {
-      creatorProfile: {
-        select: {
-          id: true,
-          slug: true,
-          displayName: true,
-          avatarUrl: true,
-          totalFollowers: true,
-          primaryPlatform: true,
-        },
-      },
-    },
-    orderBy: { pct7d: "desc" },
-    take: limit * 3, // Fetch extra to account for dedup
-  });
+  const rows = await db.$queryRaw<Row[]>(Prisma.sql`
+    SELECT cp.id,
+           cp.slug,
+           cp."displayName",
+           cp."avatarUrl",
+           cp."totalFollowers",
+           cp."primaryPlatform"::text AS "primaryPlatform",
+           COALESCE(r."delta7d", 0) AS "delta7d",
+           r."pct7d",
+           r."trendDirection"::text AS "trendDirection"
+    FROM "CreatorProfile" cp
+    LEFT JOIN LATERAL (
+      SELECT cgr."delta7d", cgr."pct7d", cgr."trendDirection"
+      FROM "CreatorGrowthRollup" cgr
+      WHERE cgr."creatorProfileId" = cp.id
+        AND cgr.platform = cp."primaryPlatform"
+      LIMIT 1
+    ) r ON true
+    WHERE cp."totalFollowers" > 500
+      AND COALESCE(r."delta7d", 0) > 100
+    ORDER BY COALESCE(r."delta7d", 0) DESC, cp."totalFollowers" DESC
+    LIMIT ${limit}
+  `);
 
-  // Deduplicate by creator (a creator can have multiple platform rollups)
-  const seenIds = new Set<string>();
-  const trending: TrendingCreator[] = [];
+  const trending: TrendingCreator[] = rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    displayName: r.displayName,
+    avatarUrl: r.avatarUrl,
+    totalFollowers: r.totalFollowers.toString(),
+    delta7d: r.delta7d.toString(),
+    followerPct7d: r.pct7d ?? 0,
+    trendDirection: r.trendDirection ?? "FLAT",
+    primaryPlatform: r.primaryPlatform,
+  }));
 
-  for (const r of rollups) {
-    if (seenIds.has(r.creatorProfile.id)) continue;
-    seenIds.add(r.creatorProfile.id);
-
-    // Cap pct7d at 200% so no single outlier dominates via a near-zero base
-    const cappedPct = Math.min(r.pct7d ?? 0, 200);
-    const trendScore =
-      cappedPct * 0.7 + Math.log10(Math.max(Number(r.delta7d), 1)) * 0.3;
-
-    trending.push({
-      id: r.creatorProfile.id,
-      slug: r.creatorProfile.slug,
-      displayName: r.creatorProfile.displayName,
-      avatarUrl: r.creatorProfile.avatarUrl,
-      totalFollowers: r.creatorProfile.totalFollowers.toString(),
-      trendScore: Math.round(trendScore * 100) / 100,
-      followerPct7d: r.pct7d ?? 0,
-      trendDirection: r.trendDirection ?? "FLAT",
-      primaryPlatform: r.creatorProfile.primaryPlatform,
-    });
-
-    if (trending.length >= limit) break;
-  }
-
-  // Sort by composite score
-  trending.sort((a, b) => b.trendScore - a.trendScore);
-
-  // Cache for 10 minutes
   await cacheSet(CACHE_KEY, trending, CACHE_TTL.TRENDING_LANDING);
 
   log.info({ count: trending.length }, "Trending creators computed");

@@ -33,7 +33,7 @@ async function getLandingData() {
       },
     }),
     // Trending creators via scoring service (cached)
-    getTrendingCreators(10),
+    getTrendingCreators(9),
     // Top games by current viewers
     db.game.findMany({
       orderBy: { currentViewers: "desc" },
@@ -67,7 +67,7 @@ async function getLandingData() {
   }));
 
   // Map trending service results to the shape TrendingSection expects
-  const trendingCreators = trendingRaw.slice(0, 5).map((t) => ({
+  const trendingCreators = trendingRaw.slice(0, 9).map((t) => ({
     displayName: t.displayName,
     slug: t.slug,
     avatarUrl: t.avatarUrl,
@@ -75,7 +75,7 @@ async function getLandingData() {
     primaryPlatform: t.primaryPlatform as Platform,
     platformAccounts: [] as { platform: Platform; platformUsername: string }[],
     growthRollup: {
-      delta7d: "0",
+      delta7d: t.delta7d,
       pct7d: t.followerPct7d,
       trendDirection: t.trendDirection,
     },
