@@ -57,3 +57,10 @@ export const avatarUploadLimiter = new Ratelimit({
   limiter: Ratelimit.slidingWindow(5, "3600 s"),
   prefix: "ratelimit:avatar-upload",
 });
+
+// Brand logo uploads: 20 presign requests per hour per user
+export const brandLogoUploadLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, "3600 s"),
+  prefix: "ratelimit:brand-logo-upload",
+});

@@ -24,7 +24,8 @@ export async function Header() {
     ? (await prisma.creatorProfile.count({ where: { userId: user.id } })) > 0
     : false;
 
-  // Resolve canonical avatar — for TMs this includes their custom upload.
+  // Resolve canonical avatar — TMs use their uploaded avatar first; creators
+  // use platform/default avatars first and custom uploads as the fallback.
   let headerAvatar: string | null = user?.image ?? null;
   if (user?.id) {
     if (user.role === "talent_manager") {
@@ -35,6 +36,21 @@ export async function Header() {
       headerAvatar = resolveAvatar("talent_manager", {
         user: { image: user.image ?? null },
         manager: { avatarUrl: tm?.avatarUrl ?? null },
+      });
+    } else {
+      const creator = await prisma.creatorProfile.findUnique({
+        where: { userId: user.id },
+        select: {
+          avatarUrl: true,
+          customAvatarUrl: true,
+          platformAccounts: {
+            select: { platformAvatarUrl: true },
+          },
+        },
+      });
+      headerAvatar = resolveAvatar(user.role, {
+        user: { image: user.image ?? null },
+        creator,
       });
     }
   }

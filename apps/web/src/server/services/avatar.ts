@@ -54,8 +54,8 @@ export function isKeyOwnedBy(key: string, userId: string): boolean {
 
 /**
  * Whether the calling user should see the edit affordance. Talent managers
- * always can. Creators (and admins) only when they have zero connected
- * platform accounts — otherwise the platform avatar is the canonical image.
+ * always can. Creators (and admins) can upload only when the normal creator
+ * avatar chain has no usable default image.
  */
 export async function canUserUploadAvatar(
   userId: string,
@@ -65,11 +65,26 @@ export async function canUserUploadAvatar(
 
   const profile = await prisma.creatorProfile.findUnique({
     where: { userId },
-    select: { id: true, _count: { select: { platformAccounts: true } } },
+    select: {
+      id: true,
+      avatarUrl: true,
+      platformAccounts: {
+        select: { platformAvatarUrl: true },
+      },
+      user: {
+        select: { image: true },
+      },
+    },
   });
 
   if (!profile) return true; // no profile yet → allow upload as a fallback
-  return profile._count.platformAccounts === 0;
+  const hasDefaultAvatar = Boolean(
+    profile.avatarUrl ||
+    profile.user?.image ||
+    profile.platformAccounts.some((account) => account.platformAvatarUrl),
+  );
+
+  return !hasDefaultAvatar;
 }
 
 /**

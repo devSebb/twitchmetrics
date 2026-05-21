@@ -4,6 +4,15 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, creatorProcedure } from "../middleware";
 import { publicProcedure, router } from "../root";
 import { WIDGET_REGISTRY } from "@/lib/constants/widgets";
+import { brandLogoUploadLimiter } from "@/lib/redis";
+import {
+  BRAND_LOGO_ALLOWED_TYPES,
+  BRAND_LOGO_MAX_BYTES,
+  deleteBrandLogo,
+  isAllowedBrandLogoContentType,
+  presignBrandLogoUpload,
+} from "@/server/services/brand-logo";
+import { isStorageConfigured } from "@/server/services/storage/r2";
 
 export const creatorRouter = router({
   getProfile: publicProcedure
@@ -210,6 +219,98 @@ export const creatorRouter = router({
       });
     }),
 
+  updatePublicDataVisibility: creatorProcedure
+    .input(
+      z.object({
+        publicDemographicsEnabled: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true, state: true },
+      });
+
+      if (!profile) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No creator profile found.",
+        });
+      }
+
+      if (profile.state !== "claimed" && profile.state !== "premium") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Profile must be claimed to edit public visibility.",
+        });
+      }
+
+      return ctx.prisma.creatorProfile.update({
+        where: { id: profile.id },
+        data: {
+          publicDemographicsEnabled: input.publicDemographicsEnabled,
+        },
+        select: { publicDemographicsEnabled: true },
+      });
+    }),
+
+  presignBrandLogoUpload: creatorProcedure
+    .input(
+      z.object({
+        contentType: z.string(),
+        sizeBytes: z.number().int().positive().max(BRAND_LOGO_MAX_BYTES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!isStorageConfigured()) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Brand logo uploads are not configured.",
+        });
+      }
+
+      if (!isAllowedBrandLogoContentType(input.contentType)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Unsupported file type. Use one of: ${BRAND_LOGO_ALLOWED_TYPES.join(", ")}.`,
+        });
+      }
+
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { userId: ctx.user.id },
+        select: { state: true },
+      });
+
+      if (!profile) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      if (profile.state !== "claimed" && profile.state !== "premium") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      try {
+        const rate = await brandLogoUploadLimiter.limit(ctx.user.id);
+        if (!rate.success) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: "Too many logo uploads - try again later.",
+          });
+        }
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.warn("[brand-logo] rate limiter unavailable, allowing upload", {
+          userId: ctx.user.id,
+          error,
+        });
+      }
+
+      return presignBrandLogoUpload({
+        userId: ctx.user.id,
+        contentType: input.contentType,
+        contentLength: input.sizeBytes,
+      });
+    }),
+
   addBrandPartnership: creatorProcedure
     .input(
       z.object({
@@ -255,6 +356,57 @@ export const creatorRouter = router({
       });
     }),
 
+  updateBrandPartnership: creatorProcedure
+    .input(
+      z.object({
+        partnershipId: z.string().uuid(),
+        brandName: z.string().trim().min(1).max(100),
+        brandLogoUrl: z.string().url().optional().or(z.literal("")),
+        campaignName: z.string().max(200).optional(),
+        startDate: z.string().datetime().optional(),
+        endDate: z.string().datetime().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.prisma.creatorProfile.findUnique({
+        where: { userId: ctx.user.id },
+        select: { id: true, state: true },
+      });
+
+      if (!profile) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      if (profile.state !== "claimed" && profile.state !== "premium") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const partnership = await ctx.prisma.brandPartnership.findUnique({
+        where: { id: input.partnershipId },
+        select: { creatorProfileId: true, brandLogoUrl: true },
+      });
+
+      if (!partnership || partnership.creatorProfileId !== profile.id) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      const updated = await ctx.prisma.brandPartnership.update({
+        where: { id: input.partnershipId },
+        data: {
+          brandName: input.brandName,
+          brandLogoUrl: input.brandLogoUrl || null,
+          campaignName: input.campaignName || null,
+          startDate: input.startDate ? new Date(input.startDate) : null,
+          endDate: input.endDate ? new Date(input.endDate) : null,
+        },
+      });
+
+      if (partnership.brandLogoUrl !== updated.brandLogoUrl) {
+        await deleteBrandLogo(partnership.brandLogoUrl);
+      }
+
+      return updated;
+    }),
+
   removeBrandPartnership: creatorProcedure
     .input(z.object({ partnershipId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -270,16 +422,20 @@ export const creatorRouter = router({
       // Verify ownership
       const partnership = await ctx.prisma.brandPartnership.findUnique({
         where: { id: input.partnershipId },
-        select: { creatorProfileId: true },
+        select: { creatorProfileId: true, brandLogoUrl: true },
       });
 
       if (!partnership || partnership.creatorProfileId !== profile.id) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      return ctx.prisma.brandPartnership.delete({
+      const deleted = await ctx.prisma.brandPartnership.delete({
         where: { id: input.partnershipId },
       });
+
+      await deleteBrandLogo(partnership.brandLogoUrl);
+
+      return deleted;
     }),
 
   generateMediaKit: creatorProcedure.query(async ({ ctx }) => {

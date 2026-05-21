@@ -3,7 +3,12 @@ import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
 import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
-import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
+import { resolveAvatar } from "@/lib/avatar";
+import {
+  OwnerDashboardView,
+  type SerializedProfile,
+} from "@/components/dashboard";
+import type { DashboardHeaderData } from "@/components/dashboard/OwnerDashboardView";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -23,8 +28,12 @@ export default async function DashboardPage() {
         platformAccounts: {
           select: {
             platform: true,
+            platformUsername: true,
+            platformUrl: true,
+            platformAvatarUrl: true,
             followerCount: true,
             totalViews: true,
+            postCount: true,
             lastSyncedAt: true,
             isOAuthConnected: true,
           },
@@ -43,6 +52,7 @@ export default async function DashboardPage() {
             acceleration: true,
             computedAt: true,
           },
+          orderBy: { computedAt: "desc" },
         },
         brandPartnerships: {
           where: { isPublic: true },
@@ -87,6 +97,50 @@ export default async function DashboardPage() {
 
   const isClaimed = profile.state === "claimed" || profile.state === "premium";
 
+  const resolvedAvatar = resolveAvatar("creator", {
+    user: { image: user?.image ?? null },
+    creator: {
+      avatarUrl: profile.avatarUrl,
+      customAvatarUrl: profile.customAvatarUrl ?? null,
+      platformAccounts: profile.platformAccounts,
+    },
+  });
+
+  // Shape header data — same fields the public profile passes to CreatorHeader.
+  const headerData: DashboardHeaderData = {
+    id: profile.id,
+    displayName: profile.displayName,
+    slug: profile.slug,
+    avatarUrl: resolvedAvatar,
+    bannerUrl: profile.bannerUrl,
+    bio: profile.bio,
+    country: profile.country,
+    language: profile.language,
+    age: profile.age,
+    state: profile.state,
+    primaryPlatform: profile.primaryPlatform,
+    totalFollowers: String(profile.totalFollowers),
+    lastSnapshotAt: profile.lastSnapshotAt
+      ? String(profile.lastSnapshotAt)
+      : null,
+    platformAccounts: profile.platformAccounts.map((account) => ({
+      platform: account.platform,
+      platformUsername: account.platformUsername,
+      platformUrl: account.platformUrl,
+      followerCount: account.followerCount
+        ? String(account.followerCount)
+        : null,
+      totalViews: account.totalViews ? String(account.totalViews) : null,
+      postCount: account.postCount ?? null,
+    })),
+    growthRollups: profile.growthRollups.map((rollup) => ({
+      platform: rollup.platform,
+      delta7d: String(rollup.delta7d),
+      pct7d: rollup.pct7d,
+      trendDirection: rollup.trendDirection,
+    })),
+  };
+
   // serializeBigInt converts BigInt → string at runtime, but TS still sees the Prisma type.
   // Cast to SerializedProfile since the runtime shape matches after serialization.
   const serialized = {
@@ -96,11 +150,11 @@ export default async function DashboardPage() {
   } as unknown as SerializedProfile;
 
   return (
-    <DashboardGrid
+    <OwnerDashboardView
+      headerData={headerData}
       profile={serialized}
       widgetConfig={profile.widgetConfig}
       isClaimed={isClaimed}
-      isOwner={true}
     />
   );
 }

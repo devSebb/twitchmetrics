@@ -16,6 +16,7 @@ type WidgetToggleProps = {
   enabledWidgets: WidgetId[];
   onConfigChange: (config: WidgetId[]) => void;
   profileSlug: string;
+  publicDemographicsEnabled: boolean;
 };
 
 export function WidgetToggle({
@@ -23,11 +24,13 @@ export function WidgetToggle({
   onClose,
   enabledWidgets,
   onConfigChange,
-  profileSlug,
+  publicDemographicsEnabled,
 }: WidgetToggleProps) {
   const [localConfig, setLocalConfig] = useState<Set<WidgetId>>(
     () => new Set(enabledWidgets),
   );
+  const [localPublicDemographicsEnabled, setLocalPublicDemographicsEnabled] =
+    useState(publicDemographicsEnabled);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
@@ -39,6 +42,10 @@ export function WidgetToggle({
     setLocalConfig(new Set(enabledWidgets));
     prevConfigRef.current = enabledWidgets;
   }, [enabledWidgets]);
+
+  useEffect(() => {
+    setLocalPublicDemographicsEnabled(publicDemographicsEnabled);
+  }, [publicDemographicsEnabled]);
 
   const mutation = trpc.creator.updateWidgetConfig.useMutation({
     onSuccess: () => {
@@ -54,6 +61,20 @@ export function WidgetToggle({
       setTimeout(() => setStatus("idle"), 2000);
     },
   });
+
+  const publicVisibilityMutation =
+    trpc.creator.updatePublicDataVisibility.useMutation({
+      onSuccess: (data) => {
+        setLocalPublicDemographicsEnabled(data.publicDemographicsEnabled);
+        setStatus("saved");
+        setTimeout(() => setStatus("idle"), 1500);
+      },
+      onError: () => {
+        setStatus("error");
+        setLocalPublicDemographicsEnabled(publicDemographicsEnabled);
+        setTimeout(() => setStatus("idle"), 2000);
+      },
+    });
 
   const persistConfig = useCallback(
     (config: WidgetId[]) => {
@@ -91,6 +112,17 @@ export function WidgetToggle({
     onConfigChange(defaults);
     persistConfig(defaults);
   }, [onConfigChange, persistConfig]);
+
+  const handlePublicDemographicsToggle = useCallback(() => {
+    setLocalPublicDemographicsEnabled((current) => {
+      const next = !current;
+      setStatus("saving");
+      publicVisibilityMutation.mutate({
+        publicDemographicsEnabled: next,
+      });
+      return next;
+    });
+  }, [publicVisibilityMutation]);
 
   // ESC key to close
   useEffect(() => {
@@ -184,6 +216,41 @@ export function WidgetToggle({
                 </button>
               );
             })}
+          </div>
+
+          <div className="mt-6 border-t border-[#3F4147] pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#949BA4]">
+              Public data sharing
+            </h3>
+            <button
+              type="button"
+              onClick={handlePublicDemographicsToggle}
+              className="mt-3 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#313338]"
+            >
+              <div className="mr-3 flex-1">
+                <span className="text-sm font-medium text-[#DBDEE1]">
+                  Show audience data publicly
+                </span>
+                <p className="mt-0.5 text-xs text-[#949BA4]">
+                  Allows visitors to see your real demographics data.
+                </p>
+              </div>
+              <div
+                className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                  localPublicDemographicsEnabled
+                    ? "bg-[#E32C19]"
+                    : "bg-[#383A40]"
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    localPublicDemographicsEnabled
+                      ? "translate-x-4"
+                      : "translate-x-0.5"
+                  }`}
+                />
+              </div>
+            </button>
           </div>
         </div>
 

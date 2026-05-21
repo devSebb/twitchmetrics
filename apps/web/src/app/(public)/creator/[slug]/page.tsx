@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
+import { resolveAvatar } from "@/lib/avatar";
 import { CreatorHeader } from "@/components/creator";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
 
@@ -87,6 +88,12 @@ export async function generateMetadata({
         : `${totalFollowers}`;
 
   const description = `View ${creator.displayName}'s streaming analytics across ${platformNames}. ${followersStr} total followers.`;
+  const avatarUrl = resolveAvatar("creator", {
+    creator: {
+      avatarUrl: creator.avatarUrl,
+      customAvatarUrl: creator.customAvatarUrl,
+    },
+  });
 
   return {
     title: `${creator.displayName} - Creator Analytics`,
@@ -94,10 +101,10 @@ export async function generateMetadata({
     openGraph: {
       title: `${creator.displayName} | ${SITE_NAME}`,
       description: `${followersStr} total followers across ${platformNames}`,
-      images: creator.avatarUrl
+      images: avatarUrl
         ? [
             {
-              url: creator.avatarUrl,
+              url: avatarUrl,
               width: 300,
               height: 300,
               alt: creator.displayName,
@@ -112,7 +119,7 @@ export async function generateMetadata({
       site: TWITTER_HANDLE,
       title: `${creator.displayName} | ${SITE_NAME}`,
       description: `${followersStr} total followers across ${platformNames}`,
-      images: creator.avatarUrl ? [creator.avatarUrl] : [],
+      images: avatarUrl ? [avatarUrl] : [],
     },
     alternates: {
       canonical: `${SITE_URL}/creator/${slug}`,
@@ -129,16 +136,24 @@ export default async function CreatorProfilePage({ params }: PageProps) {
   }
 
   const isClaimed = creator.state === "claimed" || creator.state === "premium";
+  const avatarUrl = resolveAvatar("creator", {
+    creator: {
+      avatarUrl: creator.avatarUrl,
+      customAvatarUrl: creator.customAvatarUrl,
+    },
+  });
 
   // Data for CreatorHeader (card-style profile)
   const headerData = {
     id: creator.id,
     displayName: creator.displayName,
     slug: creator.slug,
-    avatarUrl: creator.avatarUrl,
+    avatarUrl,
     bannerUrl: creator.bannerUrl,
     bio: creator.bio,
     country: creator.country,
+    language: creator.language,
+    age: creator.age,
     state: creator.state,
     primaryPlatform: creator.primaryPlatform,
     totalFollowers: String(creator.totalFollowers),
@@ -161,8 +176,24 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     })),
   };
 
+  const demographicAnalytics = creator.publicDemographicsEnabled
+    ? await db.creatorAnalytics.findMany({
+        where: { creatorProfileId: creator.id },
+        orderBy: [{ periodEnd: "desc" }, { periodStart: "desc" }],
+        select: {
+          platform: true,
+          ageGenderData: true,
+          countryData: true,
+        },
+        take: 10,
+      })
+    : [];
+
   // Data for DashboardGrid (same shape as dashboard page)
-  const serialized = serializeBigInt(creator) as unknown as SerializedProfile;
+  const serialized = {
+    ...(serializeBigInt(creator) as Record<string, unknown>),
+    demographicAnalytics: serializeBigInt(demographicAnalytics),
+  } as unknown as SerializedProfile;
 
   // Person JSON-LD for rich results
   const jsonLd = {
@@ -170,7 +201,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     "@type": "Person",
     name: creator.displayName,
     url: `${SITE_URL}/creator/${creator.slug}`,
-    image: creator.avatarUrl ?? undefined,
+    image: avatarUrl ?? undefined,
     description: creator.bio ?? undefined,
     sameAs: creator.platformAccounts
       .map((a: { platformUrl: string | null }) => a.platformUrl)
@@ -194,7 +225,6 @@ export default async function CreatorProfilePage({ params }: PageProps) {
         widgetConfig={creator.widgetConfig}
         isClaimed={isClaimed}
         isOwner={false}
-        showProfileHeader={false}
       />
     </div>
   );

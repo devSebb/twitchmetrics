@@ -16,6 +16,9 @@ import {
   Handshake,
   ShieldCheck,
   CurrencyCircleDollar,
+  Sparkle,
+  Article,
+  Star,
 } from "@phosphor-icons/react/dist/ssr";
 
 export type WidgetId =
@@ -27,9 +30,12 @@ export type WidgetId =
   | "platform_breakdown"
   | "recent_streams"
   | "featured_clips"
+  | "featured_posts"
   | "brand_partners"
   | "brand_safety"
-  | "rates";
+  | "rates"
+  | "interests"
+  | "streamer_qualities";
 
 export type WidgetAccess = "public" | "claimed" | "connected";
 
@@ -96,6 +102,16 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     colSpan: 2,
     icon: FilmSlate,
   },
+  featured_posts: {
+    id: "featured_posts",
+    label: "Featured Posts",
+    description: "Creator-selected posts to highlight on the profile",
+    defaultEnabled: false,
+    priority: "P2",
+    access: "claimed",
+    colSpan: 3,
+    icon: Article,
+  },
   viewer_count: {
     id: "viewer_count",
     label: "Viewer Count",
@@ -157,6 +173,26 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     colSpan: 1,
     icon: CurrencyCircleDollar,
   },
+  interests: {
+    id: "interests",
+    label: "Interests",
+    description: "Topics and categories the creator wants to highlight",
+    defaultEnabled: false,
+    priority: "P2",
+    access: "claimed",
+    colSpan: 1,
+    icon: Sparkle,
+  },
+  streamer_qualities: {
+    id: "streamer_qualities",
+    label: "Streamer Qualities",
+    description: "Creator-selected qualities for brand fit",
+    defaultEnabled: false,
+    priority: "P2",
+    access: "claimed",
+    colSpan: 1,
+    icon: Star,
+  },
 };
 
 /**
@@ -170,8 +206,11 @@ export const WIDGET_ORDER: WidgetId[] = [
   "popular_games",
   "recent_streams",
   "featured_clips",
+  "featured_posts",
   "follower_growth",
   "viewer_count",
+  "interests",
+  "streamer_qualities",
   "rates",
   "brand_safety",
   "platform_breakdown",

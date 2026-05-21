@@ -154,7 +154,12 @@ export function ProfileSettingsForm({
   const [customAvatarOverride, setCustomAvatarOverride] = useState<
     string | null
   >(profile?.customAvatarUrl ?? null);
-  const canUploadAvatar = platformAccounts.length === 0;
+  const hasDefaultAvatar = Boolean(
+    profile?.avatarUrl ||
+    user.image ||
+    platformAccounts.some((account) => account.avatarUrl),
+  );
+  const canUploadAvatar = !hasDefaultAvatar;
   const resolvedAvatar = resolveAvatar("creator", {
     user,
     creator: {

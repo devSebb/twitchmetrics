@@ -11,6 +11,8 @@ import {
   HeroSection,
   CreatorShowcase,
   ValueProps,
+  HowItWorks,
+  AudienceSplit,
   TrendingSection,
   CtaSection,
 } from "@/components/landing";
@@ -141,6 +143,8 @@ export default async function LandingPage() {
       <HeroSection />
       <CreatorShowcase creators={topCreators} />
       <ValueProps />
+      <HowItWorks />
+      <AudienceSplit />
       <TrendingSection
         topChannels={topCreators.slice(0, 5)}
         topGames={topGames}

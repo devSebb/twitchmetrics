@@ -3,7 +3,10 @@
 import { useMemo } from "react";
 import { EmptyState } from "@/components/widgets/EmptyState";
 import { trpc } from "@/lib/trpc";
-import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
+import type {
+  SerializedDemographicAnalytics,
+  SerializedProfile,
+} from "@/components/dashboard/DashboardGrid";
 
 // ----------------------------------------------------------------
 // Demographics data types (from CreatorAnalytics JSON)
@@ -293,8 +296,16 @@ export function DemographicsWidget({
     );
   }
 
-  // Non-owners can't access the demographics tRPC call (it's auth-gated)
   if (!isOwner) {
+    if (profile.publicDemographicsEnabled) {
+      return (
+        <DemographicsDataContent
+          analytics={profile.demographicAnalytics ?? []}
+          isLoading={false}
+        />
+      );
+    }
+
     return (
       <EmptyState
         variant="no_data"
@@ -326,8 +337,23 @@ function DemographicsDataView({ profile }: { profile: SerializedProfile }) {
     periodDays: 30,
   });
 
+  return (
+    <DemographicsDataContent
+      analytics={analytics ?? []}
+      isLoading={isLoading}
+    />
+  );
+}
+
+function DemographicsDataContent({
+  analytics,
+  isLoading,
+}: {
+  analytics: SerializedDemographicAnalytics[];
+  isLoading: boolean;
+}) {
   const { genderData, ageData, countryData, sourcePlatform } = useMemo(() => {
-    if (!analytics || analytics.length === 0)
+    if (analytics.length === 0)
       return {
         genderData: null,
         ageData: null,

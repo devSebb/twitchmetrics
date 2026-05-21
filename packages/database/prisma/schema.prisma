@@ -207,6 +207,7 @@ model CreatorProfile {
   totalViews     BigInt  @default(0)
   searchText     String? @default("")
   widgetConfig   Json    @default("[]")
+  publicDemographicsEnabled Boolean @default(false)
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
