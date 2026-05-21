@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   Document,
   Image,
@@ -30,22 +31,35 @@ const COLORS = {
   negative: "#DC2626",
 } as const;
 
-const PLATFORM_ABBR: Record<Platform, string> = {
-  twitch: "T",
-  youtube: "Y",
-  tiktok: "TT",
-  instagram: "IG",
+const PLATFORM_LABEL: Record<Platform, string> = {
+  twitch: "Twitch",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+  instagram: "Instagram",
   x: "X",
-  kick: "K",
+  kick: "Kick",
 };
 
-const PLATFORM_COLOR: Record<Platform, string> = {
-  twitch: "#9146FF",
-  youtube: "#FF0000",
-  tiktok: "#000000",
-  instagram: "#E4405F",
-  x: "#000000",
-  kick: "#53FC18",
+const ICONS_DIR = path.join(process.cwd(), "public", "platform-icons");
+
+const PLATFORM_ICON_PATH: Record<Platform, string> = {
+  twitch: path.join(ICONS_DIR, "twitch.png"),
+  youtube: path.join(ICONS_DIR, "youtube.png"),
+  tiktok: path.join(ICONS_DIR, "tiktok.png"),
+  instagram: path.join(ICONS_DIR, "instagram.png"),
+  // x.png is the dark variant; reads on white paper. x_white.png would disappear.
+  x: path.join(ICONS_DIR, "x.png"),
+  kick: path.join(ICONS_DIR, "kick.png"),
+};
+
+// Kick's wordmark has no built-in outline → needs a green circle behind it on
+// white paper, matching the on-screen PlatformIcon treatment.
+const KICK_BRAND_GREEN = "#53FC18";
+
+export type RosterReportPlatform = {
+  platform: Platform;
+  username: string | null;
+  followerCount: number | null;
 };
 
 export type RosterReportCreator = {
@@ -54,7 +68,7 @@ export type RosterReportCreator = {
   avatarUrl: string | null;
   primaryPlatform: Platform | null;
   primaryUsername: string | null;
-  connectedPlatforms: Platform[];
+  platformBreakdown: readonly RosterReportPlatform[];
   totalFollowers: number;
   growth7dPct: number | null;
   topGame: string | null;
@@ -80,6 +94,7 @@ export type RosterReportProps = {
 };
 
 const CREATORS_PER_PAGE = 6;
+const MAX_BREAKDOWN_ROWS = 4;
 
 const styles = StyleSheet.create({
   page: {
@@ -93,7 +108,6 @@ const styles = StyleSheet.create({
   },
 
   brandBarTop: { height: 8, marginHorizontal: -40, marginTop: -36 },
-  brandBarBottom: { height: 4, marginHorizontal: -40 },
 
   coverHeader: {
     flexDirection: "row",
@@ -184,6 +198,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
+  // Roster grid
   gridRow: {
     flexDirection: "row",
     gap: 10,
@@ -195,75 +210,112 @@ const styles = StyleSheet.create({
     borderStyle: "solid",
     borderColor: COLORS.hairline,
     borderRadius: 6,
-    padding: 10,
-    minHeight: 130,
+    padding: 12,
   },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     objectFit: "cover",
     backgroundColor: COLORS.hairline,
   },
   cardAvatarFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: COLORS.hairline,
     alignItems: "center",
     justifyContent: "center",
   },
   cardAvatarFallbackText: {
     fontFamily: PDF_DISPLAY_FONT_FAMILY,
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.inkMuted,
   },
+  cardIdentity: { flex: 1, minWidth: 0 },
   cardName: { fontSize: 11, fontWeight: 700, color: COLORS.ink },
   cardHandle: { fontSize: 8, color: COLORS.inkMuted, marginTop: 1 },
 
-  cardStripe: { height: 2, marginTop: 8 },
+  cardStripe: { height: 2, marginTop: 10, borderRadius: 1 },
 
-  platformRow: {
-    flexDirection: "row",
-    gap: 4,
-    marginTop: 8,
-    flexWrap: "wrap",
-  },
-  platformChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 3,
-    fontSize: 7,
-    color: COLORS.paper,
-    fontWeight: 700,
-  },
-
-  statRow: {
+  // Headline metrics row: Total followers + Growth (7d)
+  headlineRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 6,
+    alignItems: "flex-end",
+    marginTop: 10,
   },
-  statLabel: { fontSize: 8, color: COLORS.inkMuted },
-  statValue: { fontSize: 9, fontWeight: 500, color: COLORS.ink },
-  statValuePositive: { color: COLORS.positive },
-  statValueNegative: { color: COLORS.negative },
-
-  topGameWrapper: {
-    marginTop: 8,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopStyle: "solid",
-    borderTopColor: COLORS.hairline,
-  },
-  topGameLabel: {
+  headlineLabel: {
     fontSize: 7,
     color: COLORS.inkMuted,
     textTransform: "uppercase",
     letterSpacing: 1.2,
+    fontWeight: 500,
   },
-  topGameValue: { fontSize: 9, color: COLORS.ink, marginTop: 2 },
+  headlineValue: {
+    fontFamily: PDF_DISPLAY_FONT_FAMILY,
+    fontSize: 18,
+    color: COLORS.ink,
+    marginTop: 2,
+  },
+  headlineValuePositive: { color: COLORS.positive },
+  headlineValueNegative: { color: COLORS.negative },
+  headlineColRight: { alignItems: "flex-end" },
 
+  // Section divider used for Platforms + Top Game blocks inside the card
+  cardSection: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: COLORS.hairline,
+  },
+  cardSectionLabel: {
+    fontSize: 7,
+    color: COLORS.inkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    fontWeight: 500,
+    marginBottom: 6,
+  },
+
+  // Per-platform breakdown row
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 3,
+  },
+  breakdownPlatformName: {
+    flex: 1,
+    fontSize: 9,
+    color: COLORS.ink,
+  },
+  breakdownValue: {
+    fontSize: 9,
+    color: COLORS.ink,
+    fontWeight: 500,
+  },
+  breakdownMore: {
+    fontSize: 8,
+    color: COLORS.inkMuted,
+    marginTop: 2,
+  },
+
+  // Top game line
+  topGameValue: { fontSize: 10, color: COLORS.ink },
+
+  // Kick logo wrapper — green circle to make the wordmark legible on white
+  kickWrapper: {
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: KICK_BRAND_GREEN,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Footer
   footer: {
     position: "absolute",
     bottom: 18,
@@ -278,7 +330,7 @@ const styles = StyleSheet.create({
   footerBrand: {
     fontSize: 8,
     fontWeight: 500,
-    color: "#2B2D31", // app main bg color, reads as dark gray on paper
+    color: "#2B2D31",
     textDecoration: "none",
   },
   footerStripe: {
@@ -294,6 +346,11 @@ function formatNumber(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toLocaleString("en-US");
+}
+
+function formatFollowerCount(value: number | null): string {
+  if (value === null || value <= 0) return "—";
+  return formatNumber(value);
 }
 
 function formatPercent(value: number | null): string {
@@ -372,6 +429,36 @@ function Avatar({
   );
 }
 
+function PlatformLogo({
+  platform,
+  size = 11,
+}: {
+  platform: Platform;
+  size?: number;
+}) {
+  const src = PLATFORM_ICON_PATH[platform];
+
+  // Kick: nest the smaller wordmark inside a green-bordered circle so the
+  // logo doesn't visually disappear against white paper.
+  if (platform === "kick") {
+    const inner = Math.round(size * 0.62);
+    return (
+      <View
+        style={[
+          styles.kickWrapper,
+          { width: size, height: size, borderRadius: size / 2 },
+        ]}
+      >
+        {/* eslint-disable-next-line jsx-a11y/alt-text */}
+        <Image src={src} style={{ width: inner, height: inner }} />
+      </View>
+    );
+  }
+
+  // eslint-disable-next-line jsx-a11y/alt-text
+  return <Image src={src} style={{ width: size, height: size }} />;
+}
+
 function CreatorCard({
   creator,
   brandColor,
@@ -382,18 +469,26 @@ function CreatorCard({
   const growth = creator.growth7dPct;
   const growthStyle =
     growth === null
-      ? styles.statValue
+      ? styles.headlineValue
       : growth > 0
-        ? [styles.statValue, styles.statValuePositive]
+        ? [styles.headlineValue, styles.headlineValuePositive]
         : growth < 0
-          ? [styles.statValue, styles.statValueNegative]
-          : styles.statValue;
+          ? [styles.headlineValue, styles.headlineValueNegative]
+          : styles.headlineValue;
+
+  const visibleBreakdown = creator.platformBreakdown.slice(
+    0,
+    MAX_BREAKDOWN_ROWS,
+  );
+  const hiddenCount =
+    creator.platformBreakdown.length - visibleBreakdown.length;
 
   return (
     <Link
       src={creator.profileUrl}
       style={[styles.card, { textDecoration: "none", color: COLORS.ink }]}
     >
+      {/* Identity row */}
       <View style={styles.cardTop}>
         <Avatar
           src={creator.avatarUrl}
@@ -402,7 +497,7 @@ function CreatorCard({
           styleFallback={styles.cardAvatarFallback}
           styleFallbackText={styles.cardAvatarFallbackText}
         />
-        <View>
+        <View style={styles.cardIdentity}>
           <Text style={styles.cardName}>{creator.displayName}</Text>
           {creator.primaryUsername ? (
             <Text style={styles.cardHandle}>@{creator.primaryUsername}</Text>
@@ -410,38 +505,50 @@ function CreatorCard({
         </View>
       </View>
 
+      {/* Brand-color accent */}
       <View style={[styles.cardStripe, { backgroundColor: brandColor }]} />
 
-      {creator.connectedPlatforms.length > 0 ? (
-        <View style={styles.platformRow}>
-          {creator.connectedPlatforms.map((platform) => (
-            <Text
-              key={platform}
-              style={[
-                styles.platformChip,
-                { backgroundColor: PLATFORM_COLOR[platform] },
-              ]}
-            >
-              {PLATFORM_ABBR[platform]}
-            </Text>
+      {/* Headline metrics: Total followers + Growth (7d) */}
+      <View style={styles.headlineRow}>
+        <View>
+          <Text style={styles.headlineLabel}>Total followers</Text>
+          <Text style={styles.headlineValue}>
+            {formatNumber(creator.totalFollowers)}
+          </Text>
+        </View>
+        <View style={styles.headlineColRight}>
+          <Text style={styles.headlineLabel}>Growth (7d)</Text>
+          <Text style={growthStyle}>{formatPercent(creator.growth7dPct)}</Text>
+        </View>
+      </View>
+
+      {/* Per-platform breakdown */}
+      {visibleBreakdown.length > 0 ? (
+        <View style={styles.cardSection}>
+          <Text style={styles.cardSectionLabel}>Platforms</Text>
+          {visibleBreakdown.map((entry) => (
+            <View key={entry.platform} style={styles.breakdownRow}>
+              <PlatformLogo platform={entry.platform} size={11} />
+              <Text style={styles.breakdownPlatformName}>
+                {PLATFORM_LABEL[entry.platform]}
+              </Text>
+              <Text style={styles.breakdownValue}>
+                {formatFollowerCount(entry.followerCount)}
+              </Text>
+            </View>
           ))}
+          {hiddenCount > 0 ? (
+            <Text style={styles.breakdownMore}>
+              + {hiddenCount} more platform{hiddenCount === 1 ? "" : "s"}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 
-      <View style={styles.statRow}>
-        <Text style={styles.statLabel}>Followers</Text>
-        <Text style={styles.statValue}>
-          {formatNumber(creator.totalFollowers)}
-        </Text>
-      </View>
-      <View style={styles.statRow}>
-        <Text style={styles.statLabel}>Growth (7d)</Text>
-        <Text style={growthStyle}>{formatPercent(creator.growth7dPct)}</Text>
-      </View>
-
+      {/* Top game */}
       {creator.topGame ? (
-        <View style={styles.topGameWrapper}>
-          <Text style={styles.topGameLabel}>Top game</Text>
+        <View style={styles.cardSection}>
+          <Text style={styles.cardSectionLabel}>Top game</Text>
           <Text style={styles.topGameValue}>{creator.topGame}</Text>
         </View>
       ) : null}

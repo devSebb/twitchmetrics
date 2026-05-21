@@ -13,7 +13,10 @@ import {
 import { logAudit } from "@/server/services/audit";
 import { buildCsv, isoOrEmpty } from "@/server/utils/csv";
 import { renderRosterPdf } from "@/server/services/pdf/render";
-import type { RosterReportCreator } from "@/server/services/pdf/roster-report";
+import type {
+  RosterReportCreator,
+  RosterReportPlatform,
+} from "@/server/services/pdf/roster-report";
 import { resolveAvatar } from "@/lib/avatar";
 import { THEME } from "@/lib/constants/theme";
 
@@ -78,6 +81,7 @@ const PDF_CREATOR_CAP = 100;
 const exportRosterInclude = {
   creatorProfile: {
     select: {
+      id: true,
       displayName: true,
       slug: true,
       avatarUrl: true,
@@ -172,6 +176,53 @@ async function generatePdfExport(args: {
     process.env.NEXTAUTH_URL ??
     "https://twitchmetrics.net";
 
+  // Live top-game aggregation per creator. The denormalized
+  // CreatorProfile.primaryGameName is only as fresh as the last enrichment
+  // run; many active creators have games visible in the Popular Games widget
+  // (computed live from MetricSnapshot.extendedMetrics) while primaryGameName
+  // is still null. One batched query here matches the widget's freshness for
+  // the whole roster without N round-trips.
+  const creatorIds = rows.map((r) => r.creatorProfile.id);
+  const sinceDays30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  type TopGameRow = { creator_profile_id: string; game_name: string };
+  const topGameByCreator = new Map<string, string>();
+  if (creatorIds.length > 0) {
+    const topGameRows = await ctx.prisma.$queryRaw<TopGameRow[]>`
+      WITH game_counts AS (
+        SELECT
+          "creatorProfileId" AS creator_profile_id,
+          "extendedMetrics"->>'CURRENT_GAME' AS game_name,
+          COUNT(*) AS cnt
+        FROM "MetricSnapshot"
+        WHERE "creatorProfileId" IN (${Prisma.join(creatorIds)})
+          AND "snapshotAt" >= ${sinceDays30}
+          AND "extendedMetrics"->>'CURRENT_GAME' IS NOT NULL
+          AND (
+            "extendedMetrics"->>'IS_LIVE' = '1'
+            OR ("extendedMetrics"->>'LIVE_VIEWER_COUNT')::numeric > 0
+          )
+        GROUP BY "creatorProfileId", game_name
+      ),
+      ranked AS (
+        SELECT
+          creator_profile_id,
+          game_name,
+          ROW_NUMBER() OVER (
+            PARTITION BY creator_profile_id
+            ORDER BY cnt DESC
+          ) AS rn
+        FROM game_counts
+      )
+      SELECT creator_profile_id, game_name
+      FROM ranked
+      WHERE rn = 1
+    `;
+    for (const row of topGameRows) {
+      topGameByCreator.set(row.creator_profile_id, row.game_name);
+    }
+  }
+
   const creators: RosterReportCreator[] = rows.map((access) => {
     const creator = access.creatorProfile;
     const platforms = creator.platformAccounts;
@@ -197,16 +248,31 @@ async function generatePdfExport(args: {
         )
       : creator.growthRollups[0];
 
+    const platformBreakdown: RosterReportPlatform[] = platforms
+      .map((acct) => ({
+        platform: acct.platform,
+        username: acct.platformUsername,
+        followerCount:
+          acct.followerCount !== null ? Number(acct.followerCount) : null,
+      }))
+      .sort((a, b) => {
+        // Primary platform first, then by follower count desc, nulls last.
+        if (a.platform === creator.primaryPlatform) return -1;
+        if (b.platform === creator.primaryPlatform) return 1;
+        return (b.followerCount ?? 0) - (a.followerCount ?? 0);
+      });
+
     return {
       slug: creator.slug,
       displayName: creator.displayName,
       avatarUrl,
       primaryPlatform: creator.primaryPlatform,
       primaryUsername: primaryAccount?.platformUsername ?? null,
-      connectedPlatforms: platforms.map((acct) => acct.platform),
+      platformBreakdown,
       totalFollowers: Number(creator.totalFollowers ?? 0),
       growth7dPct: primaryRollup?.pct7d ?? null,
-      topGame: creator.primaryGameName,
+      topGame:
+        topGameByCreator.get(creator.id) ?? creator.primaryGameName ?? null,
       profileUrl: `${baseUrl}/creators/${creator.slug}`,
     };
   });
@@ -415,6 +481,7 @@ export const talentManagerRouter = router({
             displayName: true,
             slug: true,
             avatarUrl: true,
+            customAvatarUrl: true,
             primaryPlatform: true,
             totalFollowers: true,
             totalViews: true,
@@ -424,6 +491,7 @@ export const talentManagerRouter = router({
               select: {
                 platform: true,
                 platformUsername: true,
+                platformAvatarUrl: true,
                 followerCount: true,
               },
             },
@@ -455,6 +523,21 @@ export const talentManagerRouter = router({
           ? "expired"
           : "pending";
 
+      // Resolve avatar via the shared priority chain (platform → enriched →
+      // user-uploaded). The client only sees a single resolved `avatarUrl`.
+      const { customAvatarUrl, platformAccounts, ...restProfile } =
+        a.creatorProfile;
+      const resolvedAvatar = resolveAvatar("creator", {
+        creator: {
+          avatarUrl: restProfile.avatarUrl,
+          customAvatarUrl,
+          platformAccounts,
+        },
+      });
+      const sanitizedPlatformAccounts = platformAccounts.map(
+        ({ platformAvatarUrl: _platformAvatarUrl, ...rest }) => rest,
+      );
+
       return {
         accessId: a.id,
         status: a.status,
@@ -477,7 +560,11 @@ export const talentManagerRouter = router({
               canExportData: false,
               canManageBrands: false,
             },
-        creator: a.creatorProfile,
+        creator: {
+          ...restProfile,
+          avatarUrl: resolvedAvatar,
+          platformAccounts: sanitizedPlatformAccounts,
+        },
       };
     });
 

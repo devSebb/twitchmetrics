@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
 import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import { PlatformIcon } from "@/components/shared";
 import {
   formatNumber,
   formatPercent,
@@ -22,6 +23,11 @@ type GrowthRollup = {
   trendDirection: string | null;
 };
 
+type PlatformAccount = {
+  platform: Platform;
+  platformUsername: string;
+};
+
 type Creator = {
   id: string;
   displayName: string;
@@ -31,6 +37,7 @@ type Creator = {
   totalFollowers: bigint | string | number | null;
   lastSnapshotAt: string | Date | null;
   growthRollups: GrowthRollup[];
+  platformAccounts: PlatformAccount[];
 };
 
 type RosterRow = {
@@ -188,7 +195,7 @@ export function RosterListView({
             </th>
             <th className="hidden px-3 py-2.5 text-left sm:table-cell">
               <span className="text-[10px] font-medium uppercase tracking-wider text-[#949BA4]">
-                Platform
+                Platforms
               </span>
             </th>
             <th className="px-3 py-2.5 text-right">
@@ -226,9 +233,14 @@ export function RosterListView({
               ) ?? creator.growthRollups[0];
             const trendUp = primaryGrowth?.trendDirection === "up";
             const trendDown = primaryGrowth?.trendDirection === "down";
-            const platformConfig = creator.primaryPlatform
-              ? PLATFORM_CONFIG[creator.primaryPlatform]
-              : null;
+            const sortedPlatforms =
+              creator.platformAccounts.length > 0 && creator.primaryPlatform
+                ? [...creator.platformAccounts].sort((x, y) => {
+                    if (x.platform === creator.primaryPlatform) return -1;
+                    if (y.platform === creator.primaryPlatform) return 1;
+                    return 0;
+                  })
+                : creator.platformAccounts;
             const isActive = inviteState === "active";
             const profileHref = isActive
               ? `/talent-manager/creator/${creator.slug}`
@@ -272,14 +284,24 @@ export function RosterListView({
                   </Link>
                 </td>
                 <td className="hidden px-3 py-2.5 sm:table-cell">
-                  {platformConfig ? (
-                    <span className="text-xs text-[#DBDEE1]">
-                      <span
-                        className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: platformConfig.color }}
-                      />
-                      {platformConfig.name}
-                    </span>
+                  {sortedPlatforms.length > 0 ? (
+                    <div
+                      className="flex flex-wrap items-center gap-1.5"
+                      aria-label="Connected platforms"
+                    >
+                      {sortedPlatforms.map((account) => (
+                        <span
+                          key={account.platform}
+                          title={`${PLATFORM_CONFIG[account.platform].name} — @${account.platformUsername}`}
+                        >
+                          <PlatformIcon
+                            platform={account.platform}
+                            size="xs"
+                            rounded="full"
+                          />
+                        </span>
+                      ))}
+                    </div>
                   ) : (
                     <span className="text-xs text-[#949BA4]">—</span>
                   )}

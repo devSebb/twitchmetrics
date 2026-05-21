@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Button } from "@/components/ui";
 import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import { PlatformIcon } from "@/components/shared";
 import {
   formatNumber,
   formatPercent,
@@ -21,6 +22,11 @@ type GrowthRollup = {
   trendDirection: string | null;
 };
 
+type PlatformAccount = {
+  platform: Platform;
+  platformUsername: string;
+};
+
 type Creator = {
   id: string;
   displayName: string;
@@ -31,9 +37,23 @@ type Creator = {
   state: string;
   lastSnapshotAt: string | Date | null;
   growthRollups: GrowthRollup[];
+  platformAccounts: PlatformAccount[];
 };
 
 export type InviteState = "active" | "pending" | "expired";
+
+/** Primary platform first, then everything else in stable order. */
+function sortPlatformAccounts<T extends { platform: Platform }>(
+  accounts: T[],
+  primary: Platform | null,
+): T[] {
+  if (!primary) return accounts;
+  return [...accounts].sort((a, b) => {
+    if (a.platform === primary) return -1;
+    if (b.platform === primary) return 1;
+    return 0;
+  });
+}
 
 type CreatorRosterCardProps = {
   creator: Creator;
@@ -154,14 +174,27 @@ export function CreatorRosterCard({
           </div>
           <p className="text-xs text-[#949BA4]">/{creator.slug}</p>
 
-          {creator.primaryPlatform && (
-            <Badge
-              variant="platform"
-              platform={creator.primaryPlatform}
-              className="mt-1"
+          {creator.platformAccounts.length > 0 && (
+            <div
+              className="mt-1.5 flex flex-wrap items-center gap-1.5"
+              aria-label="Connected platforms"
             >
-              {PLATFORM_CONFIG[creator.primaryPlatform].name}
-            </Badge>
+              {sortPlatformAccounts(
+                creator.platformAccounts,
+                creator.primaryPlatform,
+              ).map((account) => (
+                <span
+                  key={account.platform}
+                  title={`${PLATFORM_CONFIG[account.platform].name} — @${account.platformUsername}`}
+                >
+                  <PlatformIcon
+                    platform={account.platform}
+                    size="sm"
+                    rounded="full"
+                  />
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>
