@@ -46,3 +46,4 @@ STAGE*.md
 docs/STAGE*.md
 docs/*-REPORT.md
 .vercel
+.env*.local

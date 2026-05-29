@@ -84,6 +84,7 @@ export function TikTokProvider(options: {
       });
     },
     userinfo: {
+      url: "https://open.tiktokapis.com/v2/user/info/",
       async request(context: OAuthRequestContext) {
         const fields = [
           "open_id",
