@@ -34,7 +34,7 @@ const PROVIDERS = [
     provider: "tiktok",
     label: "TikTok",
     iconSrc: "/platform-icons/tiktok.png",
-    bgColor: "#000000",
+    bgColor: null,
   },
 ] as const;
 

@@ -65,22 +65,28 @@ export function TikTokProvider(options: {
             ? input.href
             : input.url;
 
-      if (!url.includes("/v2/oauth/token/") || !init?.body) {
+      if (!url.includes("/v2/oauth/token/")) {
         return fetch(input, init);
       }
 
-      const body =
-        init.body instanceof URLSearchParams
-          ? new URLSearchParams(init.body)
-          : new URLSearchParams(String(init.body));
+      const request =
+        input instanceof Request ? input : new Request(input, init);
+      const body = new URLSearchParams(await request.clone().text());
 
       body.set("client_key", options.clientKey);
       body.set("client_secret", options.clientSecret);
       body.delete("client_id");
 
-      return fetch(input, {
-        ...init,
+      const headers = new Headers(request.headers);
+      headers.delete("authorization");
+      headers.set("content-type", "application/x-www-form-urlencoded");
+
+      return fetch(request.url, {
+        method: request.method,
+        headers,
         body,
+        redirect: request.redirect,
+        signal: request.signal,
       });
     },
     userinfo: {
