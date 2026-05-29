@@ -3,6 +3,7 @@ import {
   type SnapshotTier,
   type Platform,
 } from "@twitchmetrics/database";
+import { decryptToken } from "@/lib/encryption";
 import { createLogger } from "@/lib/logger";
 import { getAdapter } from "@/server/adapters";
 import { cacheInvalidate } from "@/server/services/cache";
@@ -156,7 +157,7 @@ export async function snapshotPlatformAccount(
     accessToken: string | null;
   },
 ): Promise<void> {
-  if (!supportsCreatorSnapshots(account.platform)) {
+  if (!supportsCreatorSnapshots(account.platform, account.isOAuthConnected)) {
     return;
   }
 
@@ -170,7 +171,7 @@ export async function snapshotPlatformAccount(
     isOAuthConnected: account.isOAuthConnected,
   };
   if (account.accessToken) {
-    fetchOptions.accessToken = account.accessToken;
+    fetchOptions.accessToken = await decryptToken(account.accessToken);
   }
 
   const snapshotData = await adapter.fetchSnapshot(
@@ -258,6 +259,55 @@ export async function snapshotPlatformAccount(
         { err, creatorProfileId, platformUserId: account.platformUserId },
         "Clip sync failed — continuing",
       );
+    }
+  }
+
+  if (account.platform === "tiktok") {
+    const ext = snapshotData.extendedMetrics as Record<string, unknown>;
+    const freshBio = typeof ext._bio === "string" ? ext._bio : null;
+    const freshAvatar =
+      typeof ext._avatarUrl === "string" ? ext._avatarUrl : null;
+    const freshDisplayName =
+      typeof ext._displayName === "string" ? ext._displayName : null;
+    const freshUsername =
+      typeof ext._username === "string" ? ext._username : null;
+    const freshProfileUrl =
+      typeof ext._profileUrl === "string" ? ext._profileUrl : null;
+
+    if (
+      freshBio !== null ||
+      freshAvatar !== null ||
+      freshDisplayName !== null
+    ) {
+      const profileUpdate: Record<string, string> = {};
+      if (freshBio !== null) profileUpdate.bio = freshBio;
+      if (freshAvatar !== null) profileUpdate.avatarUrl = freshAvatar;
+      if (freshDisplayName !== null)
+        profileUpdate.displayName = freshDisplayName;
+
+      await prisma.creatorProfile.update({
+        where: { id: creatorProfileId },
+        data: profileUpdate,
+      });
+    }
+
+    if (
+      freshUsername !== null ||
+      freshProfileUrl !== null ||
+      freshAvatar !== null ||
+      freshDisplayName !== null
+    ) {
+      await prisma.platformAccount.update({
+        where: { id: account.id },
+        data: {
+          ...(freshUsername ? { platformUsername: freshUsername } : {}),
+          ...(freshProfileUrl ? { platformUrl: freshProfileUrl } : {}),
+          ...(freshAvatar ? { platformAvatarUrl: freshAvatar } : {}),
+          ...(freshDisplayName
+            ? { platformDisplayName: freshDisplayName }
+            : {}),
+        },
+      });
     }
   }
 }

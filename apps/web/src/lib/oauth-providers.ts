@@ -25,9 +25,9 @@ export function isOAuthProviderConfigured(provider: OAuthProviderId): boolean {
 }
 
 export function getConfiguredSocialLoginProviders(): Array<
-  "google" | "twitch" | "kick"
+  "google" | "twitch" | "kick" | "tiktok"
 > {
-  return (["google", "twitch", "kick"] as const).filter(
+  return (["google", "twitch", "kick", "tiktok"] as const).filter(
     isOAuthProviderConfigured,
   );
 }

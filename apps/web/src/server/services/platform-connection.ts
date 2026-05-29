@@ -24,6 +24,17 @@ type PlatformIdentity = {
   avatarUrl: string | null;
 };
 
+export function parseOAuthScopes(scope: string | null): string[] {
+  if (!scope) {
+    return [];
+  }
+
+  return scope
+    .split(/[,\s]+/)
+    .map((scopeValue) => scopeValue.trim())
+    .filter((scopeValue) => scopeValue.length > 0);
+}
+
 export type ConnectPlatformResult = {
   platformAccount: PlatformAccount;
   isNewConnection: boolean;
@@ -141,6 +152,25 @@ function resolvePlatformIdentity(
     };
   }
 
+  if (platform === "tiktok") {
+    const username = getStringProperty(input.profile, "username");
+    const displayName = getStringProperty(input.profile, "display_name");
+    const avatarUrl = getStringProperty(input.profile, "avatar_url");
+    const profileDeepLink = getStringProperty(
+      input.profile,
+      "profile_deep_link",
+    );
+
+    return {
+      username,
+      displayName: displayName ?? username,
+      profileUrl:
+        profileDeepLink ??
+        (username ? `https://www.tiktok.com/@${username}` : null),
+      avatarUrl,
+    };
+  }
+
   return {
     username: platformUserId,
     displayName: null,
@@ -169,9 +199,7 @@ export async function connectPlatform(
   const encryptedRefreshToken = input.refreshToken
     ? await encryptToken(input.refreshToken)
     : null;
-  const oauthScopes = input.scope
-    ? input.scope.split(" ").filter((scopeValue) => scopeValue.length > 0)
-    : [];
+  const oauthScopes = parseOAuthScopes(input.scope);
   const tokenExpiresAt = input.expiresAt
     ? new Date(input.expiresAt * 1000)
     : null;

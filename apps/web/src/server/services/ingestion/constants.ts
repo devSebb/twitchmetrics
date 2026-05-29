@@ -3,6 +3,7 @@ import type { Platform, SnapshotTier } from "@twitchmetrics/database";
 export type CreatorPlatformCapability = {
   supportsPublicProfile: boolean;
   supportsPublicSnapshot: boolean;
+  supportsOAuthSnapshot: boolean;
   supportsOAuthEnrichment: boolean;
   supportsTokenRefresh: boolean;
   requiresOAuthForBaseline: boolean;
@@ -16,6 +17,7 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   twitch: {
     supportsPublicProfile: true,
     supportsPublicSnapshot: true,
+    supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: true,
     supportsTokenRefresh: true,
     requiresOAuthForBaseline: false,
@@ -24,6 +26,7 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   youtube: {
     supportsPublicProfile: true,
     supportsPublicSnapshot: true,
+    supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: true,
     supportsTokenRefresh: true,
     requiresOAuthForBaseline: false,
@@ -32,6 +35,7 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   instagram: {
     supportsPublicProfile: true,
     supportsPublicSnapshot: false,
+    supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: true,
     supportsTokenRefresh: true,
     requiresOAuthForBaseline: true,
@@ -40,7 +44,8 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   tiktok: {
     supportsPublicProfile: true,
     supportsPublicSnapshot: false,
-    supportsOAuthEnrichment: false,
+    supportsOAuthSnapshot: true,
+    supportsOAuthEnrichment: true,
     supportsTokenRefresh: true,
     requiresOAuthForBaseline: true,
     quotaSensitive: false,
@@ -48,6 +53,7 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   x: {
     supportsPublicProfile: true,
     supportsPublicSnapshot: false,
+    supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: false,
     supportsTokenRefresh: true,
     requiresOAuthForBaseline: true,
@@ -56,6 +62,7 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   kick: {
     supportsPublicProfile: false,
     supportsPublicSnapshot: false,
+    supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: false,
     supportsTokenRefresh: false,
     requiresOAuthForBaseline: true,
@@ -72,8 +79,15 @@ export const CREATOR_SNAPSHOT_INTERVAL_MS: Record<SnapshotTier, number> = {
 export const GAME_SNAPSHOT_INTERVAL_MS = 30 * 60 * 1000;
 export const GAME_SNAPSHOT_STALE_MS = 2 * 60 * 60 * 1000;
 
-export function supportsCreatorSnapshots(platform: Platform): boolean {
-  return CREATOR_PLATFORM_CAPABILITIES[platform].supportsPublicSnapshot;
+export function supportsCreatorSnapshots(
+  platform: Platform,
+  isOAuthConnected = false,
+): boolean {
+  const capability = CREATOR_PLATFORM_CAPABILITIES[platform];
+  return (
+    capability.supportsPublicSnapshot ||
+    (capability.supportsOAuthSnapshot && isOAuthConnected)
+  );
 }
 
 export function supportsCreatorEnrichment(platform: Platform): boolean {

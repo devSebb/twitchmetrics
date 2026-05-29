@@ -5,7 +5,7 @@ import { RolePicker, type OnboardingRole } from "@/components/onboarding";
 import { RegisterForm } from "./RegisterForm";
 import { SocialLoginButtons } from "./SocialLoginButtons";
 
-type SocialProvider = "google" | "twitch" | "kick";
+type SocialProvider = "google" | "twitch" | "kick" | "tiktok";
 
 type RegisterFlowProps = {
   callbackUrl: string;

@@ -6,7 +6,10 @@ import {
   isOAuthProviderConfigured,
   type OAuthProviderId,
 } from "@/lib/oauth-providers";
-import { refreshAccessTokenForPlatform } from "@/server/services/token-refresh";
+import {
+  refreshAccessTokenForPlatform,
+  revokeTikTokToken,
+} from "@/server/services/token-refresh";
 import { protectedProcedure } from "../middleware";
 import { router } from "../root";
 
@@ -76,6 +79,32 @@ export const platformRouter = router({
       });
       if (!creatorProfile) {
         return { success: true };
+      }
+
+      if (input.platform === Platform.tiktok) {
+        const accounts = await ctx.prisma.platformAccount.findMany({
+          where: {
+            creatorProfileId: creatorProfile.id,
+            platform: input.platform,
+            accessToken: { not: null },
+          },
+          select: { accessToken: true },
+        });
+
+        for (const account of accounts) {
+          try {
+            const accessToken = account.accessToken
+              ? await decryptToken(account.accessToken)
+              : null;
+            if (accessToken) {
+              await revokeTikTokToken(accessToken);
+            }
+          } catch (error) {
+            console.warn("Failed to revoke TikTok token during disconnect", {
+              error,
+            });
+          }
+        }
       }
 
       await ctx.prisma.platformAccount.updateMany({

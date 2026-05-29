@@ -1,7 +1,10 @@
 import { prisma } from "@twitchmetrics/database";
 import { decryptToken, encryptToken } from "@/lib/encryption";
 import { createLogger } from "@/lib/logger";
-import { refreshAccessTokenForPlatform } from "@/server/services/token-refresh";
+import {
+  refreshAccessTokenForPlatform,
+  TokenRefreshError,
+} from "@/server/services/token-refresh";
 import { inngest } from "../../client";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
@@ -79,6 +82,18 @@ export const refreshTokens = inngest.createFunction(
                 });
                 refreshedCount++;
               } catch (error) {
+                if (error instanceof TokenRefreshError && error.permanent) {
+                  await prisma.platformAccount.update({
+                    where: { id: account.id },
+                    data: {
+                      accessToken: null,
+                      refreshToken: null,
+                      tokenExpiresAt: null,
+                      isOAuthConnected: false,
+                    },
+                  });
+                }
+
                 log.error(
                   {
                     err: error,

@@ -16,7 +16,7 @@ const log = createLogger("on-connect-snapshot");
  * within seconds — no need to wait for the next scheduled tier cron.
  *
  * Also promotes the CreatorProfile slug from the placeholder `user-{uuid}` to
- * the creator's actual Twitch login, and keeps displayName in sync.
+ * the creator's actual platform username when the adapter returns one.
  */
 export const onConnectSnapshot = inngest.createFunction(
   { id: "snapshot-on-connect", retries: 2 },
@@ -68,9 +68,9 @@ export const onConnectSnapshot = inngest.createFunction(
       await recomputeCreatorGrowthRollups(creatorProfileId, [platform]);
     });
 
-    // 4. Promote slug: if it's still the placeholder "user-{uuid}", replace it with
-    //    the Twitch login that was just synced into platformUsername by step 1.
-    if (platform === "twitch") {
+    // 4. Promote slug: if it's still the placeholder "user-{uuid}", replace it
+    //    with the platform username that was just synced by step 1.
+    if (platform === "twitch" || platform === "tiktok") {
       await step.run("promote-slug", async () => {
         const profile = await prisma.creatorProfile.findUnique({
           where: { id: creatorProfileId },
@@ -88,8 +88,8 @@ export const onConnectSnapshot = inngest.createFunction(
         });
 
         const login = account?.platformUsername?.toLowerCase();
-        // Guard: must be a real login (letters/numbers/underscore), not still a numeric ID
-        if (!login || /^\d+$/.test(login)) return;
+        // Guard: must be a real username, not a numeric or opaque provider ID.
+        if (!login || /^\d+$/.test(login) || login.includes("-")) return;
 
         const conflict = await prisma.creatorProfile.findUnique({
           where: { slug: login },
