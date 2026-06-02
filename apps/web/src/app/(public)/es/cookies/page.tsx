@@ -6,11 +6,11 @@ import { SITE_URL } from "@/lib/constants/seo";
 export const revalidate = 86400;
 
 export const metadata: Metadata = {
-  title: "Cookie Policy",
+  title: "Política de Cookies",
   description:
-    "How TwitchMetrics uses technical cookies, authentication cookies, security cookies and similar technologies.",
+    "Cómo TwitchMetrics utiliza cookies técnicas, de autenticación, seguridad y tecnologías similares.",
   alternates: {
-    canonical: `${SITE_URL}/cookies`,
+    canonical: `${SITE_URL}/es/cookies`,
     languages: {
       en: `${SITE_URL}/cookies`,
       es: `${SITE_URL}/es/cookies`,
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function CookiesPage() {
-  const document = await loadLegalDocument("en", "cookies");
+export default async function CookiesPageES() {
+  const document = await loadLegalDocument("es", "cookies");
   return <LegalLayout document={document} slug="cookies" />;
 }

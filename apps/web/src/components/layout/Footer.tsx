@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { CookiePreferencesButton } from "@/components/legal/CookieNotice";
 
 const NAV_SECTIONS = [
   {
@@ -106,6 +107,7 @@ export function Footer() {
             >
               Cookies
             </Link>
+            <CookiePreferencesButton />
           </div>
           <p className="text-xs text-[#949BA4]">
             &copy; {year} TwitchMetrics. All rights reserved.

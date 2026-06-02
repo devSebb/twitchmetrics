@@ -5,7 +5,7 @@ import { remark } from "remark";
 import remarkHtml from "remark-html";
 
 export type LegalLocale = "en" | "es";
-export type LegalSlug = "terms" | "privacy";
+export type LegalSlug = "terms" | "privacy" | "cookies";
 
 export type LegalDocument = {
   title: string;
@@ -30,6 +30,13 @@ function shiftHeadings(html: string): string {
 
 const CONTENT_DIR = path.join(process.cwd(), "src", "content", "legal");
 
+function normalizeLastUpdated(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  return String(value ?? "");
+}
+
 export async function loadLegalDocument(
   locale: LegalLocale,
   slug: LegalSlug,
@@ -43,7 +50,7 @@ export async function loadLegalDocument(
 
   return {
     title: String(data.title ?? ""),
-    lastUpdated: String(data.lastUpdated ?? ""),
+    lastUpdated: normalizeLastUpdated(data.lastUpdated),
     language: locale,
     html,
   };

@@ -12,7 +12,14 @@ const ALT_LANGUAGE_PATH_PREFIX = {
 } as const;
 
 function formatLastUpdated(iso: string, locale: "en" | "es") {
-  const date = new Date(iso);
+  const dateParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const date = dateParts
+    ? new Date(
+        Number(dateParts[1]),
+        Number(dateParts[2]) - 1,
+        Number(dateParts[3]),
+      )
+    : new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return new Intl.DateTimeFormat(locale === "es" ? "es-ES" : "en-US", {
     year: "numeric",

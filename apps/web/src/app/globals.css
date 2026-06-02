@@ -46,6 +46,9 @@
   .legal-prose strong {
     @apply font-semibold text-[#F2F3F5];
   }
+  .legal-prose code {
+    @apply rounded bg-[#2B2D31] px-1 py-0.5 font-mono text-xs text-[#F2F3F5];
+  }
   .legal-prose blockquote {
     @apply mt-3 border-l-2 border-[#3F4147] pl-4 italic text-[#949BA4];
   }
