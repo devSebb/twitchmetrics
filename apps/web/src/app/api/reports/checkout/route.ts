@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@twitchmetrics/database";
-import { stripe, STRIPE_ENABLED, REPORT_PRICE_CENTS } from "@/lib/stripe";
+import { stripe, STRIPE_ENABLED } from "@/lib/stripe";
 import {
   REPORT_TEMPLATES,
   matchTemplate,
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
         {
           price_data: {
             currency: "usd",
-            unit_amount: REPORT_PRICE_CENTS,
+            unit_amount: template.priceInCents,
             product_data: {
               name: template.name,
               description: template.description,
@@ -111,7 +111,10 @@ export async function POST(request: Request) {
           quantity: 1,
         },
       ],
-      metadata: { purchaseId: purchase.id },
+      metadata: {
+        purchaseId: purchase.id,
+        templateSlug: template.slug,
+      },
       success_url: `${origin}/reports/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/reports/request`,
     });

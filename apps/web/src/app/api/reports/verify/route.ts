@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@twitchmetrics/database";
-import { stripe } from "@/lib/stripe";
+import { fulfillStripeCheckoutSession } from "@/server/services/report-payments";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -25,39 +25,24 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── Stripe mode ────────────────────────────────────────────────────────
-    if (!sessionId || !stripe) {
+    if (!sessionId) {
       return NextResponse.json(
         { error: "Missing session_id" },
         { status: 400 },
       );
     }
 
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== "paid") {
-      return NextResponse.json(
-        { error: "Payment not completed" },
-        { status: 402 },
-      );
+    const result = await fulfillStripeCheckoutSession(sessionId);
+    if (!result.fulfilled) {
+      const status = result.reason === "session_unpaid" ? 402 : 400;
+      return NextResponse.json({ error: "Payment not completed" }, { status });
     }
-
-    const purchaseIdFromMeta =
-      session.metadata?.purchaseId ?? session.client_reference_id;
-    if (!purchaseIdFromMeta) {
-      return NextResponse.json(
-        { error: "Purchase reference missing" },
-        { status: 400 },
-      );
-    }
-
-    const purchase = await prisma.reportPurchase.update({
-      where: { id: purchaseIdFromMeta },
-      data: { status: "paid" },
-      include: { template: true },
-    });
 
     return NextResponse.json({
-      purchase: { id: purchase.id, templateName: purchase.template.name },
+      purchase: {
+        id: result.purchase.id,
+        templateName: result.purchase.templateName,
+      },
     });
   } catch {
     return NextResponse.json({ error: "Verification failed" }, { status: 500 });
