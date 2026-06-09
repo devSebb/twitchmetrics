@@ -70,19 +70,16 @@ export function HowItWorks() {
             <p className="text-xs font-medium uppercase tracking-[0.15em] text-[#949BA4]">
               Powered by
             </p>
-            <div className="flex items-center gap-3">
-              <div className="relative h-7 w-7 overflow-hidden rounded">
+            <div className="flex items-center">
+              <div className="relative h-12 w-36 sm:h-14 sm:w-44">
                 <Image
                   src="/brand/streamhatchet.png"
                   alt="Stream Hatchet"
                   fill
                   className="object-contain"
-                  sizes="28px"
+                  sizes="(min-width: 640px) 176px, 144px"
                 />
               </div>
-              <span className="text-base font-semibold text-[#F2F3F5]">
-                Stream Hatchet
-              </span>
             </div>
             <span aria-hidden className="hidden text-[#3F4147] sm:inline">
               ·
