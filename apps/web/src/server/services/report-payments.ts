@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import type Stripe from "stripe";
 import { prisma } from "@twitchmetrics/database";
 import { stripe } from "@/lib/stripe";
+import { syncPurchasePaidToHubspot } from "@/server/services/hubspot";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("report-payments");
@@ -78,13 +80,29 @@ export async function fulfillStripeCheckoutSession(
     };
   }
 
-  await prisma.reportPurchase.update({
-    where: { id: purchase.id },
+  // Atomic flip: the webhook and the success page can both reach this point
+  // concurrently — only the caller that wins the update fires side effects.
+  const updated = await prisma.reportPurchase.updateMany({
+    where: { id: purchase.id, status: { not: "paid" } },
     data: {
       status: "paid",
       stripeSessionId: session.id,
     },
   });
+
+  if (updated.count === 0) {
+    return {
+      fulfilled: true,
+      alreadyFulfilled: true,
+      purchase: {
+        id: purchase.id,
+        templateName: purchase.template.name,
+        status: "paid",
+      },
+    };
+  }
+
+  after(() => syncPurchasePaidToHubspot(purchase.id));
 
   log.info(
     {

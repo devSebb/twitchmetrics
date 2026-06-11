@@ -839,6 +839,9 @@ model ReportPurchase {
   status          ReportPurchaseStatus @default(pending)
   formData        Json
 
+  hubspotContactId String?
+  hubspotDealId    String?
+
   createdAt DateTime @default(now())
 
   @@index([email])

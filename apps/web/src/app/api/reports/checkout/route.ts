@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@twitchmetrics/database";
 import { stripe, STRIPE_ENABLED } from "@/lib/stripe";
 import {
@@ -6,6 +6,7 @@ import {
   matchTemplate,
 } from "@/lib/constants/report-templates";
 import type { FormSnapshot } from "@/lib/constants/report-templates";
+import { syncCheckoutStartedToHubspot } from "@/server/services/hubspot";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("report-checkout");
@@ -129,6 +130,9 @@ export async function POST(request: Request) {
       { purchaseId: purchase.id, sessionId: session.id },
       "Stripe checkout session created",
     );
+
+    // Deal lands in "Inbound Lead" so abandoned checkouts stay visible to sales.
+    after(() => syncCheckoutStartedToHubspot(purchase.id));
 
     return NextResponse.json({ mode: "stripe", sessionUrl: session.url });
   } catch (err) {
