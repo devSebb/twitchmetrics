@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma, type Prisma } from "@twitchmetrics/database";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
+import { sendReportLeadNotifications } from "@/server/services/report-notifications";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("report-lead");
@@ -75,6 +76,20 @@ export async function POST(request: Request) {
         ...(details ? { details: details as Prisma.InputJsonValue } : {}),
       },
     });
+
+    // Notify the sales team and confirm receipt to the customer. Runs off the
+    // response's critical path; failures are logged inside the service and
+    // never block the (already-saved) lead.
+    after(() =>
+      sendReportLeadNotifications({
+        name,
+        email,
+        company,
+        details: details as Parameters<
+          typeof sendReportLeadNotifications
+        >[0]["details"],
+      }),
+    );
 
     log.info(
       {
