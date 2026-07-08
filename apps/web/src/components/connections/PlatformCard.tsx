@@ -46,8 +46,7 @@ export function PlatformCard({
   onDisconnect,
 }: PlatformCardProps) {
   const isConnected = Boolean(connection?.isConnected);
-  const showBetaBadge =
-    platform === "instagram" || platform === "tiktok" || platform === "kick";
+  const showBetaBadge = platform === "instagram" || platform === "tiktok";
   const isUnavailable = !config.oauthSupported || !oauthProviderReady;
   const connectedUsername =
     isConnected && connection?.username ? connection.username : null;
@@ -66,8 +65,17 @@ export function PlatformCard({
             {config.name}
           </h3>
           {showBetaBadge && (
-            <span className="rounded bg-[#383A40] px-2 py-0.5 text-xs text-[#DBDEE1]">
-              Beta
+            <span className="group/beta relative inline-flex">
+              <span className="cursor-default rounded bg-[#383A40] px-2 py-0.5 text-xs text-[#DBDEE1]">
+                Beta
+              </span>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-52 -translate-x-1/2 rounded-lg border border-[#3F4147] bg-[#2B2D31] px-3 py-2 text-xs leading-relaxed text-[#B5BAC1] opacity-0 shadow-lg transition-opacity duration-150 group-hover/beta:opacity-100"
+              >
+                This connection is still under construction — it may not work
+                reliably for every account just yet.
+              </span>
             </span>
           )}
         </div>
