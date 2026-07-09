@@ -432,6 +432,7 @@ export const youtubeCrosslinkBackfill = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

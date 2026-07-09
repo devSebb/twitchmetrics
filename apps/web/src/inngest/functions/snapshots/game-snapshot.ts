@@ -376,6 +376,7 @@ export const gameSnapshot = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

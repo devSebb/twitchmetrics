@@ -116,6 +116,7 @@ export const refreshTokens = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

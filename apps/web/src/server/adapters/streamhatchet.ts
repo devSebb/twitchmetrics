@@ -2,6 +2,15 @@ import type { Platform } from "@twitchmetrics/database";
 
 const STREAMHATCHET_BASE_URL = "https://api.streamhatchet.com";
 
+/**
+ * StreamHatchet occasionally returns a non-array payload (e.g. an error object)
+ * in fields that are normally arrays. Coerce so downstream `.map` never throws;
+ * returns undefined for non-arrays so `??` fallbacks still apply.
+ */
+function asArray<T>(value: unknown): T[] | undefined {
+  return Array.isArray(value) ? (value as T[]) : undefined;
+}
+
 export type StreamHatchetPlatform =
   | "twitch"
   | "ytg"
@@ -244,7 +253,7 @@ export async function fetchStreamHatchetGameDiscovery(input: {
     excluded_genres: input.excludedGenres,
   });
 
-  return response.games ?? response.global_aggregates ?? [];
+  return asArray(response?.games) ?? asArray(response?.global_aggregates) ?? [];
 }
 
 export async function fetchStreamHatchetLiveChannels(input: {
@@ -262,7 +271,7 @@ export async function fetchStreamHatchetLiveChannels(input: {
     offset: input.offset ?? 0,
   });
 
-  return response.data ?? [];
+  return asArray(response?.data) ?? [];
 }
 
 export async function fetchStreamHatchetLiveGames(input: {
@@ -277,5 +286,5 @@ export async function fetchStreamHatchetLiveGames(input: {
     sort_by: input.sortBy,
   });
 
-  return response.data ?? response.games ?? [];
+  return asArray(response?.data) ?? asArray(response?.games) ?? [];
 }

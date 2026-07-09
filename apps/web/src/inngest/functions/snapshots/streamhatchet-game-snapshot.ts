@@ -577,6 +577,7 @@ export const streamHatchetGameDiscoverySnapshot = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );
@@ -684,6 +685,7 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );
@@ -757,6 +759,7 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

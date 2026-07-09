@@ -129,6 +129,7 @@ export const discoverGames = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

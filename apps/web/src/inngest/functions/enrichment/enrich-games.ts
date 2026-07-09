@@ -173,6 +173,7 @@ export const enrichGames = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

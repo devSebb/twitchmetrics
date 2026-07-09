@@ -96,6 +96,7 @@ export const demoteInactiveCreators = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

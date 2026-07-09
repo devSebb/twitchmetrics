@@ -121,6 +121,7 @@ export const discoverSocialLinks = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

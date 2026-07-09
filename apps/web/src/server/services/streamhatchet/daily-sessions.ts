@@ -826,15 +826,21 @@ export async function ingestStreamHatchetDailySessionObject(
       Key: key,
     }),
   );
+  const currentEtag = head.ETag?.replace(/^"|"$/g, "") ?? null;
 
   const existingObject = await prisma.streamHatchetSourceObject.findUnique({
     where: { bucket_key: { bucket, key } },
   });
 
+  // The S3 file was restated (new content) since we last imported it. Its rows
+  // must be replaced, not deduped against the stale ones.
+  const etagChanged =
+    existingObject != null && existingObject.etag !== currentEtag;
+
   if (
     existingObject &&
     existingObject.status === "completed" &&
-    existingObject.etag === head.ETag?.replace(/^"|"$/g, "") &&
+    existingObject.etag === currentEtag &&
     canSkipImportedObject({
       existingMode: metadataImportMode(existingObject.metadata),
       currentMode: mode,
@@ -859,7 +865,7 @@ export async function ingestStreamHatchetDailySessionObject(
   const sourceObject = await prisma.streamHatchetSourceObject.upsert({
     where: { bucket_key: { bucket, key } },
     update: {
-      etag: head.ETag?.replace(/^"|"$/g, "") ?? null,
+      etag: currentEtag,
       size: head.ContentLength == null ? null : BigInt(head.ContentLength),
       lastModified: head.LastModified ?? null,
       platform: input.platform,
@@ -875,7 +881,7 @@ export async function ingestStreamHatchetDailySessionObject(
     create: {
       bucket,
       key,
-      etag: head.ETag?.replace(/^"|"$/g, "") ?? null,
+      etag: currentEtag,
       size: head.ContentLength == null ? null : BigInt(head.ContentLength),
       lastModified: head.LastModified ?? null,
       platform: input.platform,
@@ -890,7 +896,7 @@ export async function ingestStreamHatchetDailySessionObject(
   });
 
   try {
-    if (input.force) {
+    if (input.force || etagChanged) {
       await prisma.streamSessionFact.deleteMany({
         where: { sourceObjectId: sourceObject.id },
       });

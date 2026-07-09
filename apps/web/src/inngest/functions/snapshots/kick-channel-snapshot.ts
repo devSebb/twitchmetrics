@@ -254,6 +254,7 @@ export const kickChannelSnapshot = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

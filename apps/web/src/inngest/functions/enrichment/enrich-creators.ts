@@ -38,6 +38,7 @@ export const enrichCreators = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

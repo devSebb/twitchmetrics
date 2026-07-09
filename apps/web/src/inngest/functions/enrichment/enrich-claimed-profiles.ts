@@ -66,6 +66,7 @@ export const enrichClaimedProfiles = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

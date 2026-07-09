@@ -25,6 +25,7 @@ export const tier2Snapshot = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

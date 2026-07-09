@@ -201,6 +201,7 @@ export const discoverCreators = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );

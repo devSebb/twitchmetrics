@@ -72,15 +72,36 @@ export async function failIngestionRun(
   return updateRun(runId, "failed", summary, message.slice(0, 1000));
 }
 
+/**
+ * Minimal shape of Inngest's `step.run`. Passing `step` memoizes the run
+ * lifecycle so that Inngest's replay-per-step model reuses a single
+ * IngestionRun row instead of creating a new "running" row on every replay.
+ */
+type StepRunner = {
+  run: <R>(id: string, handler: () => Promise<R> | R) => Promise<unknown>;
+};
+
 export async function executeIngestionRun<T>(
   context: IngestionRunContext,
   work: () => Promise<{ result: T; summary?: IngestionRunSummary }>,
+  step?: StepRunner,
 ): Promise<T> {
-  const run = await startIngestionRun(context);
+  // step.run JSON-serializes its return value; we only need the run id.
+  const run = step
+    ? ((await step.run("ingestion-run:start", () =>
+        startIngestionRun(context),
+      )) as { id: string })
+    : await startIngestionRun(context);
 
   try {
     const { result, summary } = await work();
-    await completeIngestionRun(run.id, summary);
+    if (step) {
+      await step.run("ingestion-run:complete", () =>
+        completeIngestionRun(run.id, summary),
+      );
+    } else {
+      await completeIngestionRun(run.id, summary);
+    }
     return result;
   } catch (error) {
     await failIngestionRun(run.id, error);

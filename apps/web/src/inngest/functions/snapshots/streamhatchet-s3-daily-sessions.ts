@@ -190,6 +190,7 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
           },
         };
       },
+      step,
     );
   },
 );
