@@ -23,6 +23,8 @@
     "worker:snapshot-youtube": "tsx --env-file=apps/web/.env.local workers/snapshot-youtube.ts",
     "worker:streamhatchet": "tsx --env-file=apps/web/.env.local workers/streamhatchet-ingest.ts",
     "worker:streamhatchet-link": "tsx --env-file=apps/web/.env.local workers/streamhatchet-link-identities.ts",
+    "worker:streamhatchet-catalog": "tsx --env-file=apps/web/.env.local workers/streamhatchet-build-catalog.ts",
+    "worker:streamhatchet-identity": "tsx --env-file=apps/web/.env.local workers/streamhatchet-resolve-identities.ts",
     "worker:cleanup-invalid-accounts": "tsx --env-file=apps/web/.env.local workers/cleanup-invalid-platform-accounts.ts",
     "worker:purge-low-quality": "tsx --env-file=apps/web/.env.local workers/purge-low-quality-creators.ts",
     "prepare": "husky"

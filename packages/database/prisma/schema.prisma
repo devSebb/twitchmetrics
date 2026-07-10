@@ -50,6 +50,22 @@ enum ClaimMethod {
   manual_review
 }
 
+// Signal that two solo profiles are the same creator, in descending trust.
+enum IdentitySignal {
+  contact_id // SH creator ES DB export (future, top tier)
+  admin // manual admin decision
+  oauth // owner connected both platforms
+  bio_link // one profile's bio references the other's handle
+  handle_match // same normalized handle across platforms (needs corroboration)
+}
+
+enum IdentityLinkStatus {
+  proposed // awaiting a decision (auto or human)
+  confirmed // accepted but not yet merged
+  merged // acted upon; otherProfile folded into canonicalProfile
+  rejected // not the same creator (or unmerged)
+}
+
 enum ClaimStatus {
   pending
   approved
@@ -209,6 +225,23 @@ model CreatorProfile {
   widgetConfig   Json    @default("[]")
   publicDemographicsEnabled Boolean @default(false)
 
+  // Catalog provenance + browse visibility.
+  // catalogSource marks where the profile was born ("streamhatchet",
+  // "twitch_api", "youtube_api", "user_claim") so enrichment precedence and
+  // backfill guards can tell SH-born profiles from API-discovered ones.
+  // listed gates public browse visibility — SH-born profiles are ingested for
+  // everyone but only listed once they clear the activity gate (>=2 active
+  // days / 30d), so one-day-wonders don't flood browse.
+  catalogSource String?
+  listed        Boolean @default(false)
+
+  // Soft-merge pointer: when this profile is folded into another creator, it
+  // becomes a redirect stub pointing at the canonical profile. Kept (not
+  // deleted) so its old slug can 301-redirect and the merge stays reversible.
+  mergedIntoId String?          @db.Uuid
+  mergedInto   CreatorProfile?  @relation("ProfileMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   CreatorProfile[] @relation("ProfileMerge")
+
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   lastSnapshotAt      DateTime?
@@ -225,6 +258,9 @@ model CreatorProfile {
   clips             CreatorClip[]
   streamSessions    StreamSessionFact[]
 
+  identityLinksAsCanonical IdentityLink[] @relation("IdentityLinkCanonical")
+  identityLinksAsOther     IdentityLink[] @relation("IdentityLinkOther")
+
   @@index([state])
   @@index([snapshotTier])
   @@index([primaryPlatform])
@@ -232,6 +268,38 @@ model CreatorProfile {
   @@index([derivedLanguage])
   @@index([primaryGameSlug])
   @@index([isActiveLast30d, totalFollowers(sort: Desc)])
+  @@index([listed, totalFollowers(sort: Desc)])
+  @@index([catalogSource])
+  @@index([mergedIntoId])
+}
+
+// Proposed / decided cross-platform identity links between two solo profiles.
+// The resolver generates these from signals; high-confidence ones auto-merge
+// (otherProfile folds into canonicalProfile), the rest queue for human review.
+model IdentityLink {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  canonicalProfileId String         @db.Uuid
+  canonicalProfile   CreatorProfile @relation("IdentityLinkCanonical", fields: [canonicalProfileId], references: [id], onDelete: Cascade)
+  otherProfileId     String         @db.Uuid
+  otherProfile       CreatorProfile @relation("IdentityLinkOther", fields: [otherProfileId], references: [id], onDelete: Cascade)
+
+  signal     IdentitySignal
+  confidence Float // 0..1
+  status     IdentityLinkStatus @default(proposed)
+
+  evidence Json? // signal-specific detail (matched handle, bio url, corroborations)
+  reversal Json? // snapshot needed to unmerge (moved account ids, prior listed/state)
+
+  decidedAt DateTime?
+  decidedBy String? // "system" | userId | "admin:<id>"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([canonicalProfileId, otherProfileId, signal])
+  @@index([status, confidence(sort: Desc)])
+  @@index([otherProfileId])
 }
 
 model CreatorAnalytics {

@@ -29,10 +29,14 @@ type StreamHatchetS3CronResult =
     };
 
 const DEFAULT_RETRY_DAYS = 3;
+// StreamHatchet is the primary catalog source: ingest ALL channels (full mode),
+// not just ones already matched to a CreatorProfile. `yt` is the canonical
+// YouTube creator feed; `ytg` (YouTube Gaming) is opt-in via env because of its
+// ~10x row volume and is used for game-level data rather than the creator catalog.
 const BASE_TARGETS: CronPlatformTarget[] = [
   { platform: "kick", matchedOnly: false },
-  { platform: "twitch", matchedOnly: true },
-  { platform: "yt", matchedOnly: true },
+  { platform: "twitch", matchedOnly: false },
+  { platform: "yt", matchedOnly: false },
 ];
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -68,7 +72,7 @@ function parsePlatformTargets(): CronPlatformTarget[] {
 
     targets.push({
       platform,
-      matchedOnly: platform !== "kick",
+      matchedOnly: false,
     });
   }
 

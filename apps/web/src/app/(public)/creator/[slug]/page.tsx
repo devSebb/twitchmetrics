@@ -1,6 +1,6 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
@@ -17,6 +17,7 @@ const getCreator = cache(async (slug: string) => {
   const creator = await db.creatorProfile.findUnique({
     where: { slug },
     include: {
+      mergedInto: { select: { slug: true } },
       platformAccounts: {
         select: {
           platform: true,
@@ -133,6 +134,11 @@ export default async function CreatorProfilePage({ params }: PageProps) {
 
   if (!creator) {
     notFound();
+  }
+
+  // Merged profiles are redirect stubs — send old links to the canonical slug.
+  if (creator.mergedInto) {
+    redirect(`/creator/${creator.mergedInto.slug}`);
   }
 
   const isClaimed = creator.state === "claimed" || creator.state === "premium";
