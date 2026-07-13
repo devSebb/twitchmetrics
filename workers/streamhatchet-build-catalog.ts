@@ -267,45 +267,52 @@ async function backfillOwnership(config: Config): Promise<{
   channelRollups: number;
   channelGameRollups: number;
 }> {
-  const platformList = Prisma.join(config.platforms);
+  let streamSessions = 0;
+  let channelRollups = 0;
+  let channelGameRollups = 0;
 
-  // yt/ytg partitions both map to the youtube account.
-  const [streamSessions, channelRollups, channelGameRollups] =
-    await prisma.$transaction([
-      prisma.$executeRaw`
-        UPDATE "StreamSessionFact" t
-        SET "creatorProfileId" = pa."creatorProfileId"
-        FROM "PlatformAccount" pa
-        WHERE t."creatorProfileId" IS NULL
-          AND t.source = ${SOURCE}
-          AND t.platform IN (${platformList})
-          AND pa."platformUserId" = t."platformUserId"
-          AND pa.platform = (CASE t.platform
-            WHEN 'yt' THEN 'youtube' WHEN 'ytg' THEN 'youtube' ELSE t.platform
-          END)::"Platform"`,
-      prisma.$executeRaw`
-        UPDATE "ChannelDailyRollup" t
-        SET "creatorProfileId" = pa."creatorProfileId"
-        FROM "PlatformAccount" pa
-        WHERE t."creatorProfileId" IS NULL
-          AND t.source = ${SOURCE}
-          AND t.platform IN (${platformList})
-          AND pa."platformUserId" = t."platformUserId"
-          AND pa.platform = (CASE t.platform
-            WHEN 'yt' THEN 'youtube' WHEN 'ytg' THEN 'youtube' ELSE t.platform
-          END)::"Platform"`,
-      prisma.$executeRaw`
-        UPDATE "ChannelGameDailyRollup" t
-        SET "creatorProfileId" = pa."creatorProfileId"
-        FROM "PlatformAccount" pa
-        WHERE t."creatorProfileId" IS NULL
-          AND t.source = ${SOURCE}
-          AND t.platform IN (${platformList})
-          AND pa."platformUserId" = t."platformUserId"
-          AND pa.platform = (CASE t.platform
-            WHEN 'yt' THEN 'youtube' WHEN 'ytg' THEN 'youtube' ELSE t.platform
-          END)::"Platform"`,
-    ]);
+  // Full-table, sequential ownership stamping — one UPDATE per (SH partition,
+  // table). Plain equality on t.platform / pa.platform (a CASE in the join is
+  // opaque to the planner; per-channel IN-batches force scattered random reads
+  // that are brutal on Neon's remote storage). A whole-partition seq scan +
+  // hash join to PlatformAccount reads the table in physical order, which is
+  // dramatically faster on Neon. Each statement autocommits on its own.
+  // yt+ytg are separate iterations that both resolve to the youtube account.
+  const tables = [
+    "StreamSessionFact",
+    "ChannelDailyRollup",
+    "ChannelGameDailyRollup",
+  ] as const;
+
+  for (const sh of config.platforms) {
+    const enumPlatform = PLATFORM_MAP[sh];
+    for (const table of tables) {
+      const t0 = Date.now();
+      const count = await prisma.$executeRawUnsafe(
+        `UPDATE "${table}" t
+         SET "creatorProfileId" = pa."creatorProfileId"
+         FROM "PlatformAccount" pa
+         WHERE t."creatorProfileId" IS NULL
+           AND t.source = $1
+           AND t.platform = $2
+           AND pa.platform = $3::"Platform"
+           AND pa."platformUserId" = t."platformUserId"`,
+        SOURCE,
+        sh,
+        enumPlatform,
+      );
+      if (table === "StreamSessionFact") streamSessions += count;
+      else if (table === "ChannelDailyRollup") channelRollups += count;
+      else channelGameRollups += count;
+
+      log("info", "Ownership backfill (full-table)", {
+        platform: sh,
+        table,
+        linked: count,
+        seconds: Number(((Date.now() - t0) / 1000).toFixed(1)),
+      });
+    }
+  }
 
   return { streamSessions, channelRollups, channelGameRollups };
 }
@@ -354,7 +361,12 @@ async function main() {
   }
 
   if (candidates.length === 0) {
-    log("info", "Nothing to promote.");
+    log(
+      "info",
+      "No new profiles to create; running ownership backfill to catch up any unlinked facts...",
+    );
+    const backfill = await backfillOwnership(config);
+    log("info", "Ownership backfill complete", { backfill });
     return;
   }
 

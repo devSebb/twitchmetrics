@@ -818,6 +818,7 @@ model ChannelDailyRollup {
   @@index([creatorProfileId, platform, date])
   @@index([platform, date, minutesWatched(sort: Desc)])
   @@index([platform, date, peakViewers(sort: Desc)])
+  @@index([platformUserId, platform])
 }
 
 model GameDailyRollup {
@@ -871,6 +872,7 @@ model ChannelGameDailyRollup {
   @@unique([source, platform, date, platformUserId, gameName])
   @@index([creatorProfileId, platform, date])
   @@index([platform, date, gameName, minutesWatched(sort: Desc)])
+  @@index([platformUserId, platform])
 }
 
 // ============================================================
