@@ -103,14 +103,6 @@ function streamHatchetIdentityWhere(
     const identity: Prisma.StreamSessionFactWhereInput[] = [
       { platformUserId: account.platformUserId },
     ];
-    if (account.platform === "kick" && account.platformUsername) {
-      identity.push({
-        platformUsername: {
-          equals: account.platformUsername,
-          mode: "insensitive",
-        },
-      });
-    }
 
     return platforms.map((platform) => ({ platform, OR: identity }));
   });
@@ -126,14 +118,6 @@ function streamHatchetRollupIdentityWhere(
     const identity: Prisma.ChannelDailyRollupWhereInput[] = [
       { platformUserId: account.platformUserId },
     ];
-    if (account.platform === "kick" && account.platformUsername) {
-      identity.push({
-        platformUsername: {
-          equals: account.platformUsername,
-          mode: "insensitive",
-        },
-      });
-    }
 
     return platforms.map((platform) => ({ platform, OR: identity }));
   });
@@ -149,14 +133,6 @@ function streamHatchetGameRollupIdentityWhere(
     const identity: Prisma.ChannelGameDailyRollupWhereInput[] = [
       { platformUserId: account.platformUserId },
     ];
-    if (account.platform === "kick" && account.platformUsername) {
-      identity.push({
-        platformUsername: {
-          equals: account.platformUsername,
-          mode: "insensitive",
-        },
-      });
-    }
 
     return platforms.map((platform) => ({ platform, OR: identity }));
   });
