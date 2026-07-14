@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { SITE_URL, SITE_NAME } from "@/lib/constants/seo";
 import { ReportRequestForm } from "@/components/reports/ReportRequestForm";
+import { IndustryInquiryCTA } from "@/components/reports/IndustryInquiryCTA";
 
 export const metadata: Metadata = {
   title: `Performance Report | ${SITE_NAME}`,
@@ -59,6 +60,9 @@ export default async function ReportRequestPage({ searchParams }: PageProps) {
 
       {/* Form */}
       <ReportRequestForm name={name} email={email} company={company} />
+
+      {/* Custom industry-data inquiry CTA */}
+      <IndustryInquiryCTA name={name} email={email} company={company} />
     </div>
   );
 }

@@ -30,7 +30,7 @@ export type ReportTemplateDefinition = {
 
 export type FormSnapshot = {
   include: "games" | "channels" | null;
-  topCount: number | "500+" | null;
+  topCount: number | null;
   timePeriod: string;
   platforms: string[];
   metrics: string[];
@@ -54,7 +54,7 @@ const CHANNELS_METRICS: MetricKey[] = [
   "country",
 ];
 
-const TOP_N_VALUES = [50, 100, 250] as const;
+const TOP_N_VALUES = [10, 25, 50, 100, 250] as const;
 const PERIOD_VALUES = ["30d", "90d"] as const;
 
 const PERIOD_LABELS: Record<"30d" | "90d", string> = {
@@ -162,9 +162,6 @@ export type QuoteReason = { label: string };
 export function getQuoteReasons(form: FormSnapshot): QuoteReason[] {
   const reasons: QuoteReason[] = [];
 
-  if (form.topCount === "500+") {
-    reasons.push({ label: "Top 500+ list" });
-  }
   if (form.timePeriod === "custom") {
     reasons.push({ label: "Custom date range" });
   }

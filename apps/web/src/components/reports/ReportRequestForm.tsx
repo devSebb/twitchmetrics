@@ -14,7 +14,7 @@ import { EntityPicker } from "./EntityPicker";
 
 type Include = "games" | "channels";
 type TimePeriod = "30d" | "90d" | "6m" | "12m" | "custom";
-type TopCount = 50 | 100 | 250 | "500+";
+type TopCount = 10 | 25 | 50 | 100 | 250;
 
 type Entity = {
   id: string;
@@ -319,7 +319,7 @@ export function ReportRequestForm({
     { value: "custom", label: "Custom range" },
   ];
 
-  const TOP_COUNTS: TopCount[] = [50, 100, 250, "500+"];
+  const TOP_COUNTS: TopCount[] = [10, 25, 50, 100, 250];
 
   const MAIN_METRICS: {
     key: MetricKey;
