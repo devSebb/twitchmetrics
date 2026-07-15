@@ -54,6 +54,17 @@ type Config = {
   minActiveDays: number;
   activityWindowDays: number;
   batchSize: number;
+  // Ownership backfill is stamped in bounded date windows (not one giant
+  // whole-table UPDATE) so each statement commits on its own, stays resumable,
+  // and leaves I/O headroom for the live app on shared prod Neon.
+  backfillWindowDays: number;
+  backfillSleepMs: number;
+  // Watchdog: a single window UPDATE that exceeds this (default 5 min) is
+  // treated as a hung/dropped connection — we reconnect and retry the window
+  // (up to backfillMaxRetries) instead of stalling forever. Windows commit
+  // independently, so a retry re-links only the still-unlinked rows.
+  backfillWindowTimeoutMs: number;
+  backfillMaxRetries: number;
 };
 
 type CandidateRow = {
@@ -107,7 +118,51 @@ function parseConfig(): Config {
       30,
     ),
     batchSize: parsePositiveInt(argValue("--batch-size"), 1000),
+    backfillWindowDays: parsePositiveInt(argValue("--backfill-window-days"), 1),
+    backfillSleepMs: parsePositiveInt(argValue("--backfill-sleep-ms"), 250),
+    backfillWindowTimeoutMs: parsePositiveInt(
+      argValue("--backfill-window-timeout-ms"),
+      300_000,
+    ),
+    backfillMaxRetries: parsePositiveInt(argValue("--backfill-max-retries"), 2),
   };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Reject if `promise` doesn't settle within `ms` (turns a silent hang into an error). */
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`operation timed out after ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// YYYY-MM-DD in UTC (matches @db.Date columns).
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function utcMidnight(d: Date): Date {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+}
+
+function addDays(d: Date, days: number): Date {
+  const next = new Date(d);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 function log(
@@ -271,45 +326,116 @@ async function backfillOwnership(config: Config): Promise<{
   let channelRollups = 0;
   let channelGameRollups = 0;
 
-  // Full-table, sequential ownership stamping — one UPDATE per (SH partition,
-  // table). Plain equality on t.platform / pa.platform (a CASE in the join is
-  // opaque to the planner; per-channel IN-batches force scattered random reads
-  // that are brutal on Neon's remote storage). A whole-partition seq scan +
-  // hash join to PlatformAccount reads the table in physical order, which is
-  // dramatically faster on Neon. Each statement autocommits on its own.
+  // Ownership stamping, batched by date window instead of one whole-table
+  // UPDATE. Each table has a (platform, <date>)-leading index and rows are
+  // physically clustered by ingestion day, so a per-window UPDATE reads only
+  // that window's (adjacent) pages — keeping reads local WITHOUT the scattered
+  // random-read penalty of per-channel IN-batches. Every window commits on its
+  // own (resumable via the `creatorProfileId IS NULL` filter) and we sleep
+  // between windows to leave I/O headroom for the live app on shared prod Neon.
   // yt+ytg are separate iterations that both resolve to the youtube account.
   const tables = [
-    "StreamSessionFact",
-    "ChannelDailyRollup",
-    "ChannelGameDailyRollup",
+    { name: "StreamSessionFact", dateCol: "partitionDate" },
+    { name: "ChannelDailyRollup", dateCol: "date" },
+    { name: "ChannelGameDailyRollup", dateCol: "date" },
   ] as const;
 
   for (const sh of config.platforms) {
     const enumPlatform = PLATFORM_MAP[sh];
-    for (const table of tables) {
-      const t0 = Date.now();
-      const count = await prisma.$executeRawUnsafe(
-        `UPDATE "${table}" t
-         SET "creatorProfileId" = pa."creatorProfileId"
-         FROM "PlatformAccount" pa
-         WHERE t."creatorProfileId" IS NULL
-           AND t.source = $1
-           AND t.platform = $2
-           AND pa.platform = $3::"Platform"
-           AND pa."platformUserId" = t."platformUserId"`,
+    for (const { name, dateCol } of tables) {
+      // Bound the loop to the date range of rows still awaiting ownership.
+      const bounds = await prisma.$queryRawUnsafe<
+        { lo: Date | null; hi: Date | null }[]
+      >(
+        `SELECT MIN("${dateCol}") AS lo, MAX("${dateCol}") AS hi
+         FROM "${name}"
+         WHERE "creatorProfileId" IS NULL AND source = $1 AND platform = $2`,
         SOURCE,
         sh,
-        enumPlatform,
       );
-      if (table === "StreamSessionFact") streamSessions += count;
-      else if (table === "ChannelDailyRollup") channelRollups += count;
-      else channelGameRollups += count;
+      const lo = bounds[0]?.lo ?? null;
+      const hi = bounds[0]?.hi ?? null;
+      if (!lo || !hi) {
+        log("info", "Ownership backfill — nothing to link", {
+          platform: sh,
+          table: name,
+        });
+        continue;
+      }
 
-      log("info", "Ownership backfill (full-table)", {
+      let tableLinked = 0;
+      const lastWindowStart = utcMidnight(hi);
+      let cursor = utcMidnight(lo);
+      while (cursor <= lastWindowStart) {
+        const next = addDays(cursor, config.backfillWindowDays);
+        const runWindow = () =>
+          prisma.$executeRawUnsafe(
+            `UPDATE "${name}" t
+             SET "creatorProfileId" = pa."creatorProfileId"
+             FROM "PlatformAccount" pa
+             WHERE t."creatorProfileId" IS NULL
+               AND t.source = $1
+               AND t.platform = $2
+               AND t."${dateCol}" >= $3::date
+               AND t."${dateCol}" < $4::date
+               AND pa.platform = $5::"Platform"
+               AND pa."platformUserId" = t."platformUserId"`,
+            SOURCE,
+            sh,
+            isoDate(cursor),
+            isoDate(next),
+            enumPlatform,
+          );
+
+        // Watchdog + reconnect-retry: turn a silent hung/dropped connection
+        // into a bounded failure. Each window commits on its own, so a retry
+        // simply re-links whatever is still unlinked in that window.
+        const t0 = Date.now();
+        let count = 0;
+        for (let attempt = 1; ; attempt++) {
+          try {
+            count = await withTimeout(
+              runWindow(),
+              config.backfillWindowTimeoutMs,
+            );
+            break;
+          } catch (err) {
+            if (attempt > config.backfillMaxRetries) throw err;
+            log("warn", "Ownership backfill window failed — reconnecting", {
+              platform: sh,
+              table: name,
+              window: isoDate(cursor),
+              attempt,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            try {
+              await prisma.$disconnect();
+            } catch {
+              /* next query reconnects automatically */
+            }
+            await sleep(2000 * attempt);
+          }
+        }
+        tableLinked += count;
+        log("info", "Ownership backfill (window)", {
+          platform: sh,
+          table: name,
+          window: isoDate(cursor),
+          linked: count,
+          seconds: Number(((Date.now() - t0) / 1000).toFixed(1)),
+        });
+        cursor = next;
+        if (config.backfillSleepMs > 0) await sleep(config.backfillSleepMs);
+      }
+
+      if (name === "StreamSessionFact") streamSessions += tableLinked;
+      else if (name === "ChannelDailyRollup") channelRollups += tableLinked;
+      else channelGameRollups += tableLinked;
+
+      log("info", "Ownership backfill — table complete", {
         platform: sh,
-        table,
-        linked: count,
-        seconds: Number(((Date.now() - t0) / 1000).toFixed(1)),
+        table: name,
+        linked: tableLinked,
       });
     }
   }
