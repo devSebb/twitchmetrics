@@ -65,6 +65,9 @@ type Config = {
   // independently, so a retry re-links only the still-unlinked rows.
   backfillWindowTimeoutMs: number;
   backfillMaxRetries: number;
+  // Candidate discovery is a single heavy aggregation; cap it so a pathological
+  // run (e.g. yt+ytg's full unlinked set) fails fast instead of hanging for hours.
+  candidateTimeoutMs: number;
 };
 
 type CandidateRow = {
@@ -125,6 +128,10 @@ function parseConfig(): Config {
       300_000,
     ),
     backfillMaxRetries: parsePositiveInt(argValue("--backfill-max-retries"), 2),
+    candidateTimeoutMs: parsePositiveInt(
+      argValue("--candidate-timeout-ms"),
+      900_000,
+    ),
   };
 }
 
@@ -229,7 +236,8 @@ async function loadCandidates(config: Config): Promise<CandidateRow[]> {
     ? Prisma.sql`LIMIT ${config.limit}`
     : Prisma.empty;
 
-  return prisma.$queryRaw<CandidateRow[]>`
+  return withTimeout(
+    prisma.$queryRaw<CandidateRow[]>`
     WITH base AS (
       SELECT
         (CASE r.platform
@@ -280,7 +288,9 @@ async function loadCandidates(config: Config): Promise<CandidateRow[]> {
     WHERE pa.id IS NULL
     ORDER BY a.total_minutes DESC
     ${limitClause}
-  `;
+  `,
+    config.candidateTimeoutMs,
+  );
 }
 
 function profileCreateInput(row: CandidateRow, config: Config, id: string) {

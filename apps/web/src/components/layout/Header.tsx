@@ -7,12 +7,8 @@ import { resolveAvatar } from "@/lib/avatar";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { HeaderUserMenu } from "./HeaderUserMenu";
 import { SolutionsDropdown } from "./SolutionsDropdown";
-
-const NAV_LINKS = [
-  { label: "Channels", href: "/creators" },
-  { label: "Categories", href: "/browse" },
-  { label: "Reports", href: "/reports" },
-] as const;
+import { MobileNavigation } from "./MobileNavigation";
+import { PRIMARY_NAV_LINKS } from "./header-navigation";
 
 export async function Header() {
   const session = await getSession();
@@ -57,7 +53,7 @@ export async function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6 lg:gap-4">
         {/* Logo */}
         <Link href="/" className="relative flex h-9 flex-shrink-0">
           <Image
@@ -71,8 +67,8 @@ export async function Header() {
         </Link>
 
         {/* Nav links */}
-        <nav className="hidden items-center gap-5 sm:flex">
-          {NAV_LINKS.map((link) => (
+        <nav className="hidden items-center gap-5 lg:flex">
+          {PRIMARY_NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -84,37 +80,52 @@ export async function Header() {
           <SolutionsDropdown />
         </nav>
 
-        {/* Search — pushed right */}
-        <div className="ml-auto hidden w-64 sm:block lg:w-80">
-          <SearchBar mode="compact" />
-        </div>
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {/* Tablet search. Mobile search lives in the drawer. */}
+          <div className="hidden w-48 min-w-0 md:block lg:w-56 xl:w-80">
+            <SearchBar mode="compact" />
+          </div>
 
-        {/* Auth section */}
-        <div className="ml-auto flex items-center gap-2 sm:ml-0">
-          {user ? (
-            <>
-              <NotificationBell
-                userRole={user.role ?? "creator"}
-                hasCreatorProfile={hasCreatorProfile}
-              />
-              <HeaderUserMenu name={user.name ?? null} image={headerAvatar} />
-            </>
-          ) : (
-            <>
-              <Link
-                href="/login"
-                className="rounded-md px-3 py-1.5 text-sm text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#DBDEE1]"
-              >
-                Log In
-              </Link>
-              <Link
-                href="/register"
-                className="rounded-md bg-[#E32C19] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
-              >
-                Sign Up
-              </Link>
-            </>
-          )}
+          {/* Keep compact authenticated controls available on mobile. Signed-out
+              actions move into the drawer at the narrowest breakpoint. */}
+          <div
+            className={
+              user
+                ? "flex items-center gap-1"
+                : "hidden items-center gap-2 sm:flex"
+            }
+          >
+            {user ? (
+              <>
+                <NotificationBell
+                  userRole={user.role ?? "creator"}
+                  hasCreatorProfile={hasCreatorProfile}
+                />
+                <HeaderUserMenu name={user.name ?? null} image={headerAvatar} />
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-md px-3 py-1.5 text-sm text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                >
+                  Log In
+                </Link>
+                <Link
+                  href="/register"
+                  className="rounded-md bg-[#E32C19] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
+          </div>
+
+          <MobileNavigation
+            user={
+              user ? { name: user.name ?? null, image: headerAvatar } : null
+            }
+          />
         </div>
       </div>
     </header>

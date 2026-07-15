@@ -3,19 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-
-const SOLUTIONS = [
-  {
-    label: "Talent Managers",
-    href: "/solutions/talent-managers",
-    description: "Tools to scout, sign, and grow your roster.",
-  },
-  {
-    label: "Creators",
-    href: "/solutions/creators",
-    description: "Analytics and a media kit to land brand deals.",
-  },
-] as const;
+import { SOLUTION_LINKS } from "./header-navigation";
 
 export function SolutionsDropdown() {
   const [open, setOpen] = useState(false);
@@ -88,7 +76,7 @@ export function SolutionsDropdown() {
             role="menu"
             className="w-64 overflow-hidden rounded-lg border border-[#3F4147] bg-[#2B2D31] shadow-lg"
           >
-            {SOLUTIONS.map((item) => (
+            {SOLUTION_LINKS.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

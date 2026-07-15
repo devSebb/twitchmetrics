@@ -47,7 +47,7 @@ export function HeaderUserMenu({ name, image }: HeaderUserMenuProps) {
             {displayName.charAt(0).toUpperCase()}
           </div>
         )}
-        <span className="hidden max-w-[120px] truncate sm:block">
+        <span className="hidden max-w-[120px] truncate xl:block">
           {displayName}
         </span>
         <svg
