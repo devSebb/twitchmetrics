@@ -8,6 +8,8 @@ import Link from "next/link";
 import { formatNumber } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { buildSearchUrl, type SearchType } from "@/lib/search";
+import { GameCoverImage } from "@/components/games/GameCoverImage";
 
 type SearchResult = {
   data: {
@@ -35,6 +37,7 @@ type SearchBarProps = {
   mode: "compact" | "full";
   defaultQuery?: string;
   autoFocus?: boolean;
+  searchType?: SearchType;
 };
 
 function useDebounce(value: string, delay: number) {
@@ -50,6 +53,7 @@ export function SearchBar({
   mode,
   defaultQuery = "",
   autoFocus = false,
+  searchType = "all",
 }: SearchBarProps) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultQuery);
@@ -59,7 +63,8 @@ export function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query, 300);
 
-  const shouldFetch = debouncedQuery.length >= 2;
+  const hasSearchableQuery = debouncedQuery.length >= 2;
+  const shouldFetchAutocomplete = mode === "compact" && hasSearchableQuery;
 
   const { data, isLoading } = useQuery<SearchResult>({
     queryKey: ["search", debouncedQuery],
@@ -69,7 +74,7 @@ export function SearchBar({
       );
       return res.json() as Promise<SearchResult>;
     },
-    enabled: shouldFetch,
+    enabled: shouldFetchAutocomplete,
     staleTime: 30_000,
   });
 
@@ -116,7 +121,7 @@ export function SearchBar({
           router.push(href);
           setOpen(false);
         } else if (query.length >= 2) {
-          router.push(`/search?q=${encodeURIComponent(query)}`);
+          router.push(buildSearchUrl(query, searchType));
           setOpen(false);
         }
         return;
@@ -134,10 +139,10 @@ export function SearchBar({
         });
       }
     },
-    [activeIndex, allItems, mode, query, router],
+    [activeIndex, allItems, mode, query, router, searchType],
   );
 
-  const showDropdown = mode === "compact" && open && shouldFetch;
+  const showDropdown = mode === "compact" && open && hasSearchableQuery;
 
   return (
     <div ref={containerRef} className="relative">
@@ -279,19 +284,13 @@ export function SearchBar({
                   )}
                 >
                   <div className="relative h-8 w-10 flex-shrink-0 overflow-hidden rounded bg-[#383A40]">
-                    {g.coverImageUrl ? (
-                      <Image
-                        src={g.coverImageUrl}
-                        alt={g.name}
-                        fill
-                        className="object-cover"
-                        sizes="40px"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs font-bold text-[#949BA4] bg-[#1E1F22]">
-                        {g.name.charAt(0)}
-                      </div>
-                    )}
+                    <GameCoverImage
+                      src={g.coverImageUrl}
+                      name={g.name}
+                      sizes="40px"
+                      className="object-cover"
+                      fallbackClassName="[&>span]:hidden"
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-[#DBDEE1]">
@@ -308,114 +307,12 @@ export function SearchBar({
 
           {!isLoading && allItems.length > 0 && (
             <Link
-              href={`/search?q=${encodeURIComponent(query)}`}
+              href={buildSearchUrl(query)}
               onClick={() => setOpen(false)}
               className="block border-t border-[#3F4147] px-4 py-2.5 text-center text-xs font-medium text-[#E32C19] transition-colors hover:bg-[#383A40]"
             >
               View all results
             </Link>
-          )}
-        </div>
-      )}
-
-      {/* Full mode: inline results */}
-      {mode === "full" && shouldFetch && (
-        <div className="mt-6">
-          {isLoading && (
-            <div className="text-sm text-[#949BA4]">Searching...</div>
-          )}
-
-          {!isLoading && allItems.length === 0 && (
-            <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-10 text-center">
-              <p className="text-lg font-medium text-[#DBDEE1]">
-                No results for &ldquo;{debouncedQuery}&rdquo;
-              </p>
-              <p className="mt-1 text-sm text-[#949BA4]">
-                Try a different search term
-              </p>
-            </div>
-          )}
-
-          {!isLoading && creators.length > 0 && (
-            <div className="mb-6">
-              <h3 className="mb-3 text-sm font-semibold uppercase text-[#949BA4]">
-                Creators
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {creators.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/creator/${c.slug}`}
-                    className="flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
-                  >
-                    <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
-                      {getSafeImageSrc(c.avatarUrl) ? (
-                        <Image
-                          src={getSafeImageSrc(c.avatarUrl)!}
-                          alt={c.displayName}
-                          fill
-                          className="object-cover"
-                          sizes="40px"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white bg-[#9146ff]">
-                          {c.displayName.charAt(0)}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-[#DBDEE1]">
-                        {c.displayName}
-                      </div>
-                      <div className="text-xs text-[#949BA4]">
-                        {formatNumber(Number(c.totalFollowers))} followers
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!isLoading && games.length > 0 && (
-            <div>
-              <h3 className="mb-3 text-sm font-semibold uppercase text-[#949BA4]">
-                Games
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {games.map((g) => (
-                  <Link
-                    key={g.id}
-                    href={`/game/${g.slug}`}
-                    className="flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
-                  >
-                    <div className="relative h-10 w-14 flex-shrink-0 overflow-hidden rounded bg-[#383A40]">
-                      {g.coverImageUrl ? (
-                        <Image
-                          src={g.coverImageUrl}
-                          alt={g.name}
-                          fill
-                          className="object-cover"
-                          sizes="56px"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs font-bold text-[#949BA4] bg-[#1E1F22]">
-                          {g.name.charAt(0)}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-[#DBDEE1]">
-                        {g.name}
-                      </div>
-                      <div className="text-xs text-[#949BA4]">
-                        {formatNumber(g.currentViewers)} viewers
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
           )}
         </div>
       )}

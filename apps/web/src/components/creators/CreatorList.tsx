@@ -3,6 +3,7 @@ import Image from "next/image";
 import { type Platform, PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber, formatDuration } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { PlatformIcon } from "@/components/shared";
 
 export type CreatorListRow = {
   displayName: string;
@@ -43,17 +44,21 @@ function Avatar({
       </div>
     );
   }
+  const config = PLATFORM_CONFIG[primaryPlatform];
   return (
     <div
-      className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-      style={{ backgroundColor: PLATFORM_CONFIG[primaryPlatform].color }}
+      className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold"
+      style={{
+        backgroundColor: config.color,
+        color: config.foregroundColor,
+      }}
     >
       {displayName.charAt(0)}
     </div>
   );
 }
 
-function PlatformDots({
+function PlatformLogos({
   accounts,
 }: {
   accounts: CreatorListRow["platformAccounts"];
@@ -61,11 +66,11 @@ function PlatformDots({
   return (
     <div className="flex gap-1.5">
       {accounts.map((a) => (
-        <span
+        <PlatformIcon
           key={a.platform}
-          className="inline-block h-2.5 w-2.5 rounded-full"
-          style={{ backgroundColor: PLATFORM_CONFIG[a.platform].color }}
-          title={PLATFORM_CONFIG[a.platform].name}
+          platform={a.platform}
+          size="xs"
+          className="h-3.5 w-3.5"
         />
       ))}
     </div>
@@ -134,7 +139,7 @@ export function CreatorList({ rows }: Props) {
                   </Link>
                 </td>
                 <td className="px-3 py-2.5">
-                  <PlatformDots accounts={row.platformAccounts} />
+                  <PlatformLogos accounts={row.platformAccounts} />
                 </td>
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
                   {formatAirtime(row.airTimeSeconds)}
@@ -172,7 +177,7 @@ export function CreatorList({ rows }: Props) {
                 <span className="truncate text-sm font-medium text-[#F2F3F5]">
                   {row.displayName}
                 </span>
-                <PlatformDots accounts={row.platformAccounts} />
+                <PlatformLogos accounts={row.platformAccounts} />
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#949BA4]">
                 <span>

@@ -6,6 +6,13 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import { SearchBar } from "@/components/search";
+import { GameCoverImage } from "@/components/games/GameCoverImage";
+import {
+  buildSearchUrl,
+  getSearchScopes,
+  normalizeSearchType,
+  type SearchType,
+} from "@/lib/search";
 
 const RESULTS_PER_PAGE = 20;
 
@@ -39,12 +46,13 @@ type UntrackedCreator = {
   isLive: boolean | null;
 };
 
-async function searchDatabase(query: string, type: string, page: number) {
+async function searchDatabase(query: string, type: SearchType, page: number) {
   const offset = (page - 1) * RESULTS_PER_PAGE;
+  const scopes = getSearchScopes(type);
 
   const [creators, games, creatorCountResult, gameCountResult] =
     await Promise.all([
-      type === "games"
+      !scopes.creators
         ? ([] as SearchCreator[])
         : serializeBigInt(
             await db.$queryRaw<SearchCreator[]>(Prisma.sql`
@@ -63,7 +71,7 @@ async function searchDatabase(query: string, type: string, page: number) {
             `),
           ),
 
-      type === "creators"
+      !scopes.games
         ? ([] as SearchGame[])
         : serializeBigInt(
             await db.$queryRaw<SearchGame[]>(Prisma.sql`
@@ -82,7 +90,7 @@ async function searchDatabase(query: string, type: string, page: number) {
             `),
           ),
 
-      type === "games"
+      !scopes.creators
         ? Promise.resolve([{ count: 0 }] as { count: number }[])
         : db.$queryRaw<{ count: number }[]>(Prisma.sql`
             SELECT COUNT(*)::int AS count
@@ -91,7 +99,7 @@ async function searchDatabase(query: string, type: string, page: number) {
                OR cp."searchText" ILIKE '%' || ${query} || '%'
           `),
 
-      type === "creators"
+      !scopes.games
         ? Promise.resolve([{ count: 0 }] as { count: number }[])
         : db.$queryRaw<{ count: number }[]>(Prisma.sql`
             SELECT COUNT(*)::int AS count
@@ -108,7 +116,7 @@ async function searchDatabase(query: string, type: string, page: number) {
   // users searching for famous streamers we haven't ingested yet still get
   // something — with a CTA link pointing at Twitch.
   let untrackedCreators: UntrackedCreator[] = [];
-  if (type !== "games" && creators.length === 0 && page === 1) {
+  if (scopes.creators && creators.length === 0 && page === 1) {
     try {
       const { twitchAdapter } = await import("@/server/adapters/twitch");
       const results = await twitchAdapter.search(query, 5);
@@ -151,7 +159,7 @@ export async function generateMetadata({
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q, type: typeParam, page: pageParam } = await searchParams;
-  const type = typeParam ?? "all";
+  const type = normalizeSearchType(typeParam);
   const query = q?.trim() ?? "";
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
 
@@ -178,7 +186,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
       <h1 className="mb-6 text-2xl font-bold text-[#F2F3F5]">Search</h1>
 
-      <SearchBar mode="full" defaultQuery={query} autoFocus={!hasQuery} />
+      <SearchBar
+        mode="full"
+        defaultQuery={query}
+        autoFocus={!hasQuery}
+        searchType={type}
+      />
 
       {/* Filter tabs */}
       {hasQuery && (
@@ -186,7 +199,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           {TABS.map((tab) => (
             <Link
               key={tab.value}
-              href={`/search?q=${encodeURIComponent(query)}&type=${tab.value}`}
+              href={buildSearchUrl(query, tab.value)}
               className={`rounded px-4 py-1.5 text-sm font-medium transition-colors ${
                 type === tab.value
                   ? "bg-[#383A40] text-[#F2F3F5]"
@@ -325,19 +338,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     className="flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
                   >
                     <div className="relative h-10 w-14 flex-shrink-0 overflow-hidden rounded bg-[#383A40]">
-                      {g.coverImageUrl ? (
-                        <Image
-                          src={g.coverImageUrl}
-                          alt={g.name}
-                          fill
-                          className="object-cover"
-                          sizes="56px"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs font-bold text-[#949BA4] bg-[#1E1F22]">
-                          {g.name.charAt(0)}
-                        </div>
-                      )}
+                      <GameCoverImage
+                        src={g.coverImageUrl}
+                        name={g.name}
+                        sizes="56px"
+                        className="object-cover"
+                        fallbackClassName="[&>span]:hidden"
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-[#DBDEE1]">

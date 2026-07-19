@@ -40,8 +40,8 @@ export function TopStreamers({ creators }: TopStreamersProps) {
       <Card className="p-0">
         <div className="divide-y divide-[#3F4147]">
           {creators.map((creator, index) => {
-            const platformColor =
-              PLATFORM_CONFIG[creator.primaryPlatform].color;
+            const platformConfig = PLATFORM_CONFIG[creator.primaryPlatform];
+            const platformColor = platformConfig.color;
             const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
             return (
               <Link
@@ -66,8 +66,11 @@ export function TopStreamers({ creators }: TopStreamersProps) {
                     />
                   ) : (
                     <div
-                      className="flex h-full w-full items-center justify-center text-sm font-bold text-white"
-                      style={{ backgroundColor: platformColor }}
+                      className="flex h-full w-full items-center justify-center text-sm font-bold"
+                      style={{
+                        backgroundColor: platformColor,
+                        color: platformConfig.foregroundColor,
+                      }}
                     >
                       {creator.displayName.charAt(0)}
                     </div>

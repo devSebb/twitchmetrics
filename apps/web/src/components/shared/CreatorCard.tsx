@@ -3,6 +3,7 @@ import Image from "next/image";
 import { type Platform, PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { PlatformIcon } from "./PlatformIcon";
 
 type CreatorCardProps = {
   creator: {
@@ -58,7 +59,7 @@ function TrendIndicator({
 
 export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
   const followers = Number(creator.totalFollowers);
-  const primaryColor = PLATFORM_CONFIG[creator.primaryPlatform].color;
+  const primaryConfig = PLATFORM_CONFIG[creator.primaryPlatform];
   const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
 
   if (compact) {
@@ -79,8 +80,11 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
             />
           ) : (
             <div
-              className="flex h-full w-full items-center justify-center text-sm font-bold text-white"
-              style={{ backgroundColor: primaryColor }}
+              className="flex h-full w-full items-center justify-center text-sm font-bold"
+              style={{
+                backgroundColor: primaryConfig.color,
+                color: primaryConfig.foregroundColor,
+              }}
             >
               {creator.displayName.charAt(0)}
             </div>
@@ -105,14 +109,14 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
           </div>
         </div>
 
-        {/* Platform dots */}
-        <div className="flex gap-1">
+        {/* Platform logos */}
+        <div className="flex items-center gap-1">
           {creator.platformAccounts.map((a) => (
-            <span
+            <PlatformIcon
               key={a.platform}
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: PLATFORM_CONFIG[a.platform].color }}
-              title={PLATFORM_CONFIG[a.platform].name}
+              platform={a.platform}
+              size="xs"
+              className="h-3.5 w-3.5"
             />
           ))}
         </div>
@@ -137,8 +141,11 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
           />
         ) : (
           <div
-            className="flex h-full w-full items-center justify-center text-lg font-bold text-white"
-            style={{ backgroundColor: primaryColor }}
+            className="flex h-full w-full items-center justify-center text-lg font-bold"
+            style={{
+              backgroundColor: primaryConfig.color,
+              color: primaryConfig.foregroundColor,
+            }}
           >
             {creator.displayName.charAt(0)}
           </div>
@@ -155,14 +162,14 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
         {formatNumber(followers)} followers
       </div>
 
-      {/* Platform badges */}
-      <div className="flex gap-1.5">
+      {/* Platform logos */}
+      <div className="flex items-center gap-1.5">
         {creator.platformAccounts.map((a) => (
-          <span
+          <PlatformIcon
             key={a.platform}
-            className="inline-block h-3 w-3 rounded-full"
-            style={{ backgroundColor: PLATFORM_CONFIG[a.platform].color }}
-            title={PLATFORM_CONFIG[a.platform].name}
+            platform={a.platform}
+            size="xs"
+            className="h-3.5 w-3.5"
           />
         ))}
       </div>

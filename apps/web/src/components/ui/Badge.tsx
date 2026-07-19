@@ -30,11 +30,14 @@ export function Badge({
     "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 
   if (variant === "platform" && platform) {
-    const color = PLATFORM_CONFIG[platform].color;
+    const config = PLATFORM_CONFIG[platform];
     return (
       <span
-        className={cn(base, "text-white", className)}
-        style={{ backgroundColor: color }}
+        className={cn(base, className)}
+        style={{
+          backgroundColor: config.color,
+          color: config.foregroundColor,
+        }}
       >
         {children}
       </span>

@@ -8,6 +8,7 @@ import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
 import { formatNumber, formatPercent, formatDate } from "@/lib/utils/format";
 import { Badge, Button, Card } from "@/components/ui";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
 import { PlatformIcon } from "@/components/shared";
 
 type PlatformAccount = {
@@ -241,6 +242,10 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
             {profile.platformAccounts.map((account) => {
               const config = PLATFORM_CONFIG[account.platform];
               const growth = growthByPlatform.get(account.platform);
+              const profileUrl = getSafePlatformProfileUrl(
+                account.platform,
+                account.platformUrl,
+              );
 
               return (
                 <Card
@@ -257,15 +262,22 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
                       <span className="text-sm font-medium text-[#DBDEE1]">
                         {config.name}
                       </span>
-                      {account.platformUrl && (
+                      {profileUrl ? (
                         <a
-                          href={account.platformUrl}
+                          href={profileUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-[#949BA4] hover:text-[#DBDEE1]"
                         >
                           @{account.platformUsername}
                         </a>
+                      ) : (
+                        <span
+                          className="text-xs text-[#949BA4]"
+                          title="External profile unavailable"
+                        >
+                          @{account.platformUsername}
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">

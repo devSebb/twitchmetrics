@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
 import { formatNumber } from "@/lib/utils/format";
+import { GameCoverImage } from "./GameCoverImage";
 
 type GameData = {
   id: string;
@@ -97,21 +97,12 @@ export function GameGrid({ initialData, initialMeta }: GameGridProps) {
                 className="group overflow-hidden rounded-lg border border-[#3F4147] bg-[#313338] transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
               >
                 <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#1E1F22]">
-                  {game.coverImageUrl ? (
-                    <Image
-                      src={game.coverImageUrl}
-                      alt={game.name}
-                      fill
-                      className="object-cover transition-transform group-hover:scale-105"
-                      sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#E32C19]/20 to-[#1E1F22]">
-                      <span className="text-3xl font-bold text-[#949BA4]">
-                        {game.name.charAt(0)}
-                      </span>
-                    </div>
-                  )}
+                  <GameCoverImage
+                    src={game.coverImageUrl}
+                    name={game.name}
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover transition-transform group-hover:scale-105"
+                  />
                   <div className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
                     {formatNumber(game.currentViewers)} viewers
                   </div>

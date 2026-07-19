@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
   Television,
   GameController,
@@ -8,6 +7,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { CreatorCard } from "@/components/shared/CreatorCard";
 import { formatNumber } from "@/lib/utils/format";
+import { GameCoverImage } from "@/components/games/GameCoverImage";
 import type { Platform } from "@/lib/constants/platforms";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 
@@ -123,19 +123,13 @@ export function TrendingSection({
                   className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-[#383A40]"
                 >
                   <div className="relative h-12 w-9 flex-shrink-0 overflow-hidden rounded bg-[#383A40]">
-                    {game.coverImageUrl ? (
-                      <Image
-                        src={game.coverImageUrl}
-                        alt={game.name}
-                        fill
-                        className="object-cover"
-                        sizes="36px"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[8px] font-bold text-[#949BA4]">
-                        {game.name.charAt(0)}
-                      </div>
-                    )}
+                    <GameCoverImage
+                      src={game.coverImageUrl}
+                      name={game.name}
+                      sizes="36px"
+                      className="object-cover"
+                      fallbackClassName="[&>span]:hidden"
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-[#DBDEE1]">

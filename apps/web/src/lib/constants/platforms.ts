@@ -8,6 +8,7 @@ export type AdapterStatus = "stable" | "beta" | "planned" | "unavailable";
 export type PlatformConfigEntry = {
   name: string;
   color: string;
+  foregroundColor: string;
   iconName: string;
   apiBaseUrl: string;
   oauthSupported: boolean;
@@ -21,6 +22,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
   twitch: {
     name: "Twitch",
     color: "#9146ff",
+    foregroundColor: "#ffffff",
     iconName: "twitch",
     apiBaseUrl: "https://api.twitch.tv/helix",
     oauthSupported: true,
@@ -42,6 +44,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
   youtube: {
     name: "YouTube",
     color: "#ff0000",
+    foregroundColor: "#ffffff",
     iconName: "youtube",
     apiBaseUrl: "https://www.googleapis.com/youtube/v3",
     oauthSupported: true,
@@ -65,6 +68,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
   instagram: {
     name: "Instagram",
     color: "#e4405f",
+    foregroundColor: "#ffffff",
     iconName: "instagram",
     apiBaseUrl: "https://graph.instagram.com",
     oauthSupported: true,
@@ -80,7 +84,8 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
   },
   tiktok: {
     name: "TikTok",
-    color: "#000000",
+    color: "#69C9D0",
+    foregroundColor: "#1E1F22",
     iconName: "music",
     apiBaseUrl: "https://open.tiktokapis.com/v2",
     oauthSupported: true,
@@ -112,7 +117,8 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
   },
   x: {
     name: "X",
-    color: "#000000",
+    color: "#F2F3F5",
+    foregroundColor: "#1E1F22",
     iconName: "twitter",
     apiBaseUrl: "https://api.twitter.com/2",
     oauthSupported: true,
@@ -124,6 +130,7 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
   kick: {
     name: "Kick",
     color: "#53fc18",
+    foregroundColor: "#1E1F22",
     iconName: "play",
     apiBaseUrl: "https://api.kick.com",
     oauthSupported: true,

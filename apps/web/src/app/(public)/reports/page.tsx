@@ -47,7 +47,7 @@ const REPORT_TYPES = [
     title: "Top Games",
     description:
       "The most-watched games across streaming platforms — viewer trends, peak hours, and channel counts.",
-    metrics: ["Hours watched", "Avg viewers", "Peak viewers", "Top channels"],
+    metrics: ["Hours watched", "Avg Viewers", "Peak viewers", "Top channels"],
   },
   {
     icon: ChartLineUp,
@@ -56,7 +56,7 @@ const REPORT_TYPES = [
     description:
       "Cross-platform performance for the channels you care about — viewership, momentum, and audience makeup.",
     metrics: [
-      "Avg viewers",
+      "Avg Viewers",
       "Peak viewers",
       "Audience by country",
       "Gender split",
@@ -68,7 +68,7 @@ const REPORT_TYPES = [
     title: "Esports Viewership",
     description:
       "Tournament and title viewership — peak concurrents, hours watched, and how interest trends over time.",
-    metrics: ["Peak concurrent", "Hours watched", "Avg viewers"],
+    metrics: ["Peak concurrent", "Hours watched", "Avg Viewers"],
   },
   {
     icon: ChartPieSlice,

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import type { Platform } from "@twitchmetrics/database";
 import { PlatformIcon } from "@/components/shared";
@@ -8,6 +7,7 @@ import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
 import { formatNumber } from "@/lib/utils/format";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
+import { GameCoverImage } from "@/components/games/GameCoverImage";
 
 type PopularGamesWidgetProps = {
   profile: SerializedProfile;
@@ -61,21 +61,15 @@ function GameCard({ game }: GameCardProps) {
   const content = (
     <div className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-[#383A40]">
       {/* Cover image */}
-      <div className="h-10 w-8 flex-shrink-0 overflow-hidden rounded bg-[#2B2D31]">
-        {game.coverImageUrl ? (
-          <Image
-            src={game.coverImageUrl}
-            alt={game.gameName}
-            width={32}
-            height={40}
-            className="h-full w-full object-cover"
-            unoptimized
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-[10px] text-[#949BA4]">
-            ?
-          </div>
-        )}
+      <div className="relative h-10 w-8 flex-shrink-0 overflow-hidden rounded bg-[#2B2D31]">
+        <GameCoverImage
+          src={game.coverImageUrl}
+          name={game.gameName}
+          sizes="32px"
+          className="object-cover"
+          fallbackClassName="[&>span]:hidden"
+          unoptimized
+        />
       </div>
 
       {/* Game info */}
@@ -103,7 +97,7 @@ function GameCard({ game }: GameCardProps) {
             <span className="text-[#F2F3F5]">
               {formatNumber(game.avgViewers)}
             </span>{" "}
-            avg viewers
+            Avg Viewers
           </span>
           <span>{game.streamCount} streams</span>
         </div>

@@ -31,8 +31,8 @@ export const THEME = {
     twitch: "#9146ff",
     youtube: "#ff0000",
     instagram: "#e4405f",
-    tiktok: "#000000",
-    x: "#000000",
+    tiktok: "#69C9D0",
+    x: "#F2F3F5",
     kick: "#53fc18",
   },
 

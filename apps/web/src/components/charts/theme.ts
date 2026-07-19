@@ -1,14 +1,16 @@
 import * as echarts from "echarts/core";
+import type { Platform } from "@twitchmetrics/database";
 import { THEME } from "@/lib/constants/theme";
+import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 
 const themeConfig: Record<string, unknown> = {
   color: [
-    "#9146ff", // Twitch
-    "#ff0000", // YouTube
-    "#e4405f", // Instagram
-    "#69C9D0", // TikTok
-    "#1DA1F2", // X
-    "#53fc18", // Kick
+    PLATFORM_CONFIG.twitch.color,
+    PLATFORM_CONFIG.youtube.color,
+    PLATFORM_CONFIG.instagram.color,
+    PLATFORM_CONFIG.tiktok.color,
+    PLATFORM_CONFIG.x.color,
+    PLATFORM_CONFIG.kick.color,
   ],
   backgroundColor: "transparent",
   textStyle: {
@@ -94,13 +96,13 @@ const themeConfig: Record<string, unknown> = {
 echarts.registerTheme("twitchmetrics", themeConfig);
 
 /** Platform-specific chart colors */
-export const CHART_PLATFORM_COLORS: Record<string, string> = {
-  twitch: "#9146ff",
-  youtube: "#ff0000",
-  instagram: "#E4405F",
-  tiktok: "#69C9D0",
-  x: "#1DA1F2",
-  kick: "#53fc18",
+export const CHART_PLATFORM_COLORS: Record<Platform, string> = {
+  twitch: PLATFORM_CONFIG.twitch.color,
+  youtube: PLATFORM_CONFIG.youtube.color,
+  instagram: PLATFORM_CONFIG.instagram.color,
+  tiktok: PLATFORM_CONFIG.tiktok.color,
+  x: PLATFORM_CONFIG.x.color,
+  kick: PLATFORM_CONFIG.kick.color,
 };
 
 /** Trend-based colors for sparklines and indicators */

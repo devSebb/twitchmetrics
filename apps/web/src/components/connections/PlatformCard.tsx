@@ -3,6 +3,7 @@
 import type { Platform } from "@/lib/constants/platforms";
 import type { PlatformConfigEntry } from "@/lib/constants/platforms";
 import { cn } from "@/lib/utils";
+import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
 
 type PlatformConnection = {
   isConnected: boolean;
@@ -45,6 +46,10 @@ export function PlatformCard({
   onConnect,
   onDisconnect,
 }: PlatformCardProps) {
+  const profileUrl = getSafePlatformProfileUrl(
+    platform,
+    connection?.profileUrl,
+  );
   const isConnected = Boolean(connection?.isConnected);
   const showBetaBadge = platform === "instagram" || platform === "tiktok";
   const isUnavailable = !config.oauthSupported || !oauthProviderReady;
@@ -120,9 +125,9 @@ export function PlatformCard({
               {connectedDisplayName ?? connectedUsername ?? config.name}
             </p>
             {connectedUsername ? (
-              connection.profileUrl ? (
+              profileUrl ? (
                 <a
-                  href={connection.profileUrl}
+                  href={profileUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="block truncate text-xs text-[#93c5fd] hover:underline"

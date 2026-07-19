@@ -326,13 +326,13 @@ export function ReportRequestForm({
     label: (inc: Include | null) => string;
   }[] = [
     { key: "hoursWatched", label: () => "Hours Watched" },
-    { key: "avgViewers", label: () => "Average Viewers" },
+    { key: "avgViewers", label: () => "Avg Viewers" },
     { key: "peakViewers", label: () => "Peak Viewers" },
     {
       key: "topCreators",
       label: (inc) => (inc === "games" ? "Top Channels" : "Top Creators"),
     },
-    { key: "airtime", label: () => "Airtime" },
+    { key: "airtime", label: () => "Air Time" },
     { key: "subscribers", label: () => "Subscribers" },
   ];
 

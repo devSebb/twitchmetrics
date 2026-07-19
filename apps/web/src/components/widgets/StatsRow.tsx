@@ -115,7 +115,7 @@ export function StatsRow({ profile }: StatsRowProps) {
 
   const streamingStatDefs = [
     {
-      label: "AirTime",
+      label: "Air Time",
       value:
         streamingStats?.airTimeSeconds != null
           ? formatDuration(streamingStats.airTimeSeconds)
@@ -123,7 +123,7 @@ export function StatsRow({ profile }: StatsRowProps) {
       platforms: twitchOnly,
     },
     {
-      label: "Avg AirTime",
+      label: "Avg Air Time",
       value:
         streamingStats?.avgAirTimeSeconds != null
           ? formatDuration(streamingStats.avgAirTimeSeconds)

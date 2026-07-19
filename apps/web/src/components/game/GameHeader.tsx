@@ -2,6 +2,7 @@ import Image from "next/image";
 import type { Platform } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { PlatformIcon } from "@/components/shared";
+import { GameCoverImage } from "@/components/games/GameCoverImage";
 
 type PlatformMetricRow = {
   platform: Platform;
@@ -123,22 +124,13 @@ export function GameHeader({ game }: GameHeaderProps) {
     <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
       {/* Cover Art (portrait, preserved) */}
       <div className="relative aspect-[3/4] w-[220px] max-w-full flex-shrink-0 overflow-hidden rounded-lg bg-[#383A40]">
-        {game.coverImageUrl ? (
-          <Image
-            src={game.coverImageUrl}
-            alt={game.name}
-            fill
-            className="object-cover"
-            sizes="220px"
-            priority
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#E32C19]/30 to-[#1E1F22]">
-            <span className="text-3xl font-bold text-[#949BA4]">
-              {game.name.charAt(0)}
-            </span>
-          </div>
-        )}
+        <GameCoverImage
+          src={game.coverImageUrl}
+          name={game.name}
+          sizes="220px"
+          className="object-cover"
+          priority
+        />
       </div>
 
       {/* Content area — 4 cols × 2 rows; cards stretch to fill cover height */}
@@ -173,7 +165,7 @@ export function GameHeader({ game }: GameHeaderProps) {
         </div>
 
         {/* Row 1 cols 2–3 */}
-        <KpiCard label="Average Viewers" value={game.avgViewers7d} />
+        <KpiCard label="Avg Viewers" value={game.avgViewers7d} />
         <KpiCard label="Peak Viewers" value={game.peakViewers24h} />
 
         {/* Pro CTA — col 4, spans rows 1–2 */}

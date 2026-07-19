@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { GameController } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { formatNumber, formatDuration } from "@/lib/utils/format";
+import { GameCoverImage } from "@/components/games/GameCoverImage";
 
 type PopularGamesProps = {
   games: {
@@ -46,19 +46,13 @@ export function PopularGames({ games }: PopularGamesProps) {
             >
               {/* Cover art */}
               <div className="relative h-12 w-9 flex-shrink-0 overflow-hidden rounded bg-[#383A40]">
-                {game.coverImageUrl ? (
-                  <Image
-                    src={game.coverImageUrl}
-                    alt={game.name}
-                    fill
-                    className="object-cover"
-                    sizes="36px"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-[8px] font-bold text-[#949BA4]">
-                    {game.name.charAt(0)}
-                  </div>
-                )}
+                <GameCoverImage
+                  src={game.coverImageUrl}
+                  name={game.name}
+                  sizes="36px"
+                  className="object-cover"
+                  fallbackClassName="[&>span]:hidden"
+                />
               </div>
 
               {/* Game info */}

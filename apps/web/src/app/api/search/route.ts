@@ -4,8 +4,7 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
-
-type SearchType = "all" | "creators" | "games";
+import { getSearchScopes, normalizeSearchType } from "@/lib/search";
 
 type CreatorSearchRow = {
   id: string;
@@ -25,8 +24,6 @@ type GameSearchRow = {
   relevance: number;
 };
 
-const VALID_TYPES: SearchType[] = ["all", "creators", "games"];
-
 export async function GET(request: Request) {
   const rateLimited = await rateLimitOrResponse(request, "search", {
     limit: 60,
@@ -36,7 +33,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
-  const type = (searchParams.get("type") ?? "all") as SearchType;
+  const requestedType = searchParams.get("type");
+  const type = normalizeSearchType(requestedType);
 
   if (!query) {
     return NextResponse.json(
@@ -49,7 +47,7 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!VALID_TYPES.includes(type)) {
+  if (requestedType !== null && requestedType !== type) {
     return NextResponse.json(
       {
         data: { creators: [], games: [] },
@@ -60,16 +58,17 @@ export async function GET(request: Request) {
     );
   }
 
+  const scopes = getSearchScopes(type);
+
   const cacheKey = `search:${type}:${query.toLowerCase()}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
   }
 
-  const creatorsPromise =
-    type === "games"
-      ? Promise.resolve<CreatorSearchRow[]>([])
-      : db.$queryRaw<CreatorSearchRow[]>(Prisma.sql`
+  const creatorsPromise = !scopes.creators
+    ? Promise.resolve<CreatorSearchRow[]>([])
+    : db.$queryRaw<CreatorSearchRow[]>(Prisma.sql`
           SELECT
             cp.id,
             cp."displayName",
@@ -84,10 +83,9 @@ export async function GET(request: Request) {
           LIMIT 10
         `);
 
-  const gamesPromise =
-    type === "creators"
-      ? Promise.resolve<GameSearchRow[]>([])
-      : db.$queryRaw<GameSearchRow[]>(Prisma.sql`
+  const gamesPromise = !scopes.games
+    ? Promise.resolve<GameSearchRow[]>([])
+    : db.$queryRaw<GameSearchRow[]>(Prisma.sql`
           SELECT
             g.id,
             g.name,
@@ -114,7 +112,7 @@ export async function GET(request: Request) {
     isLive: boolean | null;
   };
   let untrackedCreators: UntrackedCreator[] = [];
-  if (type !== "games" && creators.length === 0 && query.length >= 2) {
+  if (scopes.creators && creators.length === 0 && query.length >= 2) {
     try {
       const { twitchAdapter } = await import("@/server/adapters/twitch");
       const results = await twitchAdapter.search(query, 5);

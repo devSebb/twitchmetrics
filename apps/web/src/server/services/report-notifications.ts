@@ -36,10 +36,10 @@ export type ReportLeadNotificationInput = {
 
 const METRIC_LABELS: Record<string, string> = {
   hoursWatched: "Hours Watched",
-  avgViewers: "Average Viewers",
+  avgViewers: "Avg Viewers",
   peakViewers: "Peak Viewers",
   topCreators: "Top Creators / Channels",
-  airtime: "Airtime",
+  airtime: "Air Time",
   subscribers: "Subscribers",
   gender: "Gender",
   country: "Country",

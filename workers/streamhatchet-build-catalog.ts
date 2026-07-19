@@ -68,6 +68,10 @@ type Config = {
   // Candidate discovery is a single heavy aggregation; cap it so a pathological
   // run (e.g. yt+ytg's full unlinked set) fails fast instead of hanging for hours.
   candidateTimeoutMs: number;
+  // Skip candidate discovery + profile creation and run only the ownership
+  // backfill — for cheaply resuming an interrupted backfill without re-paying
+  // the (heavy) discovery scan. Requires --write.
+  backfillOnly: boolean;
 };
 
 type CandidateRow = {
@@ -132,6 +136,7 @@ function parseConfig(): Config {
       argValue("--candidate-timeout-ms"),
       900_000,
     ),
+    backfillOnly: args.includes("--backfill-only"),
   };
 }
 
@@ -152,6 +157,41 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     return await Promise.race([promise, timeout]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Run a DB op with a hang watchdog + reconnect-retry. A timed-out or dropped
+ * connection is retried (up to maxRetries) after disconnecting so the next call
+ * reconnects — turns a silent multi-hour stall into a bounded, self-healing op.
+ */
+async function withReconnectRetry<T>(
+  fn: () => Promise<T>,
+  timeoutMs: number,
+  maxRetries: number,
+  label: Record<string, unknown>,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await withTimeout(fn(), timeoutMs);
+    } catch (err) {
+      if (attempt > maxRetries) throw err;
+      log("warn", "DB op failed — reconnecting + retrying", {
+        ...label,
+        attempt,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Bound $disconnect itself: a query wedged on a dropped Neon connection
+      // makes $disconnect() block forever waiting for it to drain, which is the
+      // exact silent-hang we're guarding against. Abandon it after 30s; the
+      // next query reconnects via a fresh pool connection regardless.
+      try {
+        await withTimeout(prisma.$disconnect(), 30_000);
+      } catch {
+        /* disconnect hung or failed; next query reconnects automatically */
+      }
+      await sleep(2000 * attempt);
+    }
   }
 }
 
@@ -192,17 +232,19 @@ function slugify(name: string): string {
     .slice(0, 40);
 }
 
-// Deterministic 6-char suffix so re-runs produce identical slugs (idempotent) and
+// Deterministic hash suffix so re-runs produce identical slugs (idempotent) and
 // two different channels never collide on the same slug within a bulk insert.
+// 16 hex chars (64 bits): non-Latin usernames slugify to empty and collapse to
+// base = platform, so uniqueness rests entirely on this suffix — at hundreds of
+// thousands of channels an 8-hex (32-bit) suffix collides (birthday paradox),
+// which silently dropped profiles and orphaned their accounts. 64 bits is
+// collision-free at our scale.
 function slugSuffix(pf: Platform, puid: string): string {
-  return (
-    createHash("sha1")
-      .update(`${pf}:${puid}`)
-      .digest("hex")
-      .slice(0, 8)
-      // hex -> base36-ish compact; keep it url-safe and short
-      .toLowerCase()
-  );
+  return createHash("sha1")
+    .update(`${pf}:${puid}`)
+    .digest("hex")
+    .slice(0, 16)
+    .toLowerCase();
 }
 
 function buildSlug(pf: Platform, puid: string, username: string): string {
@@ -223,74 +265,197 @@ function platformUrl(pf: Platform, username: string): string | null {
   }
 }
 
+type DailyRollupRow = {
+  pf: Platform;
+  puid: string;
+  username: string;
+  display_name: string | null;
+  logo: string | null;
+  country: string | null;
+  session_count: number;
+  minutes_watched: bigint;
+  peak_viewers: number | null;
+  last_stream_at: Date | null;
+};
+
+type CandidateAcc = {
+  pf: Platform;
+  puid: string;
+  username: string;
+  display_name: string | null;
+  logo: string | null;
+  country: string | null;
+  total_sessions: bigint;
+  total_minutes: bigint;
+  peak_viewers: number | null;
+  last_stream_at: Date | null;
+  active_days: number;
+  latest_date: number; // ms of the most recent rollup date seen (for identity)
+};
+
 /**
  * Aggregate candidate channels: distinct (mapped-platform, platformUserId) SH
  * channels with no existing PlatformAccount. yt+ytg fold into youtube.
+ *
+ * Done as a windowed accumulation rather than one giant GROUP BY: a single
+ * whole-table aggregation over the unlinked YouTube rollups (esp. ytg's ~10x
+ * volume) thrashes Neon's compute and times out. Instead we read ONE day at a
+ * time (bounded, index-friendly) and fold per-channel aggregates into an
+ * in-memory map — each daily read is fast, retryable, and never a multi-hour
+ * hang. Since ChannelDailyRollup is unique on (source, platform, date, puid),
+ * a 1-day window yields at most one row per channel, so folding is trivial.
  */
 async function loadCandidates(config: Config): Promise<CandidateRow[]> {
-  const windowStart = new Date(
-    Date.now() - config.activityWindowDays * 24 * 60 * 60 * 1000,
-  );
+  const windowStartMs =
+    Date.now() - config.activityWindowDays * 24 * 60 * 60 * 1000;
   const platformList = Prisma.join(config.platforms);
-  const limitClause = config.limit
-    ? Prisma.sql`LIMIT ${config.limit}`
-    : Prisma.empty;
 
-  return withTimeout(
-    prisma.$queryRaw<CandidateRow[]>`
-    WITH base AS (
-      SELECT
-        (CASE r.platform
-          WHEN 'yt' THEN 'youtube'
-          WHEN 'ytg' THEN 'youtube'
-          ELSE r.platform
-        END)::"Platform" AS pf,
-        r."platformUserId"      AS puid,
-        r."platformUsername"    AS username,
-        r."platformDisplayName" AS display_name,
-        r."platformLogoUrl"     AS logo,
-        r.country               AS country,
-        r."sessionCount"        AS session_count,
-        r."minutesWatched"      AS minutes_watched,
-        r."peakViewers"         AS peak_viewers,
-        r."lastStreamAt"        AS last_stream_at,
-        r.date                  AS date
-      FROM "ChannelDailyRollup" r
-      WHERE r.source = ${SOURCE}
-        AND r."creatorProfileId" IS NULL
-        AND r.platform IN (${platformList})
-    ),
-    latest AS (
-      SELECT DISTINCT ON (pf, puid)
-        pf, puid, username, display_name, logo, country
-      FROM base
-      ORDER BY pf, puid, date DESC, last_stream_at DESC NULLS LAST
-    ),
-    agg AS (
-      SELECT
-        pf,
-        puid,
-        SUM(session_count)::bigint AS total_sessions,
-        SUM(minutes_watched)::bigint AS total_minutes,
-        MAX(peak_viewers) AS peak_viewers,
-        MAX(last_stream_at) AS last_stream_at,
-        COUNT(DISTINCT date) FILTER (WHERE date >= ${windowStart})::bigint AS active_days
-      FROM base
-      GROUP BY pf, puid
-    )
-    SELECT
-      l.pf, l.puid, l.username, l.display_name, l.logo, l.country,
-      a.total_sessions, a.total_minutes, a.peak_viewers, a.last_stream_at, a.active_days
-    FROM latest l
-    JOIN agg a ON a.pf = l.pf AND a.puid = l.puid
-    LEFT JOIN "PlatformAccount" pa
-      ON pa."platformUserId" = l.puid AND pa.platform = l.pf
-    WHERE pa.id IS NULL
-    ORDER BY a.total_minutes DESC
-    ${limitClause}
-  `,
+  // Date range of rows still awaiting a profile.
+  const bounds = await withReconnectRetry(
+    () =>
+      prisma.$queryRaw<{ lo: Date | null; hi: Date | null }[]>`
+        SELECT MIN(r.date) AS lo, MAX(r.date) AS hi
+        FROM "ChannelDailyRollup" r
+        WHERE r.source = ${SOURCE}
+          AND r."creatorProfileId" IS NULL
+          AND r.platform IN (${platformList})`,
     config.candidateTimeoutMs,
+    config.backfillMaxRetries,
+    { phase: "candidate-bounds" },
   );
+  const lo = bounds[0]?.lo ?? null;
+  const hi = bounds[0]?.hi ?? null;
+  if (!lo || !hi) return [];
+
+  const acc = new Map<string, CandidateAcc>();
+  const lastWindowStart = utcMidnight(hi);
+  let cursor = utcMidnight(lo);
+  let windows = 0;
+
+  while (cursor <= lastWindowStart) {
+    const next = addDays(cursor, 1);
+    const from = isoDate(cursor);
+    const to = isoDate(next);
+    const dateMs = cursor.getTime();
+    const isActiveWindow = dateMs >= windowStartMs;
+
+    const rows = await withReconnectRetry(
+      () =>
+        prisma.$queryRaw<DailyRollupRow[]>`
+          SELECT
+            (CASE r.platform WHEN 'yt' THEN 'youtube' WHEN 'ytg' THEN 'youtube' ELSE r.platform END)::"Platform" AS pf,
+            r."platformUserId"      AS puid,
+            r."platformUsername"    AS username,
+            r."platformDisplayName" AS display_name,
+            r."platformLogoUrl"     AS logo,
+            r.country               AS country,
+            r."sessionCount"        AS session_count,
+            r."minutesWatched"      AS minutes_watched,
+            r."peakViewers"         AS peak_viewers,
+            r."lastStreamAt"        AS last_stream_at
+          FROM "ChannelDailyRollup" r
+          WHERE r.source = ${SOURCE}
+            AND r."creatorProfileId" IS NULL
+            AND r.platform IN (${platformList})
+            AND r.date >= ${from}::date
+            AND r.date <  ${to}::date`,
+      config.candidateTimeoutMs,
+      config.backfillMaxRetries,
+      { phase: "candidate-window", window: from },
+    );
+
+    for (const r of rows) {
+      const key = `${r.pf}:${r.puid}`;
+      let a = acc.get(key);
+      if (!a) {
+        a = {
+          pf: r.pf,
+          puid: r.puid,
+          username: r.username,
+          display_name: r.display_name,
+          logo: r.logo,
+          country: r.country,
+          total_sessions: 0n,
+          total_minutes: 0n,
+          peak_viewers: null,
+          last_stream_at: null,
+          active_days: 0,
+          latest_date: 0,
+        };
+        acc.set(key, a);
+      }
+      a.total_sessions += BigInt(r.session_count ?? 0);
+      a.total_minutes += BigInt(r.minutes_watched ?? 0);
+      if (
+        r.peak_viewers != null &&
+        (a.peak_viewers == null || r.peak_viewers > a.peak_viewers)
+      ) {
+        a.peak_viewers = r.peak_viewers;
+      }
+      if (
+        r.last_stream_at &&
+        (!a.last_stream_at || r.last_stream_at > a.last_stream_at)
+      ) {
+        a.last_stream_at = r.last_stream_at;
+      }
+      if (isActiveWindow) a.active_days += 1;
+      if (dateMs > a.latest_date) {
+        a.latest_date = dateMs;
+        a.username = r.username;
+        a.display_name = r.display_name;
+        a.logo = r.logo;
+        a.country = r.country;
+      }
+    }
+
+    windows++;
+    if (windows % 15 === 0 || cursor >= lastWindowStart) {
+      log("info", "Candidate discovery progress", {
+        window: from,
+        channelsSoFar: acc.size,
+      });
+    }
+    cursor = next;
+    if (config.backfillSleepMs > 0) await sleep(config.backfillSleepMs);
+  }
+
+  // Exclude channels that already have a PlatformAccount on these platforms.
+  const enumPlatforms = [
+    ...new Set(config.platforms.map((p) => PLATFORM_MAP[p])),
+  ];
+  const existing = await prisma.platformAccount.findMany({
+    where: { platform: { in: enumPlatforms } },
+    select: { platform: true, platformUserId: true },
+  });
+  const existingKeys = new Set(
+    existing.map((e) => `${e.platform}:${e.platformUserId}`),
+  );
+
+  const candidates: CandidateRow[] = [];
+  for (const a of acc.values()) {
+    if (existingKeys.has(`${a.pf}:${a.puid}`)) continue;
+    candidates.push({
+      pf: a.pf,
+      puid: a.puid,
+      username: a.username,
+      display_name: a.display_name,
+      logo: a.logo,
+      country: a.country,
+      total_sessions: a.total_sessions,
+      total_minutes: a.total_minutes,
+      peak_viewers: a.peak_viewers,
+      last_stream_at: a.last_stream_at,
+      active_days: BigInt(a.active_days),
+    });
+  }
+  candidates.sort((x, y) =>
+    y.total_minutes > x.total_minutes
+      ? 1
+      : y.total_minutes < x.total_minutes
+        ? -1
+        : 0,
+  );
+  return config.limit ? candidates.slice(0, config.limit) : candidates;
 }
 
 function profileCreateInput(row: CandidateRow, config: Config, id: string) {
@@ -354,14 +519,22 @@ async function backfillOwnership(config: Config): Promise<{
     const enumPlatform = PLATFORM_MAP[sh];
     for (const { name, dateCol } of tables) {
       // Bound the loop to the date range of rows still awaiting ownership.
-      const bounds = await prisma.$queryRawUnsafe<
-        { lo: Date | null; hi: Date | null }[]
-      >(
-        `SELECT MIN("${dateCol}") AS lo, MAX("${dateCol}") AS hi
-         FROM "${name}"
-         WHERE "creatorProfileId" IS NULL AND source = $1 AND platform = $2`,
-        SOURCE,
-        sh,
+      // Guarded by the same watchdog as the window UPDATEs: this MIN/MAX over
+      // all-unlinked rollups is a cold full-range scan that Neon can drop the
+      // connection on — unguarded it awaits forever (silent hang at each table
+      // transition). withReconnectRetry turns that into a bounded, self-healing op.
+      const bounds = await withReconnectRetry(
+        () =>
+          prisma.$queryRawUnsafe<{ lo: Date | null; hi: Date | null }[]>(
+            `SELECT MIN("${dateCol}") AS lo, MAX("${dateCol}") AS hi
+             FROM "${name}"
+             WHERE "creatorProfileId" IS NULL AND source = $1 AND platform = $2`,
+            SOURCE,
+            sh,
+          ),
+        config.candidateTimeoutMs,
+        config.backfillMaxRetries,
+        { phase: "backfill-bounds", platform: sh, table: name },
       );
       const lo = bounds[0]?.lo ?? null;
       const hi = bounds[0]?.hi ?? null;
@@ -401,31 +574,17 @@ async function backfillOwnership(config: Config): Promise<{
         // into a bounded failure. Each window commits on its own, so a retry
         // simply re-links whatever is still unlinked in that window.
         const t0 = Date.now();
-        let count = 0;
-        for (let attempt = 1; ; attempt++) {
-          try {
-            count = await withTimeout(
-              runWindow(),
-              config.backfillWindowTimeoutMs,
-            );
-            break;
-          } catch (err) {
-            if (attempt > config.backfillMaxRetries) throw err;
-            log("warn", "Ownership backfill window failed — reconnecting", {
-              platform: sh,
-              table: name,
-              window: isoDate(cursor),
-              attempt,
-              error: err instanceof Error ? err.message : String(err),
-            });
-            try {
-              await prisma.$disconnect();
-            } catch {
-              /* next query reconnects automatically */
-            }
-            await sleep(2000 * attempt);
-          }
-        }
+        const count = await withReconnectRetry(
+          runWindow,
+          config.backfillWindowTimeoutMs,
+          config.backfillMaxRetries,
+          {
+            phase: "backfill",
+            platform: sh,
+            table: name,
+            window: isoDate(cursor),
+          },
+        );
         tableLinked += count;
         log("info", "Ownership backfill (window)", {
           platform: sh,
@@ -463,6 +622,20 @@ async function main() {
     activityWindowDays: config.activityWindowDays,
     batchSize: config.batchSize,
   });
+
+  if (config.backfillOnly) {
+    if (!config.write) {
+      log(
+        "info",
+        "--backfill-only requires --write (it mutates ownership); nothing to do in dry run.",
+      );
+      return;
+    }
+    log("info", "Backfill-only: skipping candidate discovery + creation.");
+    const backfill = await backfillOwnership(config);
+    log("info", "Ownership backfill complete", { backfill });
+    return;
+  }
 
   const candidates = await loadCandidates(config);
   const wouldList = candidates.filter(
@@ -523,26 +696,44 @@ async function main() {
   try {
     for (let i = 0; i < candidates.length; i += config.batchSize) {
       const batch = candidates.slice(i, i + config.batchSize);
-      const profiles = batch.map((row) => ({
+      const built = batch.map((row) => ({
         row,
         input: profileCreateInput(row, config, randomUUID()),
       }));
 
-      const profileResult = await prisma.creatorProfile.createMany({
-        data: profiles.map((p) => p.input),
+      // De-orphan the insert: a PlatformAccount references its profile's id, but
+      // createMany(skipDuplicates) silently drops a profile whose slug already
+      // exists — leaving the account with a dangling FK. So we only ever insert
+      // profile+account pairs whose slug is genuinely new: dedupe within the
+      // batch, then drop any slug that already exists in the DB.
+      const bySlug = new Map<string, (typeof built)[number]>();
+      for (const b of built) {
+        if (!bySlug.has(b.input.slug)) bySlug.set(b.input.slug, b);
+      }
+      const existing = await prisma.creatorProfile.findMany({
+        where: { slug: { in: [...bySlug.keys()] } },
+        select: { slug: true },
+      });
+      for (const e of existing) bySlug.delete(e.slug);
+
+      const toCreate = [...bySlug.values()];
+      if (toCreate.length === 0) continue;
+
+      await prisma.creatorProfile.createMany({
+        data: toCreate.map((p) => p.input),
         skipDuplicates: true,
       });
       await prisma.platformAccount.createMany({
-        data: profiles.map((p) => accountCreateInput(p.row, p.input.id)),
+        data: toCreate.map((p) => accountCreateInput(p.row, p.input.id)),
         skipDuplicates: true,
       });
 
-      profilesCreated += profileResult.count;
-      listedCreated += profiles.filter((p) => p.input.listed).length;
+      profilesCreated += toCreate.length;
+      listedCreated += toCreate.filter((p) => p.input.listed).length;
 
       log("info", "Batch promoted", {
         batch: i / config.batchSize + 1,
-        created: profileResult.count,
+        created: toCreate.length,
         cumulative: profilesCreated,
       });
     }

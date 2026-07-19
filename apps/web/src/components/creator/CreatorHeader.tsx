@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
+import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
 import { PlatformIcon } from "@/components/shared";
 
 type PlatformAccountData = {
@@ -52,6 +53,52 @@ type CreatorHeaderProps = {
 function getFollowerLabel(platform: Platform): string {
   if (platform === "youtube") return "Subscribers";
   return "Followers";
+}
+
+function PlatformAccountStat({ account }: { account: PlatformAccountData }) {
+  const profileUrl = getSafePlatformProfileUrl(
+    account.platform,
+    account.platformUrl,
+  );
+  const content = (
+    <>
+      <PlatformIcon platform={account.platform} size="lg" rounded="none" />
+      <div className="flex flex-col">
+        <span className="text-base font-bold leading-tight text-[#F2F3F5]">
+          {account.followerCount
+            ? formatNumber(Number(account.followerCount))
+            : "—"}
+        </span>
+        <span className="text-[11px] font-medium text-[#949BA4]">
+          {getFollowerLabel(account.platform)}
+        </span>
+      </div>
+    </>
+  );
+
+  if (!profileUrl) {
+    return (
+      <div
+        role="group"
+        aria-label={`${account.platform} external profile unavailable`}
+        className="flex items-center gap-2.5"
+        title="External profile unavailable"
+      >
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={profileUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex items-center gap-2.5 transition-opacity hover:opacity-80 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+    >
+      {content}
+    </a>
+  );
 }
 
 function ClaimStatus({
@@ -209,34 +256,9 @@ export function CreatorHeader({
 
             {/* Platform breakdown */}
             <div className="flex flex-wrap items-end gap-5 lg:gap-6">
-              {creator.platformAccounts.map((account) => {
-                return (
-                  <a
-                    key={account.platform}
-                    href={account.platformUrl ?? "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center gap-2.5 transition-opacity hover:opacity-80"
-                  >
-                    <PlatformIcon
-                      platform={account.platform}
-                      size="lg"
-                      rounded="none"
-                    />
-                    {/* Count + label */}
-                    <div className="flex flex-col">
-                      <span className="text-base font-bold leading-tight text-[#F2F3F5]">
-                        {account.followerCount
-                          ? formatNumber(Number(account.followerCount))
-                          : "—"}
-                      </span>
-                      <span className="text-[11px] font-medium text-[#949BA4]">
-                        {getFollowerLabel(account.platform)}
-                      </span>
-                    </div>
-                  </a>
-                );
-              })}
+              {creator.platformAccounts.map((account) => (
+                <PlatformAccountStat key={account.platform} account={account} />
+              ))}
             </div>
           </div>
         </div>
