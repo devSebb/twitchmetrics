@@ -34,14 +34,15 @@ export function PopularGamesSection({ creatorProfileId }: Props) {
     );
   }
 
-  const games = (data ?? [])
-    .filter((g) => g.slug !== null)
-    .map((g) => ({
-      name: g.gameName,
-      slug: g.slug!,
-      coverImageUrl: g.coverImageUrl,
-      avgViewers: g.avgViewers,
-    }));
+  const games = (data ?? []).map((g) => ({
+    name: g.gameName,
+    slug: g.slug,
+    coverImageUrl: g.coverImageUrl,
+    avgViewers: g.avgViewers,
+    airtimeMinutes: g.airtimeMinutes,
+    observationCount: g.observationCount,
+    measurement: g.measurement,
+  }));
 
   return <PopularGames games={games} />;
 }

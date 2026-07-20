@@ -38,6 +38,9 @@ export type SerializedPlatformAccount = {
   totalViews: string | null;
   lastSyncedAt: string | null;
   isOAuthConnected: boolean;
+  // Link-only social accounts (e.g. StreamHatchet-discovered IG/TikTok/X) set
+  // this; NULL/undefined = a tracked account with snapshot history.
+  discoverySource?: string | null;
 };
 
 export type SerializedGrowthRollup = {

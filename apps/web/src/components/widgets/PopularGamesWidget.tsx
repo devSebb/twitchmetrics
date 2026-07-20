@@ -5,7 +5,7 @@ import type { Platform } from "@twitchmetrics/database";
 import { PlatformIcon } from "@/components/shared";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
-import { formatNumber } from "@/lib/utils/format";
+import { formatDuration, formatNumber } from "@/lib/utils/format";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 import { GameCoverImage } from "@/components/games/GameCoverImage";
 
@@ -50,7 +50,10 @@ type GameCardProps = {
   game: {
     gameName: string;
     streamCount: number;
+    observationCount: number;
+    airtimeMinutes: number;
     avgViewers: number;
+    measurement: "measured" | "observed" | "mixed";
     slug: string | null;
     coverImageUrl: string | null;
     platforms?: Platform[];
@@ -99,7 +102,14 @@ function GameCard({ game }: GameCardProps) {
             </span>{" "}
             Avg Viewers
           </span>
-          <span>{game.streamCount} streams</span>
+          {game.measurement === "observed" ? (
+            <span>
+              {formatNumber(game.observationCount)} live{" "}
+              {game.observationCount === 1 ? "observation" : "observations"}
+            </span>
+          ) : (
+            <span>Air Time {formatDuration(game.airtimeMinutes * 60)}</span>
+          )}
         </div>
       </div>
     </div>

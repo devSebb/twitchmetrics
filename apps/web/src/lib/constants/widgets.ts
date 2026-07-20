@@ -84,8 +84,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
   },
   popular_games: {
     id: "popular_games",
-    label: "Popular Games",
-    description: "Top streamed games with cover art and viewer counts",
+    label: "Popular Games · Last 30 days",
+    description: "Games ranked by audience consumption over the last 30 days",
     defaultEnabled: true,
     priority: "P0",
     access: "public",

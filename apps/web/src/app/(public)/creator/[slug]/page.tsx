@@ -30,6 +30,7 @@ const getCreator = cache(async (slug: string) => {
           postCount: true,
           lastSyncedAt: true,
           isOAuthConnected: true,
+          discoverySource: true,
         },
       },
       growthRollups: {
