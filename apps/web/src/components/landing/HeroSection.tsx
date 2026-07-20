@@ -25,7 +25,7 @@ export function HeroSection() {
           </p>
           <p className="mx-auto mt-5 max-w-3xl text-base leading-relaxed text-[#949BA4] sm:text-lg">
             Your stats deserve more than scattered analytics and static
-            screenshots. Get a verified, professional, and always-up-to-date
+            screenshots. Get a verified, professional, and always-updating
             presence — whether you&apos;re building your own creator profile or
             managing a full agency roster.{" "}
             <span className="font-semibold text-[#DBDEE1]">For Free.</span>

@@ -6,6 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { formatNumber } from "@/lib/utils/format";
+import {
+  normalizeGameListFilters,
+  PUBLIC_GAME_PAGE_SIZE,
+} from "@/lib/game-list";
 import { GameCoverImage } from "./GameCoverImage";
 
 type GameData = {
@@ -35,9 +39,13 @@ type GameGridProps = {
 
 export function GameGrid({ initialData, initialMeta }: GameGridProps) {
   const searchParams = useSearchParams();
-  const sort = searchParams.get("sort") ?? "viewers";
-  const vertical = searchParams.get("vertical") ?? "gaming";
-  const genre = vertical === "gaming" ? (searchParams.get("genre") ?? "") : "";
+  const filters = normalizeGameListFilters({
+    sort: searchParams.get("sort"),
+    vertical: searchParams.get("vertical"),
+    genre: searchParams.get("genre"),
+  });
+  const { sort, vertical } = filters;
+  const genre = filters.genre ?? "";
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -53,9 +61,9 @@ export function GameGrid({ initialData, initialMeta }: GameGridProps) {
       const params = new URLSearchParams();
       params.set("sort", sort);
       params.set("page", String(page));
-      params.set("limit", "20");
+      params.set("limit", String(PUBLIC_GAME_PAGE_SIZE));
       if (genre) params.set("genre", genre);
-      if (vertical !== "all") params.set("vertical", vertical);
+      params.set("vertical", vertical);
       const res = await fetch(`/api/games?${params.toString()}`);
       return res.json() as Promise<ApiResponse>;
     },

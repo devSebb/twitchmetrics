@@ -5,6 +5,7 @@ import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { CreatorDetailView } from "@/components/manager/CreatorDetailView";
 import { ROSTER_ACTIVE_FILTER } from "@/server/services/roster-access";
+import { getLatestTimestamp } from "@/lib/metric-freshness";
 import type { Platform } from "@twitchmetrics/database";
 
 type PageProps = {
@@ -36,6 +37,7 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
           platform: true,
           platformUsername: true,
           followerCount: true,
+          lastSyncedAt: true,
         },
       },
       growthRollups: {
@@ -66,6 +68,15 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
   if (!access) notFound();
 
   const serialized = serializeBigInt(profile);
+  const serializedAccounts = serialized.platformAccounts as {
+    platform: Platform;
+    platformUsername: string;
+    followerCount: bigint | number | null;
+    lastSyncedAt: string | null;
+  }[];
+  const lastUpdatedAt = getLatestTimestamp(
+    serializedAccounts.map((account) => account.lastSyncedAt),
+  );
 
   const creatorData = {
     id: serialized.id as string,
@@ -76,16 +87,8 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
     totalFollowers: String(serialized.totalFollowers),
     totalViews: String(serialized.totalViews),
     state: serialized.state as string,
-    lastSnapshotAt: serialized.lastSnapshotAt
-      ? String(serialized.lastSnapshotAt)
-      : null,
-    platformAccounts: (
-      serialized.platformAccounts as {
-        platform: Platform;
-        platformUsername: string;
-        followerCount: bigint | number | null;
-      }[]
-    ).map((a) => ({
+    lastSnapshotAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
+    platformAccounts: serializedAccounts.map((a) => ({
       platform: a.platform,
       platformUsername: a.platformUsername,
       followerCount: a.followerCount ? String(a.followerCount) : "0",

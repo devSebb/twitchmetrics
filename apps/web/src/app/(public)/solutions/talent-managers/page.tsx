@@ -41,12 +41,12 @@ const FEATURES = [
   {
     icon: ShieldCheck,
     title: "Verified data brands trust",
-    body: "Every metric is pulled live from Stream Hatchet — the same data engine gaming publishers and brands already use. Start closing pitches with data-led stats.",
+    body: "Metrics are automatically refreshed from Stream Hatchet — the same data engine gaming publishers and brands already use. Start closing pitches with data-led stats.",
   },
   {
     icon: Export,
     title: "Pitch-ready exports",
-    body: "Generate branded reports and shareable roster links in one click. Always live, always accurate. Send to brands, agencies, or publishers — no design work, no manual updates.",
+    body: "Generate branded reports and shareable roster links in one click. Always updating and ready to share with brands, agencies, or publishers — no design work or manual updates.",
   },
 ] as const;
 
@@ -57,7 +57,7 @@ const STEPS = [
   },
   {
     title: "Verified data, automatically",
-    body: "Every creator's stats are pulled live from Stream Hatchet — the same data engine publishers and brands already trust.",
+    body: "Every creator's stats are automatically refreshed from Stream Hatchet — the same data engine publishers and brands already trust.",
   },
   {
     title: "Manage from one dashboard",
@@ -104,12 +104,12 @@ const FAQS = [
   {
     question: 'What does "verified" mean — and why should brands trust it?',
     answer:
-      "Every metric is pulled live from Stream Hatchet, the same data engine gaming publishers, brands, and agencies already use to source talent. The numbers in your pitch are the numbers brands already see on their side.",
+      "Metrics are automatically refreshed from Stream Hatchet, the same data engine gaming publishers, brands, and agencies already use to source talent. The numbers come from the same source brands already use on their side.",
   },
   {
     question: "How often is creator data refreshed?",
     answer:
-      "Continuously. Snapshots run on a live cadence so your roster, dashboards, and exported reports are always current.",
+      "On a scheduled cadence based on profile priority and the data available from each platform. Profiles show when their latest snapshot was updated.",
   },
   {
     question: "Can I export reports in custom formats (PDF, CSV, branded)?",
@@ -149,7 +149,7 @@ export default function TalentManagersSolutionsPage() {
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[#DBDEE1]">
               Imagine having every creator and every platform in one verified
-              dashboard. Always live. Always pitch-ready. For free.
+              dashboard. Always updating. Always pitch-ready. For free.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
@@ -190,15 +190,15 @@ export default function TalentManagersSolutionsPage() {
               {[
                 {
                   title: "Close deals faster",
-                  body: "Access to verified stats, not self-reported. Every metric is pulled live from Stream Hatchet. Pitch brands with data they already trust.",
+                  body: "Access verified stats, not self-reported numbers. Metrics refresh automatically from Stream Hatchet, so you can pitch brands with data from a source they already trust.",
                 },
                 {
                   title: "One dashboard, full visibility",
-                  body: "Every creator, every platform, always live. Filter, compare, and surface your top talent instantly.",
+                  body: "Every creator and platform in one always-updating view. Filter, compare, and surface your top talent quickly.",
                 },
                 {
                   title: "Reports that win pitches",
-                  body: "Export always-current data in one click. No design work. No manual updates. Always live. Always accurate.",
+                  body: "Export the latest available data in one click. No design work and no manual updates.",
                 },
               ].map((item) => (
                 <li
@@ -350,7 +350,7 @@ export default function TalentManagersSolutionsPage() {
               </h2>
               <p className="mt-4 max-w-xl text-base leading-relaxed text-[#DBDEE1]">
                 Discover what&apos;s trending. Browse top channels and games and
-                understand what audiences are watching right now.
+                understand what audiences are watching in the latest data.
               </p>
               <p className="mt-4 max-w-xl text-base font-semibold text-[#F2F3F5]">
                 Need more data? Discover our instant reports.
@@ -376,7 +376,7 @@ export default function TalentManagersSolutionsPage() {
                 { label: "Trending games", value: "30+" },
                 { label: "Tracked creators", value: "10K+" },
                 { label: "Platforms", value: "6" },
-                { label: "Refresh", value: "Live" },
+                { label: "Refresh", value: "Automatic" },
               ].map((stat) => (
                 <div
                   key={stat.label}

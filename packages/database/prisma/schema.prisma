@@ -367,6 +367,12 @@ model PlatformAccount {
   isOAuthConnected Boolean   @default(false)
   lastOAuthRefresh DateTime?
 
+  // Provenance for link-only accounts discovered from the StreamHatchet social
+  // graph (handle + follower count only; not OAuth-connected, not metric-tracked).
+  // NULL for normal tracked/OAuth accounts. Metric-fetch/token pipelines must
+  // skip rows where this is non-null (they have no tokens/adapter session).
+  discoverySource String?
+
   followerCount   BigInt?
   followingCount  BigInt?
   totalViews      BigInt?

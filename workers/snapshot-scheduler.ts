@@ -426,10 +426,15 @@ async function processProfiles(
       // Update lastSnapshotAt on the profile (unless dry run)
       if (!DRY_RUN) {
         try {
-          // Re-aggregate totals from platform accounts
+          // Re-aggregate totals from platform accounts (exclude link-only
+          // social accounts — discoverySource != null — from tier/totals).
           const accounts = await prisma.platformAccount.findMany({
-            where: { creatorProfileId: profile.id },
-            select: { followerCount: true, totalViews: true },
+            where: { creatorProfileId: profile.id, discoverySource: null },
+            select: {
+              followerCount: true,
+              totalViews: true,
+              lastSyncedAt: true,
+            },
           });
 
           const totalFollowers = accounts.reduce(
@@ -439,6 +444,14 @@ async function processProfiles(
           const totalViews = accounts.reduce(
             (sum, a) => sum + (a.totalViews ?? 0n),
             0n,
+          );
+          const lastSnapshotAt = accounts.reduce<Date | null>(
+            (latest, account) =>
+              account.lastSyncedAt &&
+              (!latest || account.lastSyncedAt.getTime() > latest.getTime())
+                ? account.lastSyncedAt
+                : latest,
+            null,
           );
 
           // Evaluate tier (inlined from tiers.ts)
@@ -452,7 +465,7 @@ async function processProfiles(
             data: {
               totalFollowers,
               totalViews,
-              lastSnapshotAt: new Date(),
+              lastSnapshotAt,
               snapshotTier: newTier,
             },
           });

@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, creatorProcedure } from "../middleware";
 import { publicProcedure, router } from "../root";
 import { WIDGET_REGISTRY } from "@/lib/constants/widgets";
+import { MAX_PROFILE_INTERESTS } from "@/lib/constants/profile";
 import { brandLogoUploadLimiter } from "@/lib/redis";
 import {
   BRAND_LOGO_ALLOWED_TYPES,
@@ -84,7 +85,10 @@ export const creatorRouter = router({
         gender: z.string().trim().max(20).optional(),
         language: z.string().trim().max(50).optional(),
         age: z.number().int().min(13).max(120).optional(),
-        interests: z.array(z.string().trim().max(30)).max(10).optional(),
+        interests: z
+          .array(z.string().trim().max(30))
+          .max(MAX_PROFILE_INTERESTS)
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

@@ -23,8 +23,8 @@ export type GamePlatformMetricGroup = {
 };
 
 export type GamePlatformMetrics = {
-  liveViewers: GamePlatformMetricGroup;
-  liveChannels: GamePlatformMetricGroup;
+  latestViewers: GamePlatformMetricGroup;
+  latestChannels: GamePlatformMetricGroup;
 };
 
 function sortRows(rows: GamePlatformMetricRow[]): GamePlatformMetricRow[] {
@@ -67,8 +67,6 @@ function sourcePriority(source: string): number {
 
 export async function getGamePlatformMetrics(input: {
   gameId: string;
-  fallbackTwitchViewers: number;
-  fallbackTwitchChannels: number;
 }): Promise<GamePlatformMetrics> {
   const [legacySnapshot, platformSnapshots] = await Promise.all([
     prisma.gameViewerSnapshot.findFirst({
@@ -155,16 +153,6 @@ export async function getGamePlatformMetrics(input: {
         source: "legacy_game_snapshot",
       });
     }
-  } else if (
-    input.fallbackTwitchViewers > 0 ||
-    input.fallbackTwitchChannels > 0
-  ) {
-    latestByPlatform.set("twitch", {
-      viewers: input.fallbackTwitchViewers,
-      channels: input.fallbackTwitchChannels,
-      snapshotAt: new Date(),
-      source: "game_fallback",
-    });
   }
 
   const viewerRows: GamePlatformMetricRow[] = [];
@@ -179,7 +167,7 @@ export async function getGamePlatformMetrics(input: {
   }
 
   return {
-    liveViewers: group(viewerRows),
-    liveChannels: group(channelRows),
+    latestViewers: group(viewerRows),
+    latestChannels: group(channelRows),
   };
 }

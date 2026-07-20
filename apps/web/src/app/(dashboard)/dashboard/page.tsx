@@ -4,6 +4,7 @@ import { prisma } from "@twitchmetrics/database";
 import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { resolveAvatar } from "@/lib/avatar";
+import { getLatestTimestamp } from "@/lib/metric-freshness";
 import {
   OwnerDashboardView,
   type SerializedProfile,
@@ -96,6 +97,9 @@ export default async function DashboardPage() {
   }
 
   const isClaimed = profile.state === "claimed" || profile.state === "premium";
+  const lastUpdatedAt = getLatestTimestamp(
+    profile.platformAccounts.map((account) => account.lastSyncedAt),
+  );
 
   const resolvedAvatar = resolveAvatar("creator", {
     user: { image: user?.image ?? null },
@@ -120,9 +124,7 @@ export default async function DashboardPage() {
     state: profile.state,
     primaryPlatform: profile.primaryPlatform,
     totalFollowers: String(profile.totalFollowers),
-    lastSnapshotAt: profile.lastSnapshotAt
-      ? String(profile.lastSnapshotAt)
-      : null,
+    lastSnapshotAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
     platformAccounts: profile.platformAccounts.map((account) => ({
       platform: account.platform,
       platformUsername: account.platformUsername,

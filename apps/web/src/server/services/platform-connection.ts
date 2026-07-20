@@ -293,6 +293,10 @@ export async function connectPlatform(
           oauthScopes,
           isOAuthConnected: true,
           lastOAuthRefresh: new Date(),
+          // Connecting via OAuth upgrades a link-only social account (if that's
+          // what this row was) into a real tracked account, so clear the
+          // discovery marker — otherwise it stays excluded from totals/tiering.
+          discoverySource: null,
         },
       });
     });
@@ -338,22 +342,37 @@ export async function connectPlatform(
       },
     }));
 
-  const created = await prisma.platformAccount.create({
-    data: {
-      creatorProfileId: ensuredCreatorProfile.id,
-      platform,
-      platformUserId,
-      platformUsername: identity.username ?? platformUserId,
-      platformDisplayName: identity.displayName,
-      platformUrl: identity.profileUrl,
-      platformAvatarUrl: identity.avatarUrl,
-      accessToken: encryptedAccessToken,
-      refreshToken: encryptedRefreshToken,
-      tokenExpiresAt,
-      oauthScopes,
-      isOAuthConnected: true,
-      lastOAuthRefresh: new Date(),
-    },
+  const created = await prisma.$transaction(async (tx) => {
+    // A link-only social account (discoverySource != null) for this platform —
+    // e.g. an Instagram handle we discovered from StreamHatchet — would occupy
+    // the unique (creatorProfileId, platform) slot and make the create below
+    // fail. The user is connecting their real account via OAuth, which is
+    // authoritative, so retire the placeholder first.
+    await tx.platformAccount.deleteMany({
+      where: {
+        creatorProfileId: ensuredCreatorProfile.id,
+        platform,
+        discoverySource: { not: null },
+      },
+    });
+
+    return tx.platformAccount.create({
+      data: {
+        creatorProfileId: ensuredCreatorProfile.id,
+        platform,
+        platformUserId,
+        platformUsername: identity.username ?? platformUserId,
+        platformDisplayName: identity.displayName,
+        platformUrl: identity.profileUrl,
+        platformAvatarUrl: identity.avatarUrl,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        tokenExpiresAt,
+        oauthScopes,
+        isOAuthConnected: true,
+        lastOAuthRefresh: new Date(),
+      },
+    });
   });
 
   // Fire snapshot event so the dashboard is populated immediately rather than

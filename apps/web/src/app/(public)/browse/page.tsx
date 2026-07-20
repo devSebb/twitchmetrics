@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
-import type { Vertical } from "@twitchmetrics/database";
-import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
-import { VERTICAL_LABELS, VERTICAL_ORDER } from "@/lib/constants/categories";
+import { VERTICAL_LABELS } from "@/lib/constants/categories";
+import {
+  normalizeGameListFilters,
+  normalizeGameVertical,
+  type GameVerticalFilter,
+} from "@/lib/game-list";
+import { listPublicGames } from "@/server/services/public-game-list";
 import { GameSortControls } from "@/components/games/GameSortControls";
 import { GameGrid } from "@/components/games/GameGrid";
 import { GenreFilter } from "@/components/games/GenreFilter";
@@ -14,20 +18,7 @@ import { Suspense } from "react";
 
 export const revalidate = 300;
 
-type SortOption = "viewers" | "channels" | "hoursWatched";
-type VerticalFilter = Vertical | "all";
-
-const VALID_SORTS = ["viewers", "channels", "hoursWatched"] as const;
-
-function parseVertical(raw: string | undefined): VerticalFilter {
-  if (raw === "all") return "all";
-  if (raw && (VERTICAL_ORDER as readonly string[]).includes(raw)) {
-    return raw as Vertical;
-  }
-  return "gaming";
-}
-
-function verticalCopy(vertical: VerticalFilter): {
+function verticalCopy(vertical: GameVerticalFilter): {
   title: string;
   description: string;
   noun: string;
@@ -36,7 +27,7 @@ function verticalCopy(vertical: VerticalFilter): {
     return {
       title: "Top Categories",
       description:
-        "Browse every category on Twitch — gaming, IRL, music, and more — ranked by live viewers.",
+        "Browse every category on Twitch — gaming, IRL, music, and more — ranked by the latest observed viewers.",
       noun: "categories",
     };
   }
@@ -44,14 +35,14 @@ function verticalCopy(vertical: VerticalFilter): {
     return {
       title: "Top Games",
       description:
-        "Browse the most-watched games on Twitch with live viewership data and channel counts.",
+        "Browse the most-watched games on Twitch with the latest observed viewership and channel counts.",
       noun: "games",
     };
   }
   const label = VERTICAL_LABELS[vertical];
   return {
     title: `Top ${label}`,
-    description: `Browse the most-watched ${label} categories on Twitch with live viewership data and channel counts.`,
+    description: `Browse the most-watched ${label} categories on Twitch with the latest observed viewership and channel counts.`,
     noun: "categories",
   };
 }
@@ -68,7 +59,7 @@ export async function generateMetadata({
   searchParams,
 }: PageProps): Promise<Metadata> {
   const { vertical: verticalParam } = await searchParams;
-  const vertical = parseVertical(verticalParam);
+  const vertical = normalizeGameVertical(verticalParam);
   const { title, description } = verticalCopy(vertical);
   const url =
     vertical === "gaming"
@@ -93,45 +84,8 @@ export async function generateMetadata({
   };
 }
 
-async function getGames(
-  sort: SortOption,
-  vertical: VerticalFilter,
-  genre: string | undefined,
-) {
-  const orderBy =
-    sort === "channels"
-      ? { currentChannels: "desc" as const }
-      : sort === "hoursWatched"
-        ? { hoursWatched7d: "desc" as const }
-        : { currentViewers: "desc" as const };
-
-  const where: Prisma.GameWhereInput = {
-    OR: [{ currentChannels: { gt: 0 } }, { hoursWatched7d: { gt: 0 } }],
-  };
-  if (vertical !== "all") where.vertical = vertical;
-  if (genre) where.genres = { has: genre };
-
-  const [games, total] = await Promise.all([
-    db.game.findMany({ where, orderBy, take: 20 }),
-    db.game.count({ where }),
-  ]);
-
-  return {
-    games: serializeBigInt(games) as {
-      id: string;
-      name: string;
-      slug: string;
-      coverImageUrl: string | null;
-      currentViewers: number;
-      currentChannels: number;
-      genres: string[];
-    }[],
-    total,
-  };
-}
-
 async function getGenresForVertical(
-  vertical: VerticalFilter,
+  vertical: GameVerticalFilter,
 ): Promise<string[]> {
   if (vertical !== "gaming") return [];
   const rows = await db.game.findMany({
@@ -149,20 +103,27 @@ export default async function BrowsePage({ searchParams }: PageProps) {
     vertical: verticalParam,
   } = await searchParams;
 
-  const vertical = parseVertical(verticalParam);
-  const sort = (
-    (VALID_SORTS as readonly string[]).includes(sortParam ?? "")
-      ? sortParam
-      : "viewers"
-  ) as SortOption;
-
-  const effectiveGenre = vertical === "gaming" ? genre : undefined;
+  const filters = normalizeGameListFilters({
+    sort: sortParam,
+    vertical: verticalParam,
+    genre,
+  });
+  const { vertical } = filters;
 
   const [{ games, total }, genres] = await Promise.all([
-    getGames(sort, vertical, effectiveGenre),
+    listPublicGames(filters),
     getGenresForVertical(vertical),
   ]);
-  const totalPages = Math.ceil(total / 20);
+  const serializedGames = serializeBigInt(games) as {
+    id: string;
+    name: string;
+    slug: string;
+    coverImageUrl: string | null;
+    currentViewers: number;
+    currentChannels: number;
+    genres: string[];
+  }[];
+  const totalPages = Math.ceil(total / filters.limit);
   const { title, description, noun } = verticalCopy(vertical);
 
   return (
@@ -199,8 +160,13 @@ export default async function BrowsePage({ searchParams }: PageProps) {
 
       <Suspense>
         <GameGrid
-          initialData={games}
-          initialMeta={{ total, page: 1, limit: 20, totalPages }}
+          initialData={serializedGames}
+          initialMeta={{
+            total,
+            page: filters.page,
+            limit: filters.limit,
+            totalPages,
+          }}
         />
       </Suspense>
     </div>

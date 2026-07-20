@@ -39,7 +39,7 @@ const FEATURES = [
   {
     icon: FileText,
     title: "Free media kit generation",
-    body: "Auto-generate a professional media kit from your analytics. Share your always-up-to-date reach and engagement with potential sponsors instantly.",
+    body: "Auto-generate a professional media kit from your analytics. Share your always-updating reach and engagement with potential sponsors instantly.",
   },
   {
     icon: Handshake,
@@ -51,7 +51,7 @@ const FEATURES = [
 const STEPS = [
   {
     title: "Build your profile",
-    body: "Connect your accounts (Twitch, YouTube, TikTok, Instagram, X, Kick, etc). We auto-generate your free media kit in minutes — automatically and always up-to-date.",
+    body: "Connect your accounts (Twitch, YouTube, TikTok, Instagram, X, Kick, etc). We auto-generate your free media kit in minutes and keep it updating automatically.",
   },
   {
     title: "Go live in the network",
@@ -63,7 +63,7 @@ const STEPS = [
   },
   {
     title: "Show your full reach",
-    body: "Every platform, one dashboard. One link with your free media kit, always up-to-date and ready to share. Send it anywhere.",
+    body: "Every platform, one dashboard. One link with your free media kit, always updating and ready to share. Send it anywhere.",
   },
 ] as const;
 
@@ -106,7 +106,7 @@ const FAQS = [
   {
     question: "How long does setup actually take?",
     answer:
-      "Minutes. Connect your accounts and your media kit auto-generates from live data — no spreadsheets, no manual updates.",
+      "Minutes. Connect your accounts and your media kit auto-generates from regularly refreshed data — no spreadsheets or manual updates.",
   },
 ] as const;
 
@@ -181,7 +181,7 @@ export default function CreatorsSolutionsPage() {
                 },
                 {
                   title: "A media kit that's ready when they are",
-                  body: "When a brand reaches out, your kit is already done. One link. Live stats.",
+                  body: "When a brand reaches out, your kit is already done. One link with always-updating stats.",
                 },
               ].map((item) => (
                 <li

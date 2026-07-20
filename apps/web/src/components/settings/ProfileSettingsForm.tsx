@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui";
 import { EditableAvatar } from "@/components/avatar/EditableAvatar";
 import { resolveAvatar } from "@/lib/avatar";
+import { MAX_PROFILE_INTERESTS } from "@/lib/constants/profile";
 import { ProfileCompletionBar } from "./ProfileCompletionBar";
 import { AccountsConnected } from "./AccountsConnected";
 import { InterestsCard } from "./InterestsCard";
@@ -235,12 +236,13 @@ export function ProfileSettingsForm({
   const toggleInterest = (interest: string) => {
     setInterests((prev) => {
       if (prev.includes(interest)) return prev.filter((i) => i !== interest);
-      if (prev.length >= 10) return prev;
+      if (prev.length >= MAX_PROFILE_INTERESTS) return prev;
       return [...prev, interest];
     });
   };
 
   const isPending = updateName.isPending || updateProfile.isPending;
+  const hasReachedInterestLimit = interests.length >= MAX_PROFILE_INTERESTS;
 
   return (
     <div className="space-y-6">
@@ -359,29 +361,53 @@ export function ProfileSettingsForm({
                   onClick={() => setShowInterestDropdown((v) => !v)}
                   className={`${INPUT_CLS} text-left`}
                   disabled={!profile}
+                  aria-expanded={showInterestDropdown}
                 >
-                  {interests.length > 0
-                    ? `${interests.length} selected`
-                    : "Select interests"}
+                  {interests.length > 0 ? "Interests" : "Select interests"}
+                  <span className="float-right text-[#949BA4]">
+                    {interests.length}/{MAX_PROFILE_INTERESTS}
+                  </span>
                 </button>
                 {showInterestDropdown && (
                   <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[#3F4147] bg-[#2B2D31] p-2 shadow-lg">
-                    {INTEREST_OPTIONS.map((opt) => (
-                      <label
-                        key={opt}
-                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-[#DBDEE1] hover:bg-[#383A40]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={interests.includes(opt)}
-                          onChange={() => toggleInterest(opt)}
-                          className="rounded border-[#3F4147]"
-                        />
-                        {opt}
-                      </label>
-                    ))}
+                    {INTEREST_OPTIONS.map((opt) => {
+                      const selected = interests.includes(opt);
+                      const disabled = hasReachedInterestLimit && !selected;
+
+                      return (
+                        <label
+                          key={opt}
+                          className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm ${
+                            disabled
+                              ? "cursor-not-allowed text-[#72767D]"
+                              : "cursor-pointer text-[#DBDEE1] hover:bg-[#383A40]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={disabled}
+                            onChange={() => toggleInterest(opt)}
+                            className="rounded border-[#3F4147]"
+                          />
+                          {opt}
+                        </label>
+                      );
+                    })}
                   </div>
                 )}
+                <p
+                  className={`mt-1 text-xs ${
+                    hasReachedInterestLimit
+                      ? "text-[#fcd34d]"
+                      : "text-[#949BA4]"
+                  }`}
+                  role="status"
+                >
+                  {hasReachedInterestLimit
+                    ? `Maximum of ${MAX_PROFILE_INTERESTS} selected. Remove one to choose another.`
+                    : `Choose up to ${MAX_PROFILE_INTERESTS} interests.`}
+                </p>
               </div>
             </div>
 

@@ -11,10 +11,10 @@ const SORTS: { label: string; value: SortValue }[] = [
   { label: "Recent", value: "recent" },
 ];
 
-const TIMEFRAME: Record<SortValue, { label: string; live: boolean }> = {
-  followers: { label: "Live", live: true },
-  trending: { label: "Last 7 days", live: false },
-  recent: { label: "Recently added", live: false },
+const TIMEFRAME: Record<SortValue, string> = {
+  followers: "Latest snapshots",
+  trending: "Last 7 days",
+  recent: "Recently added",
 };
 
 function isSortValue(value: string | null): value is SortValue {
@@ -59,13 +59,7 @@ export function CreatorSortControls() {
       </div>
 
       <div className="flex items-center gap-1.5 text-xs text-[#949BA4]">
-        {status.live && (
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-          </span>
-        )}
-        <span>{status.label}</span>
+        <span>{status}</span>
       </div>
     </div>
   );

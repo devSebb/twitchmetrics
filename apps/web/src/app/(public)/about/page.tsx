@@ -20,7 +20,7 @@ const PAGE_PATH = "/about";
 const CANONICAL = `${SITE_URL}${PAGE_PATH}`;
 
 const PAGE_DESCRIPTION =
-  "TwitchMetrics is the free media kit for gaming creators and the talent agencies behind them. Verified, always-live profiles across Twitch, YouTube, TikTok, Instagram, X, and Kick — powered by Stream Hatchet.";
+  "TwitchMetrics is the free media kit for gaming creators and the talent agencies behind them. Verified, always-updating profiles across Twitch, YouTube, TikTok, Instagram, X, and Kick — powered by Stream Hatchet.";
 
 export const metadata: Metadata = {
   title: "About Us",
@@ -87,7 +87,7 @@ const PILLARS = [
   {
     icon: ChartLineUp,
     title: "Unified, verified metrics",
-    body: "Followers, viewers, engagement, and growth across every platform — pulled live and trusted by brands. No self-reported numbers.",
+    body: "Followers, viewers, engagement, and growth across every platform — automatically refreshed and trusted by brands. No self-reported numbers.",
   },
   {
     icon: MagnifyingGlass,
@@ -97,7 +97,7 @@ const PILLARS = [
   {
     icon: FileText,
     title: "Dashboards & media kits",
-    body: "Claimed profiles unlock deeper tooling: personal analytics, roster views for managers, and media kits built from live data — pitch-ready in one click.",
+    body: "Claimed profiles unlock deeper tooling: personal analytics, roster views for managers, and media kits built from regularly refreshed data — pitch-ready in one click.",
   },
 ] as const;
 
@@ -145,9 +145,9 @@ export default function AboutPage() {
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[#DBDEE1]">
                 {SITE_NAME} is where gaming creators and talent agencies build
-                verified, always-live profiles to get discovered, pitch brands,
-                and close deals — without spreadsheets, screenshots, or static
-                PDFs.
+                verified, always-updating profiles to get discovered, pitch
+                brands, and close deals — without spreadsheets, screenshots, or
+                static PDFs.
               </p>
               <ul
                 className="mt-8 flex flex-wrap gap-2"
@@ -209,8 +209,8 @@ export default function AboutPage() {
                 </p>
                 <p>
                   We connect Twitch, YouTube, TikTok, Instagram, X, and Kick
-                  into one live profile and auto-generate a media kit that
-                  updates itself. Every metric is pulled live and powered by{" "}
+                  into one always-updating profile and auto-generate a media kit
+                  that refreshes automatically. Metrics are refreshed from{" "}
                   <span className="text-[#F2F3F5]">Stream Hatchet</span>.
                 </p>
                 <p>
@@ -334,7 +334,8 @@ export default function AboutPage() {
                 See what your profile could look like.
               </h2>
               <p className="mt-4 text-base text-[#DBDEE1]">
-                Or dive into live trends, top channels, and creator comparisons.
+                Or dive into the latest trends, top channels, and creator
+                comparisons.
               </p>
               <nav
                 className="mt-8 flex flex-wrap justify-center gap-3"

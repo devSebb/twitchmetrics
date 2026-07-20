@@ -16,7 +16,7 @@ export const revalidate = 300; // ISR: revalidate every 5 minutes
 export const metadata: Metadata = {
   title: "Top Creators",
   description:
-    "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more. Live follower counts and growth trends.",
+    "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more. Latest follower snapshots and growth trends.",
   openGraph: {
     title: `Top Creators | ${SITE_NAME}`,
     description:

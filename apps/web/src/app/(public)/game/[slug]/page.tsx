@@ -111,17 +111,22 @@ export async function generateMetadata({
     return { title: "Game Not Found | TwitchMetrics" };
   }
 
-  const viewersStr = formatNumber(game.currentViewers);
-  const channelsStr = formatNumber(game.currentChannels);
+  const latestSnapshot = game.viewerSnapshots[0];
+  const viewersStr = formatNumber(
+    latestSnapshot?.totalViewers ?? game.currentViewers,
+  );
+  const channelsStr = formatNumber(
+    latestSnapshot?.totalChannels ?? game.currentChannels,
+  );
 
-  const description = `Live viewership data for ${game.name}. ${viewersStr} current viewers across ${channelsStr} channels.`;
+  const description = `Latest observed viewership for ${game.name}: ${viewersStr} viewers across ${channelsStr} channels.`;
 
   return {
     title: `${game.name} - Game Analytics`,
     description,
     openGraph: {
       title: `${game.name} | ${SITE_NAME}`,
-      description: `${viewersStr} current viewers across ${channelsStr} channels`,
+      description: `${viewersStr} viewers across ${channelsStr} channels in the latest snapshot`,
       images: game.coverImageUrl
         ? [{ url: game.coverImageUrl, width: 264, height: 352, alt: game.name }]
         : [],
@@ -132,7 +137,7 @@ export async function generateMetadata({
       card: "summary",
       site: TWITTER_HANDLE,
       title: `${game.name} | ${SITE_NAME}`,
-      description: `${viewersStr} current viewers across ${channelsStr} channels`,
+      description: `${viewersStr} viewers across ${channelsStr} channels in the latest snapshot`,
       images: game.coverImageUrl ? [game.coverImageUrl] : [],
     },
     alternates: {
@@ -151,9 +156,8 @@ export default async function GamePage({ params }: PageProps) {
 
   const platformMetrics = await getGamePlatformMetrics({
     gameId: game.id,
-    fallbackTwitchViewers: game.currentViewers,
-    fallbackTwitchChannels: game.currentChannels,
   });
+  const latestSnapshot = game.viewerSnapshots[0] ?? null;
 
   // Shape header data
   const headerData = {
@@ -163,11 +167,12 @@ export default async function GamePage({ params }: PageProps) {
     developer: game.developer,
     publisher: game.publisher,
     releaseDate: game.releaseDate ? String(game.releaseDate) : null,
-    currentViewers: game.currentViewers,
-    currentChannels: game.currentChannels,
+    currentViewers: latestSnapshot?.totalViewers ?? game.currentViewers,
+    currentChannels: latestSnapshot?.totalChannels ?? game.currentChannels,
     peakViewers24h: game.peakViewers24h,
     avgViewers7d: game.avgViewers7d,
     avgLiveChannels: game.avgLiveChannels,
+    lastUpdatedAt: latestSnapshot ? String(latestSnapshot.snapshotAt) : null,
     platformMetrics,
   };
 

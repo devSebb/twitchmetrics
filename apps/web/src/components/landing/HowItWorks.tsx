@@ -14,12 +14,12 @@ const STEPS = [
   {
     icon: Sparkle,
     title: "We auto-build your kit",
-    body: "Verified, live stats pulled from every platform. Zero manual work.",
+    body: "Verified stats, automatically refreshed from every platform. Zero manual work.",
   },
   {
     icon: ShareNetwork,
     title: "Share one link",
-    body: "Send it to brands, agencies, and sponsors. Always up-to-date.",
+    body: "Send it to brands, agencies, and sponsors. Always updating.",
   },
 ] as const;
 

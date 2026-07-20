@@ -115,7 +115,8 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
   viewer_count: {
     id: "viewer_count",
     label: "Viewer Count",
-    description: "Area chart with live indicator and peak annotations",
+    description:
+      "Area chart with a recent live-status indicator and peak annotations",
     defaultEnabled: true,
     priority: "P0",
     access: "public",

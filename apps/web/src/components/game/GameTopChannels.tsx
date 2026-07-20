@@ -74,7 +74,7 @@ function ChannelRow({
               />
             )}
             <span className="truncate">
-              {formatNumber(Number(channel.viewerHours))} live viewer hours
+              {formatNumber(Number(channel.viewerHours))} viewer hours observed
             </span>
           </div>
         ) : (
@@ -87,8 +87,8 @@ function ChannelRow({
               />
             )}
             <span className="truncate">
-              {formatNumber(channel.avgViewers)} current viewers &middot;{" "}
-              {Math.max(1, Math.round(channel.airtime / 3600))}h live
+              {formatNumber(channel.avgViewers)} latest viewers &middot;{" "}
+              {Math.max(1, Math.round(channel.airtime / 3600))}h Air Time
             </span>
           </div>
         )}
@@ -121,7 +121,7 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
             <TrendUp size={16} weight="duotone" className="text-[#53fc18]" />
             Emerging Channels
           </h2>
-          <span className="text-xs text-[#949BA4]">Live right now</span>
+          <span className="text-xs text-[#949BA4]">Latest observed</span>
         </div>
         <div className="space-y-0.5">
           {emerging.length === 0 ? (
@@ -145,7 +145,9 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
             />
             Most Watched Channels
           </h2>
-          <span className="text-xs text-[#949BA4]">Current live sessions</span>
+          <span className="text-xs text-[#949BA4]">
+            Latest observed sessions
+          </span>
         </div>
         <div className="space-y-0.5">
           {mostWatched.length === 0 ? (

@@ -6,7 +6,7 @@ import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
-import { PlatformIcon } from "@/components/shared";
+import { PlatformIcon, SyncStatus } from "@/components/shared";
 
 type PlatformAccountData = {
   platform: Platform;
@@ -260,6 +260,9 @@ export function CreatorHeader({
                 <PlatformAccountStat key={account.platform} account={account} />
               ))}
             </div>
+          </div>
+          <div className="mt-3">
+            <SyncStatus lastSyncedAt={creator.lastSnapshotAt} />
           </div>
         </div>
       </div>

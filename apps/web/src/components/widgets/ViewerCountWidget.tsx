@@ -4,8 +4,10 @@ import { useState, useMemo } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import { ViewerCountChart } from "@/components/charts";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
+import { SyncStatus } from "@/components/shared";
 import { trpc } from "@/lib/trpc";
 import { formatNumber } from "@/lib/utils/format";
+import { isRecentObservation } from "@/lib/metric-freshness";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type ViewerCountWidgetProps = {
@@ -59,7 +61,7 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
 
     const latest = snapshotData[snapshotData.length - 1];
     const ext = latest?.extendedMetrics as Record<string, unknown> | null;
-    if (!ext) return null;
+    if (!latest || !ext || !isRecentObservation(latest.snapshotAt)) return null;
 
     const isLive = ext.IS_LIVE === 1 || ext.IS_LIVE === true;
     const currentViewers =
@@ -69,15 +71,17 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
     return { viewers: currentViewers };
   }, [snapshotData]);
 
+  const latestSnapshotAt = snapshotData?.at(-1)?.snapshotAt ?? null;
+
   if (!isLoading && chartData.length === 0) {
     return <EmptyWidgetSentinel />;
   }
 
   return (
     <div>
-      {/* Header row with live indicator + period selector */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Header row with verified status, freshness, and period selector */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {liveInfo && (
             <div className="flex items-center gap-1.5 rounded-full bg-[#ef4444]/20 px-2.5 py-0.5">
               <span className="relative flex h-2 w-2">
@@ -92,6 +96,7 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
               )}
             </div>
           )}
+          <SyncStatus lastSyncedAt={latestSnapshotAt} />
         </div>
 
         <div className="flex gap-1">

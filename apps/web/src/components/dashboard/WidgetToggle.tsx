@@ -188,14 +188,9 @@ export function WidgetToggle({
                   className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#313338]"
                 >
                   <div className="mr-3 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-[#DBDEE1]">
-                        {def.label}
-                      </span>
-                      <span className="rounded bg-[#383A40] px-1.5 py-0.5 text-[10px] text-[#949BA4]">
-                        {def.priority}
-                      </span>
-                    </div>
+                    <span className="text-sm font-medium text-[#DBDEE1]">
+                      {def.label}
+                    </span>
                     <p className="mt-0.5 text-xs text-[#949BA4]">
                       {def.description}
                     </p>

@@ -1161,9 +1161,13 @@ export const snapshotRouter = router({
         },
       });
 
-      // Update profile aggregate
+      // Update profile aggregate (exclude link-only social accounts —
+      // discoverySource != null — so they don't inflate totalFollowers/tier).
       const allAccounts = await ctx.prisma.platformAccount.findMany({
-        where: { creatorProfileId: input.creatorProfileId },
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          discoverySource: null,
+        },
         select: { followerCount: true, totalViews: true },
       });
 
@@ -1183,7 +1187,7 @@ export const snapshotRouter = router({
         data: {
           totalFollowers,
           totalViews,
-          lastSnapshotAt: new Date(),
+          lastSnapshotAt: snapshot.snapshotAt,
           snapshotTier: newTier,
         },
       });

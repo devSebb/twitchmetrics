@@ -118,8 +118,8 @@ export const METRICS = {
   },
   LIVE_VIEWER_COUNT: {
     key: "LIVE_VIEWER_COUNT",
-    label: "Live Viewers",
-    description: "Current live viewer count if streaming",
+    label: "Latest Viewers",
+    description: "Latest observed viewer count while streaming",
     format: "number",
     platforms: [
       "twitch",

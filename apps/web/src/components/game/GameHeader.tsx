@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { Platform } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
-import { PlatformIcon } from "@/components/shared";
+import { PlatformIcon, SyncStatus } from "@/components/shared";
 import { GameCoverImage } from "@/components/games/GameCoverImage";
 
 type PlatformMetricRow = {
@@ -27,9 +27,10 @@ type GameHeaderProps = {
     peakViewers24h: number;
     avgViewers7d: number;
     avgLiveChannels: number;
+    lastUpdatedAt: string | null;
     platformMetrics: {
-      liveViewers: PlatformMetricGroup;
-      liveChannels: PlatformMetricGroup;
+      latestViewers: PlatformMetricGroup;
+      latestChannels: PlatformMetricGroup;
     };
   };
 };
@@ -162,6 +163,9 @@ export function GameHeader({ game }: GameHeaderProps) {
               </>
             )}
           </div>
+          <div className="mt-3">
+            <SyncStatus lastSyncedAt={game.lastUpdatedAt} />
+          </div>
         </div>
 
         {/* Row 1 cols 2–3 */}
@@ -173,22 +177,22 @@ export function GameHeader({ game }: GameHeaderProps) {
 
         {/* Row 2 cols 1–3 (auto-fill around CTA) */}
         <KpiCard
-          label="Live Viewers"
+          label="Latest Viewers"
           value={
-            game.platformMetrics.liveViewers.total > 0
-              ? game.platformMetrics.liveViewers.total
+            game.platformMetrics.latestViewers.total > 0
+              ? game.platformMetrics.latestViewers.total
               : game.currentViewers
           }
-          platformRows={game.platformMetrics.liveViewers.rows}
+          platformRows={game.platformMetrics.latestViewers.rows}
         />
         <KpiCard
-          label="Live Channels"
+          label="Latest Channels"
           value={
-            game.platformMetrics.liveChannels.total > 0
-              ? game.platformMetrics.liveChannels.total
+            game.platformMetrics.latestChannels.total > 0
+              ? game.platformMetrics.latestChannels.total
               : game.currentChannels
           }
-          platformRows={game.platformMetrics.liveChannels.rows}
+          platformRows={game.platformMetrics.latestChannels.rows}
         />
         <KpiCard label="Avg Live Channels" value={game.avgLiveChannels} />
       </div>

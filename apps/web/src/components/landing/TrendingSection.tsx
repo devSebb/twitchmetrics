@@ -67,7 +67,7 @@ export function TrendingSection({
           </h2>
           <p className="mt-3 text-[#949BA4]">
             Spot opportunities early and understand what audiences are watching
-            right now.
+            in the latest data.
           </p>
         </div>
 

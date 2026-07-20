@@ -2,26 +2,25 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { normalizeGameSort, type GameSort } from "@/lib/game-list";
 
-type SortValue = "viewers" | "channels" | "hoursWatched";
-
-const SORTS: { label: string; value: SortValue }[] = [
+const SORTS: { label: string; value: GameSort }[] = [
   { label: "Viewers", value: "viewers" },
   { label: "Channels", value: "channels" },
   { label: "Hours Watched", value: "hoursWatched" },
 ];
 
-const TIMEFRAME: Record<SortValue, { label: string; live: boolean }> = {
-  viewers: { label: "Live", live: true },
-  channels: { label: "Live", live: true },
-  hoursWatched: { label: "Last 7 days", live: false },
+const TIMEFRAME: Record<GameSort, string> = {
+  viewers: "Latest snapshots",
+  channels: "Latest snapshots",
+  hoursWatched: "Last 7 days",
 };
 
 export function GameSortControls() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentSort = (searchParams.get("sort") ?? "viewers") as SortValue;
-  const status = TIMEFRAME[currentSort] ?? TIMEFRAME.viewers;
+  const currentSort = normalizeGameSort(searchParams.get("sort"));
+  const status = TIMEFRAME[currentSort];
 
   return (
     <div className="flex items-center justify-between gap-3">
@@ -51,13 +50,7 @@ export function GameSortControls() {
       </div>
 
       <div className="flex items-center gap-1.5 text-xs text-[#949BA4]">
-        {status.live && (
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-          </span>
-        )}
-        <span>{status.label}</span>
+        <span>{status}</span>
       </div>
     </div>
   );

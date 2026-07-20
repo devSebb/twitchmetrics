@@ -230,12 +230,7 @@ export function SettingsForm({
                 key={widgetId}
                 className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-[#383A40]"
               >
-                <div>
-                  <span className="text-sm text-[#DBDEE1]">{def.label}</span>
-                  <span className="ml-2 rounded bg-[#383A40] px-1.5 py-0.5 text-[10px] text-[#949BA4]">
-                    {def.priority}
-                  </span>
-                </div>
+                <span className="text-sm text-[#DBDEE1]">{def.label}</span>
                 <span className="text-xs text-[#949BA4]">
                   {def.defaultEnabled ? "On by default" : "Off by default"}
                 </span>

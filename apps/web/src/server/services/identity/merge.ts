@@ -31,6 +31,12 @@ const log = {
 };
 const SOURCE = "streamhatchet";
 
+// A merge/unmerge moves a profile's full StreamHatchet history (StreamSessionFact
+// + both rollups) inside one transaction. For a high-volume creator that can take
+// well over Prisma's default 5s interactive-transaction timeout, so give it room;
+// otherwise the transaction expires mid-way and the whole merge rolls back.
+const MERGE_TX_OPTIONS = { timeout: 120_000, maxWait: 15_000 };
+
 export class ClaimLockedError extends Error {
   constructor(profileId: string) {
     super(`Profile ${profileId} is claimed and cannot be absorbed by a merge`);
@@ -293,7 +299,7 @@ export async function mergeProfiles(params: MergeParams): Promise<MergeResult> {
         },
       },
     });
-  });
+  }, MERGE_TX_OPTIONS);
 
   const link = await prisma.identityLink.findUnique({
     where: {
@@ -400,7 +406,7 @@ export async function unmergeProfiles(identityLinkId: string): Promise<void> {
       where: { id: link.id },
       data: { status: "rejected", decidedAt: new Date() },
     });
-  });
+  }, MERGE_TX_OPTIONS);
 
   log.info(
     { identityLinkId, otherId: link.otherProfileId },

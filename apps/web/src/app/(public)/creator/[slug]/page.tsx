@@ -7,6 +7,7 @@ import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { resolveAvatar } from "@/lib/avatar";
 import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getLatestTimestamp } from "@/lib/metric-freshness";
 import { CreatorHeader } from "@/components/creator";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
 
@@ -143,6 +144,9 @@ export default async function CreatorProfilePage({ params }: PageProps) {
   }
 
   const isClaimed = creator.state === "claimed" || creator.state === "premium";
+  const lastUpdatedAt = getLatestTimestamp(
+    creator.platformAccounts.map((account) => account.lastSyncedAt),
+  );
   const avatarUrl = resolveAvatar("creator", {
     creator: {
       avatarUrl: creator.avatarUrl,
@@ -164,9 +168,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     state: creator.state,
     primaryPlatform: creator.primaryPlatform,
     totalFollowers: String(creator.totalFollowers),
-    lastSnapshotAt: creator.lastSnapshotAt
-      ? String(creator.lastSnapshotAt)
-      : null,
+    lastSnapshotAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
     platformAccounts: creator.platformAccounts.map((a) => ({
       platform: a.platform,
       platformUsername: a.platformUsername,

@@ -13,6 +13,7 @@ import {
 import type { Icon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { VERTICAL_LABELS, VERTICAL_ORDER } from "@/lib/constants/categories";
+import { normalizeGameVertical } from "@/lib/game-list";
 
 const PILL_ICONS: Record<string, Icon> = {
   gaming: GameController,
@@ -36,7 +37,7 @@ const PILLS = [
 export function VerticalPills() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const active = searchParams.get("vertical") ?? "gaming";
+  const active = normalizeGameVertical(searchParams.get("vertical"));
 
   function handleSelect(value: string) {
     const params = new URLSearchParams(searchParams.toString());

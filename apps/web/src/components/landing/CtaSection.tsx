@@ -19,7 +19,7 @@ export function CtaSection() {
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#949BA4] sm:text-lg">
             Whether you&apos;re one creator or managing a hundred — get
-            verified, live, and brand-ready.{" "}
+            verified, always updating, and brand-ready.{" "}
             <span className="font-semibold text-[#DBDEE1]">For Free.</span>
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
