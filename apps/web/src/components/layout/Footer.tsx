@@ -12,19 +12,10 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    title: "Explore",
-    links: [
-      { label: "Resources", href: "#" },
-      { label: "Blog", href: "#" },
-      { label: "Documentation", href: "#" },
-    ],
-  },
-  {
     title: "Company",
     links: [
       { label: "About Us", href: "/about" },
-      { label: "Partners", href: "#" },
-      { label: "Contact Us", href: "#" },
+      { label: "Contact Us", href: "/contact" },
     ],
   },
 ] as const;
@@ -35,7 +26,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[#3F4147] bg-[#1E1F22]">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {NAV_SECTIONS.map((section) => (
             <div key={section.title}>
               <h3 className="text-sm font-semibold text-[#F2F3F5]">

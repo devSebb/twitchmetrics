@@ -1,4 +1,5 @@
 import { createLogger } from "@/lib/logger";
+import { REPORT_METRIC_LABELS } from "@/lib/constants/metric-labels";
 import { EMAIL_FROM, sendEmail } from "./email";
 
 const log = createLogger("report-notifications");
@@ -34,17 +35,7 @@ export type ReportLeadNotificationInput = {
 
 // ─── Readable labels ─────────────────────────────────────────────────────────
 
-const METRIC_LABELS: Record<string, string> = {
-  hoursWatched: "Hours Watched",
-  avgViewers: "Avg Viewers",
-  peakViewers: "Peak Viewers",
-  topCreators: "Top Creators / Channels",
-  airtime: "Air Time",
-  subscribers: "Subscribers",
-  gender: "Gender",
-  country: "Country",
-  topCategories: "Top Categories",
-};
+const METRIC_LABELS: Record<string, string> = REPORT_METRIC_LABELS;
 
 const PERIOD_LABELS: Record<string, string> = {
   "30d": "Last 30 days",

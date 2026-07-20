@@ -8,6 +8,10 @@ import {
   type FormSnapshot,
   type MetricKey,
 } from "@/lib/constants/report-templates";
+import {
+  REPORT_METRIC_LABELS,
+  topEntitiesLabel,
+} from "@/lib/constants/metric-labels";
 import { EntityPicker } from "./EntityPicker";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -325,21 +329,21 @@ export function ReportRequestForm({
     key: MetricKey;
     label: (inc: Include | null) => string;
   }[] = [
-    { key: "hoursWatched", label: () => "Hours Watched" },
-    { key: "avgViewers", label: () => "Avg Viewers" },
-    { key: "peakViewers", label: () => "Peak Viewers" },
+    { key: "hoursWatched", label: () => REPORT_METRIC_LABELS.hoursWatched },
+    { key: "avgViewers", label: () => REPORT_METRIC_LABELS.avgViewers },
+    { key: "peakViewers", label: () => REPORT_METRIC_LABELS.peakViewers },
     {
       key: "topCreators",
-      label: (inc) => (inc === "games" ? "Top Channels" : "Top Creators"),
+      label: (inc) => topEntitiesLabel(inc ?? "games"),
     },
-    { key: "airtime", label: () => "Air Time" },
-    { key: "subscribers", label: () => "Subscribers" },
+    { key: "airtime", label: () => REPORT_METRIC_LABELS.airtime },
+    { key: "subscribers", label: () => REPORT_METRIC_LABELS.subscribers },
   ];
 
   const AUDIENCE_METRICS: { key: MetricKey; label: string }[] = [
-    { key: "gender", label: "Gender" },
-    { key: "country", label: "Country" },
-    { key: "topCategories", label: "Top Categories" },
+    { key: "gender", label: REPORT_METRIC_LABELS.gender },
+    { key: "country", label: REPORT_METRIC_LABELS.country },
+    { key: "topCategories", label: REPORT_METRIC_LABELS.topCategories },
   ];
 
   const pickerLabel = include === "games" ? "games" : "channels";

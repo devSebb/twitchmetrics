@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/Card";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
+import { REPORT_METRIC_LABELS as METRIC } from "@/lib/constants/metric-labels";
 import { ReportLeadForm } from "@/components/reports";
 
 export const metadata: Metadata = {
@@ -47,7 +48,12 @@ const REPORT_TYPES = [
     title: "Top Games",
     description:
       "The most-watched games across streaming platforms — viewer trends, peak hours, and channel counts.",
-    metrics: ["Hours watched", "Avg Viewers", "Peak viewers", "Top channels"],
+    metrics: [
+      METRIC.hoursWatched,
+      METRIC.avgViewers,
+      METRIC.peakViewers,
+      METRIC.topCreators,
+    ],
   },
   {
     icon: ChartLineUp,
@@ -56,10 +62,10 @@ const REPORT_TYPES = [
     description:
       "Cross-platform performance for the channels you care about — viewership, momentum, and audience makeup.",
     metrics: [
-      "Avg Viewers",
-      "Peak viewers",
-      "Audience by country",
-      "Gender split",
+      METRIC.avgViewers,
+      METRIC.peakViewers,
+      METRIC.country,
+      METRIC.gender,
     ],
   },
   {
@@ -67,8 +73,8 @@ const REPORT_TYPES = [
     tag: "Esports",
     title: "Esports Viewership",
     description:
-      "Tournament and title viewership — peak concurrents, hours watched, and how interest trends over time.",
-    metrics: ["Peak concurrent", "Hours watched", "Avg Viewers"],
+      "Tournament and title viewership — peak viewers, hours watched, and how interest trends over time.",
+    metrics: [METRIC.peakViewers, METRIC.hoursWatched, METRIC.avgViewers],
   },
   {
     icon: ChartPieSlice,
@@ -76,7 +82,7 @@ const REPORT_TYPES = [
     title: "Platform Market Share",
     description:
       "How Twitch, YouTube, and Kick stack up — share of viewership, unique audience, and shifting trends.",
-    metrics: ["Share of viewership", "Unique viewers", "Trend over time"],
+    metrics: ["Share of Viewership", "Unique Viewers", "Trend Over Time"],
   },
 ] as const;
 

@@ -62,6 +62,12 @@ const staticPages: MetadataRoute.Sitemap = [
     changeFrequency: "monthly",
     priority: 0.75,
   },
+  {
+    url: `${SITE_URL}/contact`,
+    lastModified: new Date(),
+    changeFrequency: "monthly",
+    priority: 0.5,
+  },
 ];
 
 // Chunk layout: ids [0 .. creatorChunks-1] carry creators (chunk 0 also carries

@@ -4,6 +4,7 @@ import type {
   MetricKey,
   TemplateConfig,
 } from "@/lib/constants/report-templates";
+import { REPORT_METRIC_LABELS } from "@/lib/constants/metric-labels";
 
 type GenerateArgs = {
   entityIds?: string[];
@@ -260,11 +261,14 @@ async function generateGamesReport(
 
   // 3. Build column list
   const cols: string[] = ["Rank", "Game"];
-  if (metrics.includes("hoursWatched")) cols.push("Hours Watched (est.)");
-  if (metrics.includes("avgViewers")) cols.push("Avg Viewers");
-  if (metrics.includes("peakViewers")) cols.push("Peak Viewers");
+  if (metrics.includes("hoursWatched"))
+    cols.push(`${REPORT_METRIC_LABELS.hoursWatched} (est.)`);
+  if (metrics.includes("avgViewers"))
+    cols.push(REPORT_METRIC_LABELS.avgViewers);
+  if (metrics.includes("peakViewers"))
+    cols.push(REPORT_METRIC_LABELS.peakViewers);
   if (metrics.includes("topCreators"))
-    cols.push("Top Channels (latest snapshot)");
+    cols.push(`${REPORT_METRIC_LABELS.topCreators} (latest snapshot)`);
   cols.push(
     "Snapshot Count",
     "Expected Snapshots",
@@ -510,11 +514,14 @@ async function generateChannelsReport(
 
   // 3. Columns
   const cols: string[] = ["Rank", "Channel", "Followers"];
-  if (metrics.includes("avgViewers")) cols.push("Avg Viewers");
-  if (metrics.includes("peakViewers")) cols.push("Peak Viewers");
+  if (metrics.includes("avgViewers"))
+    cols.push(REPORT_METRIC_LABELS.avgViewers);
+  if (metrics.includes("peakViewers"))
+    cols.push(REPORT_METRIC_LABELS.peakViewers);
   if (needsViewerStats) cols.push("Live Observations");
-  if (metrics.includes("gender")) cols.push("Gender (if available)");
-  if (metrics.includes("country")) cols.push("Primary Country");
+  if (metrics.includes("gender"))
+    cols.push(`${REPORT_METRIC_LABELS.gender} (if available)`);
+  if (metrics.includes("country")) cols.push(REPORT_METRIC_LABELS.country);
 
   // 4. Header block
   const lines: string[] = [];
