@@ -1,16 +1,26 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type Platform, PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber, formatDuration } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
-import { PlatformIcon } from "@/components/shared";
+import { PlatformIcon, TrendIndicator } from "@/components/shared";
+import { cn } from "@/lib/utils";
 
 export type CreatorListRow = {
   displayName: string;
   slug: string;
   avatarUrl: string | null;
   primaryPlatform: Platform;
+  totalFollowers: string;
   platformAccounts: { platform: Platform; platformUsername: string }[];
+  growthRollup: {
+    delta7d: string;
+    pct7d: number;
+    trendDirection: string;
+  } | null;
   airTimeSeconds?: number | null;
   avgAirTimeSeconds?: number | null;
   peakViewers?: number | null;
@@ -89,6 +99,51 @@ function formatAirtime(seconds: number | null | undefined) {
   return seconds != null ? formatDuration(seconds) : <EmDash />;
 }
 
+const HEADER_CLASS = "px-3 py-2 text-xs font-medium text-[#949BA4]";
+
+/**
+ * Column header wired to the same `?sort=` mechanism as the sort pills, so
+ * the active sort always corresponds to a visible, highlighted column.
+ */
+function SortableHeader({
+  label,
+  sortValue,
+}: {
+  label: string;
+  sortValue: "followers" | "trending";
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const current = searchParams.get("sort") ?? "followers";
+  const isActive = current === sortValue;
+
+  function handleSelect() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sort", sortValue);
+    params.delete("page");
+    router.push(`/creators?${params.toString()}`);
+  }
+
+  return (
+    <th
+      className={HEADER_CLASS}
+      aria-sort={isActive ? "descending" : undefined}
+    >
+      <button
+        type="button"
+        onClick={handleSelect}
+        className={cn(
+          "flex items-center gap-1 transition-colors",
+          isActive ? "text-[#F2F3F5]" : "hover:text-[#DBDEE1]",
+        )}
+      >
+        {label}
+        {isActive && <span aria-hidden>↓</span>}
+      </button>
+    </th>
+  );
+}
+
 export function CreatorList({ rows }: Props) {
   return (
     <>
@@ -97,24 +152,14 @@ export function CreatorList({ rows }: Props) {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[#3F4147]">
-              <th className="px-3 py-2 text-xs font-medium text-[#949BA4]">
-                Channel
-              </th>
-              <th className="px-3 py-2 text-xs font-medium text-[#949BA4]">
-                Platforms
-              </th>
-              <th className="px-3 py-2 text-xs font-medium text-[#949BA4]">
-                Air Time
-              </th>
-              <th className="px-3 py-2 text-xs font-medium text-[#949BA4]">
-                Avg Air Time
-              </th>
-              <th className="px-3 py-2 text-xs font-medium text-[#949BA4]">
-                Peak Viewers
-              </th>
-              <th className="px-3 py-2 text-xs font-medium text-[#949BA4]">
-                Avg Viewers
-              </th>
+              <th className={HEADER_CLASS}>Channel</th>
+              <th className={HEADER_CLASS}>Platforms</th>
+              <SortableHeader label="Followers" sortValue="followers" />
+              <SortableHeader label="7d Trend" sortValue="trending" />
+              <th className={HEADER_CLASS}>Air Time</th>
+              <th className={HEADER_CLASS}>Avg Air Time</th>
+              <th className={HEADER_CLASS}>Peak Viewers</th>
+              <th className={HEADER_CLASS}>Avg Viewers</th>
             </tr>
           </thead>
           <tbody>
@@ -140,6 +185,20 @@ export function CreatorList({ rows }: Props) {
                 </td>
                 <td className="px-3 py-2.5">
                   <PlatformLogos accounts={row.platformAccounts} />
+                </td>
+                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                  {formatNumber(Number(row.totalFollowers))}
+                </td>
+                <td className="px-3 py-2.5">
+                  {row.growthRollup ? (
+                    <TrendIndicator
+                      direction={row.growthRollup.trendDirection}
+                      delta={row.growthRollup.delta7d}
+                      pct={row.growthRollup.pct7d}
+                    />
+                  ) : (
+                    <EmDash />
+                  )}
                 </td>
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
                   {formatAirtime(row.airTimeSeconds)}
@@ -178,6 +237,18 @@ export function CreatorList({ rows }: Props) {
                   {row.displayName}
                 </span>
                 <PlatformLogos accounts={row.platformAccounts} />
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[#949BA4]">
+                <span>
+                  {formatNumber(Number(row.totalFollowers))} followers
+                </span>
+                {row.growthRollup && (
+                  <TrendIndicator
+                    direction={row.growthRollup.trendDirection}
+                    delta={row.growthRollup.delta7d}
+                    pct={row.growthRollup.pct7d}
+                  />
+                )}
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#949BA4]">
                 <span>

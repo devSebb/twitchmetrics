@@ -374,7 +374,7 @@ export default function TalentManagersSolutionsPage() {
             <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "Trending games", value: "30+" },
-                { label: "Tracked creators", value: "10K+" },
+                { label: "Tracked creators", value: "1M+" },
                 { label: "Platforms", value: "6" },
                 { label: "Refresh", value: "Automatic" },
               ].map((stat) => (

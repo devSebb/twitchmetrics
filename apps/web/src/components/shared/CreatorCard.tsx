@@ -23,7 +23,7 @@ type CreatorCardProps = {
   compact?: boolean;
 };
 
-function TrendIndicator({
+export function TrendIndicator({
   direction,
   delta,
   pct,

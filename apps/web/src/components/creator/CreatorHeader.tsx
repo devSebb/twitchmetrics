@@ -242,7 +242,7 @@ export function CreatorHeader({
             </p>
           )}
 
-          {/* Total Connections + Platform row */}
+          {/* Total Followers + Platform row */}
           <div className="flex flex-col lg:flex-row lg:items-end gap-4 lg:gap-8">
             {/* Total stat */}
             <div className="flex-shrink-0">
@@ -250,7 +250,7 @@ export function CreatorHeader({
                 {formatNumber(totalFollowers)}
               </div>
               <div className="text-xs font-medium tracking-wide text-[#949BA4] uppercase">
-                Total Connections
+                Total Followers
               </div>
             </div>
 
