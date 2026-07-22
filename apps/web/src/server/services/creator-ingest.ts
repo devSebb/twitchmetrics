@@ -92,6 +92,8 @@ export async function ingestCreatorByTwitchId(
       snapshotTier: tierFromFollowers(followers),
       totalFollowers: BigInt(followers),
       searchText: `${user.displayName} ${user.login}`.toLowerCase(),
+      catalogSource: "twitch_api",
+      listed: false,
       platformAccounts: {
         create: {
           platform: "twitch",

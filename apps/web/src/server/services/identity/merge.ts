@@ -5,7 +5,7 @@
  * and the other is folded into it: its PlatformAccounts and StreamHatchet
  * facts/rollups move to the canonical profile, and the absorbed profile becomes
  * a redirect stub (`mergedIntoId` set, `listed = false`). The slug is kept so
- * old links 301 to the canonical profile.
+ * old links permanently redirect to the canonical profile.
  *
  * Scope of what moves is deliberately narrow — PlatformAccounts + SH catalog
  * data (StreamSessionFact / ChannelDailyRollup / ChannelGameDailyRollup), all
@@ -18,6 +18,7 @@
  */
 
 import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
+import { listedAfterMerge } from "../creator-visibility";
 
 // Local logger (no `@/` alias) so this service is importable from both the
 // Next.js app and the standalone identity worker.
@@ -256,7 +257,10 @@ export async function mergeProfiles(params: MergeParams): Promise<MergeResult> {
     });
     await tx.creatorProfile.update({
       where: { id: canonical.id },
-      data: { updatedAt: new Date() },
+      data: {
+        listed: listedAfterMerge(canonical.listed, other.listed),
+        updatedAt: new Date(),
+      },
     });
 
     await tx.identityLink.upsert({

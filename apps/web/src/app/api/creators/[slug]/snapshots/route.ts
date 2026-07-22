@@ -3,6 +3,7 @@ import { Platform } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
+import { resolveCreatorSlug } from "@/server/services/creator-visibility";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -87,19 +88,8 @@ export async function GET(
     );
   }
 
-  // Check cache
-  const cacheKey = `creator:${slug}:snapshots:${platform}:${metric}:${period}`;
-  const cached = await cacheGet(cacheKey);
-  if (cached) {
-    return NextResponse.json(cached);
-  }
-
-  const creator = await db.creatorProfile.findUnique({
-    where: { slug },
-    select: { id: true },
-  });
-
-  if (!creator) {
+  const resolution = await resolveCreatorSlug(db, slug);
+  if (!resolution.found) {
     return NextResponse.json(
       {
         data: [],
@@ -109,6 +99,19 @@ export async function GET(
       { status: 404 },
     );
   }
+  if (resolution.redirect) {
+    const redirectUrl = new URL(request.url);
+    redirectUrl.pathname = `/api/creators/${resolution.canonicalSlug}/snapshots`;
+    return NextResponse.redirect(redirectUrl, 308);
+  }
+
+  // Check cache only after canonical resolution so a newly merged slug can
+  // never continue serving stale snapshot data.
+  const cacheKey = `creator:v2:${resolution.canonicalSlug}:snapshots:${platform}:${metric}:${period}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
 
   const startDate = getPeriodStart(period);
 
@@ -116,7 +119,7 @@ export async function GET(
   if (platform === "all") {
     const allSnapshots = await db.metricSnapshot.findMany({
       where: {
-        creatorProfileId: creator.id,
+        creatorProfileId: resolution.id,
         ...(startDate ? { snapshotAt: { gte: startDate } } : {}),
       },
       orderBy: { snapshotAt: "asc" },
@@ -174,7 +177,7 @@ export async function GET(
   // ── Single platform response ──
   const snapshots = await db.metricSnapshot.findMany({
     where: {
-      creatorProfileId: creator.id,
+      creatorProfileId: resolution.id,
       platform: platform as Platform,
       ...(startDate ? { snapshotAt: { gte: startDate } } : {}),
     },

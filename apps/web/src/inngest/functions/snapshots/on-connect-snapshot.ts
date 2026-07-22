@@ -124,7 +124,7 @@ export const onConnectSnapshot = inngest.createFunction(
         await cacheInvalidate(`creator:${profile.slug}`);
         await cacheInvalidate(`creator:${profile.slug}:*`);
       }
-      await cacheInvalidate("trending:landing");
+      await cacheInvalidate("trending:landing*");
     });
 
     log.info({ creatorProfileId, platform }, "on-connect snapshot completed");

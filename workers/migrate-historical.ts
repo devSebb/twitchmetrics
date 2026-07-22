@@ -300,6 +300,8 @@ async function migrateChannels(pool: pg.Pool): Promise<Map<string, string>> {
             totalFollowers: followerCount,
             totalViews: viewCount,
             searchText: `${displayName} ${username}`.toLowerCase(),
+            catalogSource: "twitch_api",
+            listed: true,
             platformAccounts: {
               create: {
                 platform: "twitch",

@@ -13,6 +13,7 @@ import {
   normalizeSearchType,
   type SearchType,
 } from "@/lib/search";
+import { LOOKUP_CREATOR_SQL } from "@/server/services/creator-visibility";
 
 const RESULTS_PER_PAGE = 20;
 
@@ -64,8 +65,11 @@ async function searchDatabase(query: string, type: SearchType, page: number) {
                 cp."totalFollowers",
                 similarity(cp."searchText", ${query}) AS relevance
               FROM "CreatorProfile" cp
-              WHERE cp."searchText" % ${query}
-                 OR cp."searchText" ILIKE '%' || ${query} || '%'
+              WHERE ${LOOKUP_CREATOR_SQL}
+                AND (
+                  cp."searchText" % ${query}
+                  OR cp."searchText" ILIKE '%' || ${query} || '%'
+                )
               ORDER BY relevance DESC, cp."totalFollowers" DESC
               LIMIT ${RESULTS_PER_PAGE} OFFSET ${offset}
             `),
@@ -95,8 +99,11 @@ async function searchDatabase(query: string, type: SearchType, page: number) {
         : db.$queryRaw<{ count: number }[]>(Prisma.sql`
             SELECT COUNT(*)::int AS count
             FROM "CreatorProfile" cp
-            WHERE cp."searchText" % ${query}
-               OR cp."searchText" ILIKE '%' || ${query} || '%'
+            WHERE ${LOOKUP_CREATOR_SQL}
+              AND (
+                cp."searchText" % ${query}
+                OR cp."searchText" ILIKE '%' || ${query} || '%'
+              )
           `),
 
       !scopes.games

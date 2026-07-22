@@ -176,6 +176,8 @@ async function main() {
           totalFollowers: BigInt(followers),
           state: "unclaimed",
           searchText: `${user.display_name} ${user.login}`.toLowerCase(),
+          catalogSource: "twitch_api",
+          listed: true,
           snapshotTier:
             followers >= 1_000_000
               ? "tier1"

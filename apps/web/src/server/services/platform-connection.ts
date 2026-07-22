@@ -260,6 +260,8 @@ export async function connectPlatform(
             userId: null,
             state: "unclaimed",
             claimedAt: null,
+            listed: false,
+            mergedIntoId: existingPlatformAccount.creatorProfileId,
           },
         });
       }
@@ -271,7 +273,13 @@ export async function connectPlatform(
             userId: input.userId,
             state: "claimed",
             claimedAt: new Date(),
+            listed: true,
           },
+        });
+      } else {
+        await tx.creatorProfile.update({
+          where: { id: existingPlatformAccount.creatorProfileId },
+          data: { listed: true },
         });
       }
 
@@ -339,6 +347,8 @@ export async function connectPlatform(
         primaryPlatform: platform,
         state: "claimed",
         claimedAt: new Date(),
+        catalogSource: "user_claim",
+        listed: true,
       },
     }));
 
@@ -354,6 +364,11 @@ export async function connectPlatform(
         platform,
         discoverySource: { not: null },
       },
+    });
+
+    await tx.creatorProfile.update({
+      where: { id: ensuredCreatorProfile.id },
+      data: { listed: true },
     });
 
     return tx.platformAccount.create({

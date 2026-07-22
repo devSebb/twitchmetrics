@@ -14,13 +14,22 @@ import {
   presignBrandLogoUpload,
 } from "@/server/services/brand-logo";
 import { isStorageConfigured } from "@/server/services/storage/r2";
+import { resolveCreatorSlug } from "@/server/services/creator-visibility";
 
 export const creatorRouter = router({
   getProfile: publicProcedure
     .input(z.object({ slug: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      const resolution = await resolveCreatorSlug(ctx.prisma, input.slug);
+      if (!resolution.found) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Creator not found.",
+        });
+      }
+
       const profile = await ctx.prisma.creatorProfile.findUnique({
-        where: { slug: input.slug },
+        where: { id: resolution.id },
         include: {
           platformAccounts: {
             select: {

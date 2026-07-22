@@ -259,6 +259,8 @@ async function main() {
           snapshotTier: tierFromFollowers(followers),
           totalFollowers: BigInt(followers),
           searchText: `${user.display_name} ${user.login}`.toLowerCase(),
+          catalogSource: "twitch_api",
+          listed: true,
           platformAccounts: {
             create: {
               platform: "twitch",

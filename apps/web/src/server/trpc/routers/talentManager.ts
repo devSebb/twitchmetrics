@@ -19,6 +19,7 @@ import type {
 } from "@/server/services/pdf/roster-report";
 import { resolveAvatar } from "@/lib/avatar";
 import { THEME } from "@/lib/constants/theme";
+import { LOOKUP_CREATOR_SQL } from "@/server/services/creator-visibility";
 
 const permissionsSchema = z
   .object({
@@ -433,7 +434,8 @@ export const talentManagerRouter = router({
           cp."userId",
           similarity(cp."searchText", ${q}) AS relevance
         FROM "CreatorProfile" cp
-        WHERE cp.state IN ('unclaimed', 'claimed', 'premium')
+        WHERE ${LOOKUP_CREATOR_SQL}
+          AND cp.state IN ('unclaimed', 'claimed', 'premium')
           AND (cp."userId" IS NULL OR cp."userId" != ${ctx.user.id}::uuid)
           AND (
             cp."searchText" % ${q}

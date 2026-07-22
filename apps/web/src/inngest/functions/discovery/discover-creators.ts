@@ -165,6 +165,8 @@ export const discoverCreators = inngest.createFunction(
                   snapshotTier: tierFromViewers(stream.viewerCount),
                   totalFollowers: BigInt(stream.viewerCount * 10), // proxy until snapshot cron fills real value
                   searchText: `${displayName} ${login}`.toLowerCase(),
+                  catalogSource: "twitch_api",
+                  listed: true,
                   platformAccounts: {
                     create: {
                       platform: "twitch",

@@ -208,6 +208,8 @@ export const authRouter = router({
                 primaryPlatform: "twitch",
                 state: "claimed",
                 claimedAt: new Date(),
+                catalogSource: "user_claim",
+                listed: false,
               },
             });
           }

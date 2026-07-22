@@ -1,6 +1,6 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
@@ -10,6 +10,7 @@ import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
 import { getLatestTimestamp } from "@/lib/metric-freshness";
 import { CreatorHeader } from "@/components/creator";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
+import { creatorRobots } from "@/server/services/creator-visibility";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -79,6 +80,16 @@ export async function generateMetadata({
     return { title: "Creator Not Found | TwitchMetrics" };
   }
 
+  if (creator.mergedInto) {
+    return {
+      title: `Creator Profile | ${SITE_NAME}`,
+      robots: { index: false, follow: true },
+      alternates: {
+        canonical: `${SITE_URL}/creator/${creator.mergedInto.slug}`,
+      },
+    };
+  }
+
   const platformNames = creator.platformAccounts
     .map((a) => PLATFORM_CONFIG[a.platform].name)
     .join(", ");
@@ -102,6 +113,7 @@ export async function generateMetadata({
   return {
     title: `${creator.displayName} - Creator Analytics`,
     description,
+    robots: creatorRobots(creator.listed),
     openGraph: {
       title: `${creator.displayName} | ${SITE_NAME}`,
       description: `${followersStr} total followers across ${platformNames}`,
@@ -141,7 +153,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
 
   // Merged profiles are redirect stubs — send old links to the canonical slug.
   if (creator.mergedInto) {
-    redirect(`/creator/${creator.mergedInto.slug}`);
+    permanentRedirect(`/creator/${creator.mergedInto.slug}`);
   }
 
   const isClaimed = creator.state === "claimed" || creator.state === "premium";

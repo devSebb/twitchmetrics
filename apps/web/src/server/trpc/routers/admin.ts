@@ -230,6 +230,8 @@ export const adminRouter = router({
             primaryPlatform: creator.primaryPlatform,
             searchText:
               `${creator.displayName} ${creator.platformUsername}`.toLowerCase(),
+            catalogSource: "admin",
+            listed: true,
             platformAccounts: {
               create: {
                 platform: creator.primaryPlatform,

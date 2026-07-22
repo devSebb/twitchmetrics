@@ -5,6 +5,10 @@ import { db } from "@/server/db";
 import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
+  DISCOVERABLE_CREATOR_SQL,
+  DISCOVERABLE_CREATOR_WHERE,
+} from "@/server/services/creator-visibility";
+import {
   CreatorPlatformPills,
   CreatorSortControls,
   CreatorViewToggle,
@@ -78,16 +82,18 @@ async function getCreators({
 }) {
   const take = 20;
   const skip = (page - 1) * take;
-  const whereClause = platform
-    ? Prisma.sql`
-        WHERE EXISTS (
+  const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
+  if (platform) {
+    conditions.push(Prisma.sql`
+        EXISTS (
           SELECT 1
           FROM "PlatformAccount" pa
           WHERE pa."creatorProfileId" = cp.id
             AND pa.platform = ${platform}::"Platform"
         )
-      `
-    : Prisma.sql``;
+      `);
+  }
+  const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
   const orderClause =
     sort === "trending"
       ? Prisma.sql`
@@ -119,7 +125,7 @@ async function getCreators({
   const [creators, countResult]: [CreatorRecord[], number] = await Promise.all([
     ids.length
       ? db.creatorProfile.findMany({
-          where: { id: { in: ids } },
+          where: { ...DISCOVERABLE_CREATOR_WHERE, id: { in: ids } },
           include: {
             platformAccounts: true,
             growthRollups: {
@@ -130,9 +136,12 @@ async function getCreators({
       : Promise.resolve([] as CreatorRecord[]),
     platform
       ? db.creatorProfile.count({
-          where: { platformAccounts: { some: { platform } } },
+          where: {
+            ...DISCOVERABLE_CREATOR_WHERE,
+            platformAccounts: { some: { platform } },
+          },
         })
-      : db.creatorProfile.count(),
+      : db.creatorProfile.count({ where: DISCOVERABLE_CREATOR_WHERE }),
   ]);
 
   const creatorById = new Map(creators.map((creator) => [creator.id, creator]));

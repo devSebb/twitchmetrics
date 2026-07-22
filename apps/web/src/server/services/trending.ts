@@ -2,10 +2,11 @@ import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { cacheGet, cacheSet, CACHE_TTL } from "./cache";
 import { createLogger } from "@/lib/logger";
+import { DISCOVERABLE_CREATOR_SQL } from "./creator-visibility";
 
 const log = createLogger("trending");
 
-const CACHE_KEY = "trending:landing";
+const CACHE_KEY = "trending:landing:v2";
 
 export type TrendingCreator = {
   id: string;
@@ -63,7 +64,8 @@ export async function getTrendingCreators(
         AND cgr.platform = cp."primaryPlatform"
       LIMIT 1
     ) r ON true
-    WHERE cp."totalFollowers" > 500
+    WHERE ${DISCOVERABLE_CREATOR_SQL}
+      AND cp."totalFollowers" > 500
       AND COALESCE(r."delta7d", 0) > 100
     ORDER BY COALESCE(r."delta7d", 0) DESC, cp."totalFollowers" DESC
     LIMIT ${limit}

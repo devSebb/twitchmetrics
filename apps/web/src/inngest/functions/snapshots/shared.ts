@@ -134,7 +134,7 @@ export async function runTierSnapshot(
 
   // Invalidate trending/landing cache after a full tier batch
   try {
-    await cacheInvalidate("trending:landing");
+    await cacheInvalidate("trending:landing*");
   } catch {
     // Non-blocking
   }

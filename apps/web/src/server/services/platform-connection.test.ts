@@ -109,6 +109,12 @@ describe("connectPlatform — link-only (discoverySource) upgrade", () => {
         }),
       }),
     );
+    expect(db.creatorProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "cp-1" },
+        data: expect.objectContaining({ listed: true }),
+      }),
+    );
   });
 
   it("retires a link-only placeholder squatting the platform slot before creating the real account", async () => {
@@ -152,5 +158,44 @@ describe("connectPlatform — link-only (discoverySource) upgrade", () => {
         }),
       }),
     );
+    expect(db.creatorProfile.update).toHaveBeenCalledWith({
+      where: { id: "cp-2" },
+      data: { listed: true },
+    });
+  });
+
+  it("turns a replaced user placeholder into a redirect stub", async () => {
+    db.platformAccount.findUnique.mockResolvedValue({
+      id: "catalog-account",
+      creatorProfileId: "catalog-profile",
+      platformUsername: "creator",
+      discoverySource: null,
+      creatorProfile: { id: "catalog-profile", userId: null },
+    });
+    db.creatorProfile.findUnique.mockResolvedValue({
+      id: "user-placeholder",
+    });
+    db.platformAccount.update.mockResolvedValue({
+      id: "catalog-account",
+      creatorProfileId: "catalog-profile",
+    });
+
+    await connectPlatform({
+      ...baseInput,
+      provider: "twitch",
+      providerAccountId: "12345",
+      profile: { login: "creator" },
+    });
+
+    expect(db.creatorProfile.update).toHaveBeenCalledWith({
+      where: { id: "user-placeholder" },
+      data: {
+        userId: null,
+        state: "unclaimed",
+        claimedAt: null,
+        listed: false,
+        mergedIntoId: "catalog-profile",
+      },
+    });
   });
 });

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { db } from "@/server/db";
 import { SITE_URL } from "@/lib/constants/seo";
+import { DISCOVERABLE_CREATOR_WHERE } from "@/server/services/creator-visibility";
 
 // URLs per child sitemap. Kept well under both the sitemaps.org limit (50,000
 // URLs / 50MB) and Vercel's 19.07MB ISR fallback body cap — at ~200 bytes per
@@ -75,7 +76,7 @@ const staticPages: MetadataRoute.Sitemap = [
 // games. Computed once at build/regeneration time from live row counts.
 async function getChunkPlan() {
   const [creatorCount, gameCount] = await Promise.all([
-    db.creatorProfile.count(),
+    db.creatorProfile.count({ where: DISCOVERABLE_CREATOR_WHERE }),
     db.game.count(),
   ]);
 
@@ -103,6 +104,7 @@ export default async function sitemap({
   // ── Creator chunk ──────────────────────────────────────────────────────────
   if (id < creatorChunks) {
     const creators = await db.creatorProfile.findMany({
+      where: DISCOVERABLE_CREATOR_WHERE,
       select: { slug: true, updatedAt: true },
       orderBy: { totalFollowers: "desc" },
       skip: id * CHUNK_SIZE,

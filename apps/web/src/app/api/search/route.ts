@@ -5,6 +5,7 @@ import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 import { getSearchScopes, normalizeSearchType } from "@/lib/search";
+import { LOOKUP_CREATOR_SQL } from "@/server/services/creator-visibility";
 
 type CreatorSearchRow = {
   id: string;
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
 
   const scopes = getSearchScopes(type);
 
-  const cacheKey = `search:${type}:${query.toLowerCase()}`;
+  const cacheKey = `search:v2:${type}:${query.toLowerCase()}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -77,8 +78,11 @@ export async function GET(request: Request) {
             cp."totalFollowers",
             similarity(cp."searchText", ${query}) AS relevance
           FROM "CreatorProfile" cp
-          WHERE cp."searchText" % ${query}
-             OR cp."searchText" ILIKE '%' || ${query} || '%'
+          WHERE ${LOOKUP_CREATOR_SQL}
+            AND (
+              cp."searchText" % ${query}
+              OR cp."searchText" ILIKE '%' || ${query} || '%'
+            )
           ORDER BY relevance DESC, cp."totalFollowers" DESC
           LIMIT 10
         `);

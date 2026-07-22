@@ -231,7 +231,7 @@ export const kickChannelSnapshot = inngest.createFunction(
         }
 
         try {
-          await cacheInvalidate("trending:landing");
+          await cacheInvalidate("trending:landing*");
         } catch {
           // Non-blocking.
         }

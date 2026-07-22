@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
 import { MediaKitLayout } from "@/components/media-kit/MediaKitLayout";
+import { creatorRobots } from "@/server/services/creator-visibility";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -15,6 +16,7 @@ async function getMediaKitData(slug: string) {
   const profile = await db.creatorProfile.findUnique({
     where: { slug },
     include: {
+      mergedInto: { select: { slug: true } },
       platformAccounts: {
         select: {
           platform: true,
@@ -60,6 +62,16 @@ export async function generateMetadata({
     return { title: "Media Kit Not Found | TwitchMetrics" };
   }
 
+  if (profile.mergedInto) {
+    return {
+      title: `Creator Media Kit | ${SITE_NAME}`,
+      robots: { index: false, follow: true },
+      alternates: {
+        canonical: `${SITE_URL}/creator/${profile.mergedInto.slug}/media-kit`,
+      },
+    };
+  }
+
   const totalFollowers = Number(profile.totalFollowers);
   const followersStr =
     totalFollowers >= 1_000_000
@@ -79,7 +91,7 @@ export async function generateMetadata({
   return {
     title: `${profile.displayName} — Media Kit | ${SITE_NAME}`,
     description,
-    robots: { index: true, follow: true },
+    robots: creatorRobots(profile.listed),
     openGraph: {
       title: `${profile.displayName} — Media Kit`,
       description: `${followersStr} followers across ${platformNames}`,
@@ -114,6 +126,10 @@ export default async function MediaKitPage({ params }: PageProps) {
   const profile = await getMediaKitData(slug);
 
   if (!profile) notFound();
+
+  if (profile.mergedInto) {
+    permanentRedirect(`/creator/${profile.mergedInto.slug}/media-kit`);
+  }
 
   const isClaimed = profile.state === "claimed" || profile.state === "premium";
 

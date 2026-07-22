@@ -9,6 +9,10 @@ import {
   getStreamingStatsBatch,
   emptyStreamingStats,
 } from "@/server/services/creator-streaming-stats";
+import {
+  DISCOVERABLE_CREATOR_SQL,
+  DISCOVERABLE_CREATOR_WHERE,
+} from "@/server/services/creator-visibility";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -29,7 +33,7 @@ function parsePlatform(value: string | null): Platform | null {
 }
 
 function buildWhereClause(platform: Platform | null, query: string | null) {
-  const conditions: Prisma.Sql[] = [];
+  const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
 
   if (platform) {
     conditions.push(Prisma.sql`
@@ -46,10 +50,6 @@ function buildWhereClause(platform: Platform | null, query: string | null) {
     conditions.push(
       Prisma.sql`(cp."searchText" % ${query} OR cp."searchText" ILIKE '%' || ${query} || '%')`,
     );
-  }
-
-  if (!conditions.length) {
-    return Prisma.sql``;
   }
 
   return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
 
   // Cache by normalized query params (view splits list/grid into separate keys
   // since list responses carry extra streaming-stat fields).
-  const cacheKey = `creators:list:v2:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
+  const cacheKey = `creators:list:v3:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -130,7 +130,7 @@ export async function GET(request: Request) {
   }
 
   const creators = await db.creatorProfile.findMany({
-    where: { id: { in: ids } },
+    where: { ...DISCOVERABLE_CREATOR_WHERE, id: { in: ids } },
     select: {
       id: true,
       displayName: true,

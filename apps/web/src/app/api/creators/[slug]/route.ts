@@ -3,19 +3,38 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
+import { resolveCreatorSlug } from "@/server/services/creator-visibility";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
-  const rateLimited = await rateLimitOrResponse(_request, "creator-detail", {
+  const rateLimited = await rateLimitOrResponse(request, "creator-detail", {
     limit: 120,
     window: "60 s",
   });
   if (rateLimited) return rateLimited;
 
   const { slug } = await context.params;
-  const cacheKey = `creator:${slug}`;
+  const resolution = await resolveCreatorSlug(db, slug);
+  if (!resolution.found) {
+    return NextResponse.json(
+      {
+        data: null,
+        meta: {},
+        error: "Creator not found",
+      },
+      { status: 404 },
+    );
+  }
+  if (resolution.redirect) {
+    return NextResponse.redirect(
+      new URL(`/api/creators/${resolution.canonicalSlug}`, request.url),
+      308,
+    );
+  }
+
+  const cacheKey = `creator:v2:${resolution.canonicalSlug}`;
 
   // Check cache first
   const cached = await cacheGet(cacheKey);
@@ -24,7 +43,7 @@ export async function GET(
   }
 
   const creator = await db.creatorProfile.findUnique({
-    where: { slug },
+    where: { id: resolution.id },
     select: {
       id: true,
       userId: true,
@@ -103,13 +122,11 @@ export async function GET(
     },
   });
 
+  // The resolution and detail reads are intentionally separate so cached
+  // responses can never bypass a newly-created merge redirect.
   if (!creator) {
     return NextResponse.json(
-      {
-        data: null,
-        meta: {},
-        error: "Creator not found",
-      },
+      { data: null, meta: {}, error: "Creator not found" },
       { status: 404 },
     );
   }
