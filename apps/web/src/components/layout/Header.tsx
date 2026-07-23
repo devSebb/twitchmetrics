@@ -67,12 +67,12 @@ export async function Header() {
         </Link>
 
         {/* Nav links */}
-        <nav className="hidden items-center gap-5 lg:flex">
+        <nav className="hidden items-center gap-7 lg:flex">
           {PRIMARY_NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+              className="text-sm font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
             >
               {link.label}
             </Link>

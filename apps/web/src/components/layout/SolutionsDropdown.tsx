@@ -44,7 +44,7 @@ export function SolutionsDropdown() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "flex items-center gap-1 text-sm transition-colors",
+          "flex items-center gap-1 text-sm font-medium transition-colors",
           open ? "text-[#DBDEE1]" : "text-[#949BA4] hover:text-[#DBDEE1]",
         )}
       >

@@ -3,7 +3,11 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type Platform, PLATFORM_CONFIG } from "@/lib/constants/platforms";
+import {
+  type Platform,
+  PLATFORM_CONFIG,
+  sortByPlatformOrder,
+} from "@/lib/constants/platforms";
 import { formatNumber, formatDuration } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import { PlatformIcon, TrendIndicator } from "@/components/shared";
@@ -75,7 +79,7 @@ function PlatformLogos({
 }) {
   return (
     <div className="flex gap-1.5">
-      {accounts.map((a) => (
+      {sortByPlatformOrder(accounts).map((a) => (
         <PlatformIcon
           key={a.platform}
           platform={a.platform}
@@ -192,7 +196,6 @@ export function CreatorList({ rows }: Props) {
                 <td className="px-3 py-2.5">
                   {row.growthRollup ? (
                     <TrendIndicator
-                      direction={row.growthRollup.trendDirection}
                       delta={row.growthRollup.delta7d}
                       pct={row.growthRollup.pct7d}
                     />
@@ -244,7 +247,6 @@ export function CreatorList({ rows }: Props) {
                 </span>
                 {row.growthRollup && (
                   <TrendIndicator
-                    direction={row.growthRollup.trendDirection}
                     delta={row.growthRollup.delta7d}
                     pct={row.growthRollup.pct7d}
                   />

@@ -4,7 +4,11 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import {
+  PLATFORM_CONFIG,
+  sortByPlatformOrder,
+  type Platform,
+} from "@/lib/constants/platforms";
 import { formatNumber, formatPercent, formatDate } from "@/lib/utils/format";
 import { Badge, Button, Card } from "@/components/ui";
 import { getSafeImageSrc } from "@/lib/safeImage";
@@ -82,7 +86,7 @@ function TrendArrow({ direction }: { direction: string | null }) {
         height="14"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#ef4444"
+        stroke="#E32C19"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -239,9 +243,19 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
             Platform Breakdown
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {profile.platformAccounts.map((account) => {
+            {sortByPlatformOrder(profile.platformAccounts).map((account) => {
               const config = PLATFORM_CONFIG[account.platform];
               const growth = growthByPlatform.get(account.platform);
+              // Direction from the displayed value so a loss never renders
+              // green, even if the stored trendDirection disagrees.
+              const growthDirection =
+                growth?.pct30d != null
+                  ? growth.pct30d > 0
+                    ? "up"
+                    : growth.pct30d < 0
+                      ? "down"
+                      : null
+                  : (growth?.trendDirection ?? null);
               const profileUrl = getSafePlatformProfileUrl(
                 account.platform,
                 account.platformUrl,
@@ -286,16 +300,14 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
                       </span>
                       {growth && (
                         <span className="flex items-center gap-0.5 text-xs">
-                          <TrendArrow direction={growth.trendDirection} />
+                          <TrendArrow direction={growthDirection} />
                           <span
                             className={cn(
                               "font-medium",
-                              growth.trendDirection === "up" &&
-                                "text-[#22c55e]",
-                              growth.trendDirection === "down" &&
-                                "text-[#ef4444]",
-                              growth.trendDirection !== "up" &&
-                                growth.trendDirection !== "down" &&
+                              growthDirection === "up" && "text-[#22c55e]",
+                              growthDirection === "down" && "text-[#E32C19]",
+                              growthDirection !== "up" &&
+                                growthDirection !== "down" &&
                                 "text-[#949BA4]",
                             )}
                           >

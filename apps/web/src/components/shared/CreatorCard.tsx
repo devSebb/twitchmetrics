@@ -1,6 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
-import { type Platform, PLATFORM_CONFIG } from "@/lib/constants/platforms";
+import {
+  type Platform,
+  PLATFORM_CONFIG,
+  sortByPlatformOrder,
+} from "@/lib/constants/platforms";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import { PlatformIcon } from "./PlatformIcon";
@@ -23,35 +27,33 @@ type CreatorCardProps = {
   compact?: boolean;
 };
 
-export function TrendIndicator({
-  direction,
-  delta,
-  pct,
-}: {
-  direction: string;
-  delta: string;
-  pct: number;
-}) {
+export function TrendIndicator({ delta, pct }: { delta: string; pct: number }) {
+  // Direction is derived from the actual delta so a follower loss can never
+  // render green, even if the stored trendDirection disagrees.
   const deltaNum = Number(delta);
-  const isUp = direction === "UP";
-  const isDown = direction === "DOWN";
+  const isUp = deltaNum > 0;
+  const isDown = deltaNum < 0;
 
   const color = isUp
     ? "text-[#22c55e]"
     : isDown
-      ? "text-[#ef4444]"
+      ? "text-[#E32C19]"
       : "text-[#949BA4]";
   const arrow = isUp ? "▲" : isDown ? "▼" : "–";
-  const sign = isUp ? "+" : "";
+  const sign = isUp ? "+" : isDown ? "-" : "";
+
+  // Normalize -0.0% and keep the sign out of toFixed so it can't double up.
+  const pctAbs = Math.abs(pct).toFixed(1);
+  const pctSign = pctAbs === "0.0" ? "" : pct > 0 ? "+" : "-";
 
   return (
     <span className={`flex items-center gap-1 text-xs font-medium ${color}`}>
       <span className="text-[10px]">{arrow}</span>
       {sign}
-      {formatNumber(deltaNum)}
+      {formatNumber(Math.abs(deltaNum))}
       <span className="text-[#949BA4]">
-        ({pct > 0 ? "+" : ""}
-        {pct.toFixed(1)}%)
+        ({pctSign}
+        {pctAbs}%)
       </span>
     </span>
   );
@@ -99,7 +101,6 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
           <div className="flex items-center gap-2 text-xs text-[#949BA4]">
             {creator.growthRollup ? (
               <TrendIndicator
-                direction={creator.growthRollup.trendDirection}
                 delta={creator.growthRollup.delta7d}
                 pct={creator.growthRollup.pct7d}
               />
@@ -111,7 +112,7 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
 
         {/* Platform logos */}
         <div className="flex items-center gap-1">
-          {creator.platformAccounts.map((a) => (
+          {sortByPlatformOrder(creator.platformAccounts).map((a) => (
             <PlatformIcon
               key={a.platform}
               platform={a.platform}
@@ -164,7 +165,7 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
 
       {/* Platform logos */}
       <div className="flex items-center gap-1.5">
-        {creator.platformAccounts.map((a) => (
+        {sortByPlatformOrder(creator.platformAccounts).map((a) => (
           <PlatformIcon
             key={a.platform}
             platform={a.platform}
@@ -177,7 +178,6 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
       {/* Growth indicator */}
       {creator.growthRollup && (
         <TrendIndicator
-          direction={creator.growthRollup.trendDirection}
           delta={creator.growthRollup.delta7d}
           pct={creator.growthRollup.pct7d}
         />

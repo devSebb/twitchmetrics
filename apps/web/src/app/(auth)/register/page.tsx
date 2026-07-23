@@ -52,7 +52,9 @@ export default async function RegisterPage({
           <p className="text-xs uppercase tracking-[0.16em] text-[#949BA4]">
             Get started
           </p>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">Create Account</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-[#F2F3F5]">
+            Create Account
+          </h1>
           <p className="text-sm text-[#949BA4]">
             Join TwitchMetrics in seconds
           </p>

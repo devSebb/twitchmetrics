@@ -62,10 +62,10 @@ export function TrendingSection({
     <section className="bg-[#2B2D31] py-20">
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-[#F2F3F5]">
+          <h2 className="font-display text-3xl font-bold tracking-tight text-[#F2F3F5] sm:text-4xl">
             Discover What&apos;s Trending
           </h2>
-          <p className="mt-3 text-[#949BA4]">
+          <p className="mt-4 text-base text-[#949BA4] sm:text-lg">
             Spot opportunities early and understand what audiences are watching
             in the latest data.
           </p>
@@ -85,7 +85,7 @@ export function TrendingSection({
               </h3>
               <Link
                 href="/creators"
-                className="text-xs text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+                className="text-xs font-medium text-[#949BA4] underline-offset-4 transition-colors hover:text-[#E32C19] hover:underline"
               >
                 View All →
               </Link>
@@ -110,7 +110,7 @@ export function TrendingSection({
               </h3>
               <Link
                 href="/browse"
-                className="text-xs text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+                className="text-xs font-medium text-[#949BA4] underline-offset-4 transition-colors hover:text-[#E32C19] hover:underline"
               >
                 View All →
               </Link>
@@ -157,7 +157,7 @@ export function TrendingSection({
             </h3>
             <Link
               href="/creators?sort=trending"
-              className="text-xs text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+              className="text-xs font-medium text-[#949BA4] underline-offset-4 transition-colors hover:text-[#E32C19] hover:underline"
             >
               View All →
             </Link>

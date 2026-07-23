@@ -6,7 +6,11 @@ import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Card, Button } from "@/components/ui";
-import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import {
+  PLATFORM_CONFIG,
+  sortByPlatformOrder,
+  type Platform,
+} from "@/lib/constants/platforms";
 import { PlatformIcon } from "@/components/shared";
 import {
   formatNumber,
@@ -42,19 +46,6 @@ type Creator = {
 
 export type InviteState = "active" | "pending" | "expired";
 
-/** Primary platform first, then everything else in stable order. */
-function sortPlatformAccounts<T extends { platform: Platform }>(
-  accounts: T[],
-  primary: Platform | null,
-): T[] {
-  if (!primary) return accounts;
-  return [...accounts].sort((a, b) => {
-    if (a.platform === primary) return -1;
-    if (b.platform === primary) return 1;
-    return 0;
-  });
-}
-
 type CreatorRosterCardProps = {
   creator: Creator;
   accessId: string;
@@ -82,8 +73,9 @@ export function CreatorRosterCard({
     creator.growthRollups.find((g) => g.platform === creator.primaryPlatform) ??
     creator.growthRollups[0];
 
-  const trendUp = primaryGrowth?.trendDirection === "up";
-  const trendDown = primaryGrowth?.trendDirection === "down";
+  // Color from the actual value so a loss never renders green.
+  const trendUp = primaryGrowth?.pct7d != null && primaryGrowth.pct7d > 0;
+  const trendDown = primaryGrowth?.pct7d != null && primaryGrowth.pct7d < 0;
 
   const regenerateMutation = trpc.talentManager.regenerateInvite.useMutation({
     onSuccess: (data) => {
@@ -179,10 +171,7 @@ export function CreatorRosterCard({
               className="mt-1.5 flex flex-wrap items-center gap-1.5"
               aria-label="Connected platforms"
             >
-              {sortPlatformAccounts(
-                creator.platformAccounts,
-                creator.primaryPlatform,
-              ).map((account) => (
+              {sortByPlatformOrder(creator.platformAccounts).map((account) => (
                 <span
                   key={account.platform}
                   title={`${PLATFORM_CONFIG[account.platform].name} — @${account.platformUsername}`}
@@ -220,7 +209,7 @@ export function CreatorRosterCard({
                   className={cn(
                     "text-sm font-bold",
                     trendUp && "text-[#22c55e]",
-                    trendDown && "text-[#ef4444]",
+                    trendDown && "text-[#E32C19]",
                     !trendUp && !trendDown && "text-[#949BA4]",
                   )}
                 >
@@ -246,7 +235,7 @@ export function CreatorRosterCard({
                     height="12"
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="#ef4444"
+                    stroke="#E32C19"
                     strokeWidth="3"
                   >
                     <path d="m6 9 6 6 6-6" />

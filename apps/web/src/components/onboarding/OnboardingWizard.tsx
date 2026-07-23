@@ -55,7 +55,7 @@ export function OnboardingWizard({
   if (step === 1) {
     return (
       <Card className="space-y-4">
-        <h2 className="text-2xl font-bold text-[#F2F3F5]">
+        <h2 className="font-display text-2xl font-bold tracking-tight text-[#F2F3F5]">
           What brings you here?
         </h2>
         <RolePicker value={role} onSelect={selectRole} />
@@ -67,7 +67,7 @@ export function OnboardingWizard({
   if (step === 2) {
     return (
       <Card className="space-y-4">
-        <h2 className="text-2xl font-bold text-[#F2F3F5]">
+        <h2 className="font-display text-2xl font-bold tracking-tight text-[#F2F3F5]">
           Tell us about yourself
         </h2>
         <input
@@ -93,7 +93,7 @@ export function OnboardingWizard({
 
   return (
     <Card className="space-y-4">
-      <h2 className="text-2xl font-bold text-[#F2F3F5]">
+      <h2 className="font-display text-2xl font-bold tracking-tight text-[#F2F3F5]">
         Already tracked by TwitchMetrics?
       </h2>
       <p className="text-sm text-[#949BA4]">

@@ -6,7 +6,11 @@ import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
-import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import {
+  PLATFORM_CONFIG,
+  sortByPlatformOrder,
+  type Platform,
+} from "@/lib/constants/platforms";
 import { PlatformIcon } from "@/components/shared";
 import {
   formatNumber,
@@ -231,16 +235,14 @@ export function RosterListView({
               creator.growthRollups.find(
                 (g) => g.platform === creator.primaryPlatform,
               ) ?? creator.growthRollups[0];
-            const trendUp = primaryGrowth?.trendDirection === "up";
-            const trendDown = primaryGrowth?.trendDirection === "down";
-            const sortedPlatforms =
-              creator.platformAccounts.length > 0 && creator.primaryPlatform
-                ? [...creator.platformAccounts].sort((x, y) => {
-                    if (x.platform === creator.primaryPlatform) return -1;
-                    if (y.platform === creator.primaryPlatform) return 1;
-                    return 0;
-                  })
-                : creator.platformAccounts;
+            // Color from the actual value so a loss never renders green.
+            const trendUp =
+              primaryGrowth?.pct7d != null && primaryGrowth.pct7d > 0;
+            const trendDown =
+              primaryGrowth?.pct7d != null && primaryGrowth.pct7d < 0;
+            const sortedPlatforms = sortByPlatformOrder(
+              creator.platformAccounts,
+            );
             const isActive = inviteState === "active";
             const profileHref = isActive
               ? `/talent-manager/creator/${creator.slug}`
@@ -315,7 +317,7 @@ export function RosterListView({
                       className={cn(
                         "text-sm font-medium",
                         trendUp && "text-[#22c55e]",
-                        trendDown && "text-[#ef4444]",
+                        trendDown && "text-[#E32C19]",
                         !trendUp && !trendDown && "text-[#949BA4]",
                       )}
                     >

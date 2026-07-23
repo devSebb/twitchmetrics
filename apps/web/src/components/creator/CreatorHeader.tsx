@@ -6,6 +6,7 @@ import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { sortByPlatformOrder } from "@/lib/constants/platforms";
 import { PlatformIcon, SyncStatus } from "@/components/shared";
 
 type PlatformAccountData = {
@@ -256,7 +257,7 @@ export function CreatorHeader({
 
             {/* Platform breakdown */}
             <div className="flex flex-wrap items-end gap-5 lg:gap-6">
-              {creator.platformAccounts.map((account) => (
+              {sortByPlatformOrder(creator.platformAccounts).map((account) => (
                 <PlatformAccountStat key={account.platform} account={account} />
               ))}
             </div>

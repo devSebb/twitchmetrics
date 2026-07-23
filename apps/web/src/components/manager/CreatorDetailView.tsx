@@ -5,7 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { Card, Badge, Button, Skeleton } from "@/components/ui";
-import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
+import {
+  PLATFORM_CONFIG,
+  sortByPlatformOrder,
+  type Platform,
+} from "@/lib/constants/platforms";
 import {
   formatNumber,
   formatPercent,
@@ -300,7 +304,7 @@ export function CreatorDetailView({
           Platform Breakdown
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {creator.platformAccounts.map((account) => {
+          {sortByPlatformOrder(creator.platformAccounts).map((account) => {
             const config = PLATFORM_CONFIG[account.platform];
             const growth = creator.growthRollups.find(
               (g) => g.platform === account.platform,
@@ -335,10 +339,10 @@ export function CreatorDetailView({
                     {growth && growth.pct7d !== null && (
                       <span
                         className={`text-xs font-medium ${
-                          growth.trendDirection === "up"
+                          growth.pct7d > 0
                             ? "text-[#22c55e]"
-                            : growth.trendDirection === "down"
-                              ? "text-[#ef4444]"
+                            : growth.pct7d < 0
+                              ? "text-[#E32C19]"
                               : "text-[#949BA4]"
                         }`}
                       >

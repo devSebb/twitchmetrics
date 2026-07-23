@@ -75,7 +75,7 @@ function AudienceColumn({
         />
       )}
 
-      <div className="relative">
+      <div className="relative flex flex-1 flex-col">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#E32C19]">
           <Eyebrow size={14} weight="duotone" />
           {eyebrow}
@@ -102,7 +102,7 @@ function AudienceColumn({
           ))}
         </ul>
 
-        <div className="mt-10">
+        <div className="mt-auto pt-10">
           <Link
             href={ctaHref}
             className={

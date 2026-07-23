@@ -143,6 +143,26 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfigEntry> = {
 
 export const SUPPORTED_PLATFORMS: Platform[] = Object.values(Platform);
 
+/** Canonical display order whenever platforms are lined up in the UI. */
+export const PLATFORM_DISPLAY_ORDER: Platform[] = [
+  Platform.twitch,
+  Platform.youtube,
+  Platform.kick,
+  Platform.instagram,
+  Platform.tiktok,
+  Platform.x,
+];
+
+export function sortByPlatformOrder<T extends { platform: Platform }>(
+  items: T[],
+): T[] {
+  return [...items].sort(
+    (a, b) =>
+      PLATFORM_DISPLAY_ORDER.indexOf(a.platform) -
+      PLATFORM_DISPLAY_ORDER.indexOf(b.platform),
+  );
+}
+
 export function getPlatformConfig(platform: Platform): PlatformConfigEntry {
   return PLATFORM_CONFIG[platform];
 }

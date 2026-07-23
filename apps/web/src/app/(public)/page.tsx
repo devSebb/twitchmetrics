@@ -37,7 +37,7 @@ async function getLandingData() {
     // Top games by current viewers
     db.game.findMany({
       orderBy: { currentViewers: "desc" },
-      take: 5,
+      take: 7,
     }),
   ]);
 
@@ -146,7 +146,7 @@ export default async function LandingPage() {
       <HowItWorks />
       <AudienceSplit />
       <TrendingSection
-        topChannels={topCreators.slice(0, 5)}
+        topChannels={topCreators.slice(0, 7)}
         topGames={topGames}
         trendingCreators={trendingCreators}
       />
