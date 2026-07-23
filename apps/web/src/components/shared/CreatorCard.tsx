@@ -70,15 +70,16 @@ export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
         href={`/creator/${creator.slug}`}
         className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-[#383A40]"
       >
-        {/* Avatar */}
-        <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
+        {/* Avatar — h-12 matches the game-cover row height in TrendingSection
+            so the Top Channels and Top Games cards stay the same size. */}
+        <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
           {safeAvatarUrl ? (
             <Image
               src={safeAvatarUrl}
               alt={creator.displayName}
               fill
               className="object-cover"
-              sizes="40px"
+              sizes="48px"
             />
           ) : (
             <div
