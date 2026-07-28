@@ -6,7 +6,7 @@ import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { resolveAvatar } from "@/lib/avatar";
-import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { getLatestTimestamp } from "@/lib/metric-freshness";
 import { CreatorHeader } from "@/components/creator";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
@@ -226,7 +226,9 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     image: avatarUrl ?? undefined,
     description: creator.bio ?? undefined,
     sameAs: creator.platformAccounts
-      .map((a) => getSafePlatformProfileUrl(a.platform, a.platformUrl))
+      .map((a) =>
+        getPlatformProfileUrl(a.platform, a.platformUrl, a.platformUsername),
+      )
       .filter((url): url is string => url !== null),
     interactionStatistic: {
       "@type": "InteractionCounter",

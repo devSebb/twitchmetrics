@@ -160,8 +160,8 @@ export function CreatorList({ rows }: Props) {
               <th className={HEADER_CLASS}>Platforms</th>
               <SortableHeader label="Followers" sortValue="followers" />
               <SortableHeader label="7d Trend" sortValue="trending" />
-              <th className={HEADER_CLASS}>Air Time</th>
-              <th className={HEADER_CLASS}>Avg Air Time</th>
+              <th className={HEADER_CLASS}>Airtime</th>
+              <th className={HEADER_CLASS}>Avg Airtime</th>
               <th className={HEADER_CLASS}>Peak Viewers</th>
               <th className={HEADER_CLASS}>Avg Viewers</th>
             </tr>

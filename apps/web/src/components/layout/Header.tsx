@@ -66,8 +66,8 @@ export async function Header() {
           />
         </Link>
 
-        {/* Nav links */}
-        <nav className="hidden items-center gap-7 lg:flex">
+        {/* Nav links — centered and evenly spread between the logo and search bar */}
+        <nav className="hidden flex-1 items-center justify-center gap-8 lg:flex xl:gap-12">
           {PRIMARY_NAV_LINKS.map((link) => (
             <Link
               key={link.href}

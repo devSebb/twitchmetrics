@@ -25,7 +25,7 @@ export function CreatorShowcase({ creators }: CreatorShowcaseProps) {
   return (
     <section className="bg-[#2B2D31] py-12">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[#383A40]">
+        <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4">
           {creators.map((creator) => (
             <div
               key={creator.slug}

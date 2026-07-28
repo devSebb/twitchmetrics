@@ -88,7 +88,7 @@ function ChannelRow({
             )}
             <span className="truncate">
               {formatNumber(channel.avgViewers)} latest viewers &middot;{" "}
-              {Math.max(1, Math.round(channel.airtime / 3600))}h Air Time
+              {Math.max(1, Math.round(channel.airtime / 3600))}h Airtime
             </span>
           </div>
         )}

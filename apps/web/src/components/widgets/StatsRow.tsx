@@ -115,7 +115,7 @@ export function StatsRow({ profile }: StatsRowProps) {
 
   const streamingStatDefs = [
     {
-      label: "Air Time",
+      label: "Airtime",
       value:
         streamingStats?.airTimeSeconds != null
           ? formatDuration(streamingStats.airTimeSeconds)
@@ -123,7 +123,7 @@ export function StatsRow({ profile }: StatsRowProps) {
       platforms: twitchOnly,
     },
     {
-      label: "Avg Air Time",
+      label: "Avg Airtime",
       value:
         streamingStats?.avgAirTimeSeconds != null
           ? formatDuration(streamingStats.avgAirTimeSeconds)
@@ -147,7 +147,7 @@ export function StatsRow({ profile }: StatsRowProps) {
       platforms: streamingStats?.platforms,
     },
     {
-      label: "Followers Gain",
+      label: "New Followers",
       value:
         streamingStats != null
           ? streamingStats.followersGain > 0

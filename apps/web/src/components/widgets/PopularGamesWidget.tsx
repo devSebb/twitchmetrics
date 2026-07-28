@@ -108,7 +108,7 @@ function GameCard({ game }: GameCardProps) {
               {game.observationCount === 1 ? "observation" : "observations"}
             </span>
           ) : (
-            <span>Air Time {formatDuration(game.airtimeMinutes * 60)}</span>
+            <span>Airtime {formatDuration(game.airtimeMinutes * 60)}</span>
           )}
         </div>
       </div>

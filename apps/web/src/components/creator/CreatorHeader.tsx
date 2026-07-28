@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
-import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { sortByPlatformOrder } from "@/lib/constants/platforms";
 import { PlatformIcon, SyncStatus } from "@/components/shared";
 
@@ -57,9 +57,10 @@ function getFollowerLabel(platform: Platform): string {
 }
 
 function PlatformAccountStat({ account }: { account: PlatformAccountData }) {
-  const profileUrl = getSafePlatformProfileUrl(
+  const profileUrl = getPlatformProfileUrl(
     account.platform,
     account.platformUrl,
+    account.platformUsername,
   );
   const content = (
     <>

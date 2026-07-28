@@ -11,7 +11,7 @@ export const REPORT_METRIC_LABELS: Record<MetricKey, string> = {
   avgViewers: "Avg Viewers",
   peakViewers: "Peak Viewers",
   topCreators: "Top Channels",
-  airtime: "Air Time",
+  airtime: "Airtime",
   subscribers: "Subscribers",
   gender: "Gender Split",
   country: "Primary Country",

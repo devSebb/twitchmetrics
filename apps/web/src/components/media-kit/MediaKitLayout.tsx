@@ -12,7 +12,7 @@ import {
 import { formatNumber, formatPercent, formatDate } from "@/lib/utils/format";
 import { Badge, Button, Card } from "@/components/ui";
 import { getSafeImageSrc } from "@/lib/safeImage";
-import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { PlatformIcon } from "@/components/shared";
 
 type PlatformAccount = {
@@ -256,9 +256,10 @@ export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
                       ? "down"
                       : null
                   : (growth?.trendDirection ?? null);
-              const profileUrl = getSafePlatformProfileUrl(
+              const profileUrl = getPlatformProfileUrl(
                 account.platform,
                 account.platformUrl,
+                account.platformUsername,
               );
 
               return (
