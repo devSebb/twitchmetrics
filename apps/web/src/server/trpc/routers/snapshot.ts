@@ -5,6 +5,7 @@ import { publicProcedure, router } from "../root";
 import { adminProcedure } from "../middleware";
 import { getTierForCreator } from "@/lib/constants/tiers";
 import { getPopularGames } from "@/server/services/popular-games";
+import { isRecentObservation } from "@/lib/metric-freshness";
 
 type StreamHatchetAccount = {
   platform: Platform;
@@ -194,6 +195,126 @@ export const snapshotRouter = router({
       });
 
       return snapshots;
+    }),
+
+  // Viewer history for the Viewer Count widget. MetricSnapshots (fine-grained,
+  // API-polled) are preferred; platforms without them — notably the SH kick
+  // catalog, which is never API-polled — fall back to StreamHatchet daily
+  // rollups (one point per streamed day).
+  getViewerHistory: publicProcedure
+    .input(
+      z.object({
+        creatorProfileId: z.string().uuid(),
+        platform: z.nativeEnum(Platform),
+        period: z.enum(["7d", "30d", "90d"]).default("30d"),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const days = { "7d": 7, "30d": 30, "90d": 90 }[input.period];
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const snapshots = await ctx.prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          platform: input.platform,
+          snapshotAt: { gte: since },
+        },
+        select: { snapshotAt: true, extendedMetrics: true },
+        orderBy: { snapshotAt: "asc" },
+      });
+
+      const points: { date: string; viewers: number; game?: string }[] = [];
+      for (const snapshot of snapshots) {
+        const ext = snapshot.extendedMetrics as Record<string, unknown> | null;
+        const viewers =
+          typeof ext?.AVG_VIEWERS === "number"
+            ? ext.AVG_VIEWERS
+            : typeof ext?.LIVE_VIEWER_COUNT === "number"
+              ? ext.LIVE_VIEWER_COUNT
+              : null;
+        if (viewers === null) continue;
+
+        const game =
+          typeof ext?.CURRENT_GAME === "string" ? ext.CURRENT_GAME : undefined;
+        points.push({
+          date: snapshot.snapshotAt.toISOString(),
+          viewers,
+          ...(game !== undefined ? { game } : {}),
+        });
+      }
+
+      // Live badge from the latest snapshot, when fresh.
+      let liveInfo: { viewers: number | null } | null = null;
+      const latest = snapshots[snapshots.length - 1];
+      if (latest && isRecentObservation(latest.snapshotAt)) {
+        const ext = latest.extendedMetrics as Record<string, unknown> | null;
+        if (ext && (ext.IS_LIVE === 1 || ext.IS_LIVE === true)) {
+          liveInfo = {
+            viewers:
+              typeof ext.LIVE_VIEWER_COUNT === "number"
+                ? ext.LIVE_VIEWER_COUNT
+                : null,
+          };
+        }
+      }
+
+      let source: "snapshots" | "streamhatchet_rollups" = "snapshots";
+
+      if (
+        points.length === 0 &&
+        STREAMHATCHET_SUPPORTED_PLATFORMS.includes(input.platform)
+      ) {
+        const accounts = (
+          await getStreamHatchetAccounts(ctx.prisma, input.creatorProfileId)
+        ).filter((account) => account.platform === input.platform);
+        const identity = streamHatchetRollupIdentityWhere(accounts);
+
+        if (identity.length > 0) {
+          const rollups = await ctx.prisma.channelDailyRollup.findMany({
+            where: { OR: identity, date: { gte: since } },
+            select: {
+              date: true,
+              averageViewers: true,
+              primaryGameName: true,
+            },
+            orderBy: { date: "asc" },
+          });
+
+          // yt/ytg can both contribute rows for one day — keep the max.
+          const byDay = new Map<
+            string,
+            { viewers: number; game: string | null }
+          >();
+          for (const rollup of rollups) {
+            if (rollup.averageViewers == null) continue;
+            const dayKey = rollup.date.toISOString();
+            const viewers = Math.round(rollup.averageViewers);
+            const existing = byDay.get(dayKey);
+            if (!existing || viewers > existing.viewers) {
+              byDay.set(dayKey, {
+                viewers,
+                game: rollup.primaryGameName ?? null,
+              });
+            }
+          }
+
+          for (const [date, entry] of byDay) {
+            points.push({
+              date,
+              viewers: entry.viewers,
+              ...(entry.game !== null ? { game: entry.game } : {}),
+            });
+          }
+          if (byDay.size > 0) source = "streamhatchet_rollups";
+        }
+      }
+
+      const latestAt =
+        latest?.snapshotAt.toISOString() ??
+        points[points.length - 1]?.date ??
+        null;
+
+      return { points, liveInfo, latestAt, source };
     }),
 
   getLatestMetrics: publicProcedure

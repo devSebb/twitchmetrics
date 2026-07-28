@@ -317,6 +317,76 @@ async function persistDiscoveryRow(
   });
 }
 
+// Kick has no other follower source: the official Kick API returns no
+// follower counts and the S3 daily-sessions feed has no follower field. SH
+// live-channel rows DO carry `followers`, so harvest them here — refresh the
+// matched PlatformAccount and accrue at most one follower MetricSnapshot per
+// account per ~day so kick follower history builds up organically.
+const KICK_FOLLOWER_SNAPSHOT_MIN_AGE_MS = 20 * 60 * 60 * 1000;
+
+async function syncKickFollowersFromLiveChannels(
+  channels: StreamHatchetLiveChannel[],
+  snapshotAt: Date,
+) {
+  const followersByUserId = new Map<string, number>();
+  for (const channel of channels) {
+    if (internalPlatformForStreamHatchet(channel.platform) !== "kick") continue;
+    const followers = channel.followers;
+    if (
+      typeof followers !== "number" ||
+      !Number.isFinite(followers) ||
+      followers < 0
+    ) {
+      continue;
+    }
+    followersByUserId.set(String(channel.user_id), Math.round(followers));
+  }
+  if (followersByUserId.size === 0) return;
+
+  const accounts = await prisma.platformAccount.findMany({
+    where: {
+      platform: "kick",
+      platformUserId: { in: [...followersByUserId.keys()] },
+    },
+    select: { id: true, creatorProfileId: true, platformUserId: true },
+  });
+
+  for (const account of accounts) {
+    const followers = followersByUserId.get(account.platformUserId);
+    if (followers === undefined) continue;
+
+    await prisma.platformAccount.update({
+      where: { id: account.id },
+      data: { followerCount: BigInt(followers), lastSyncedAt: snapshotAt },
+    });
+
+    const recentSnapshot = await prisma.metricSnapshot.findFirst({
+      where: {
+        creatorProfileId: account.creatorProfileId,
+        platform: "kick",
+        followerCount: { not: null },
+        snapshotAt: {
+          gte: new Date(
+            snapshotAt.getTime() - KICK_FOLLOWER_SNAPSHOT_MIN_AGE_MS,
+          ),
+        },
+      },
+      select: { id: true },
+    });
+    if (recentSnapshot) continue;
+
+    await prisma.metricSnapshot.create({
+      data: {
+        creatorProfileId: account.creatorProfileId,
+        platform: "kick",
+        snapshotAt,
+        followerCount: BigInt(followers),
+        extendedMetrics: { SOURCE: "streamhatchet_live_channels" },
+      },
+    });
+  }
+}
+
 async function persistLiveChannels(
   game: GameMatch,
   channels: StreamHatchetLiveChannel[],
@@ -374,6 +444,16 @@ async function persistLiveChannels(
       update: row,
       create: row,
     });
+  }
+
+  try {
+    await syncKickFollowersFromLiveChannels(channels, snapshotAt);
+  } catch (error) {
+    // Follower harvesting is best-effort; never fail the game persist over it.
+    log.warn(
+      { err: error, game: game.name },
+      "Kick follower sync from live channels failed",
+    );
   }
 }
 

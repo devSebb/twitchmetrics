@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import type { Platform } from "@twitchmetrics/database";
+import { useState } from "react";
 import { ViewerCountChart } from "@/components/charts";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { SyncStatus } from "@/components/shared";
 import { trpc } from "@/lib/trpc";
 import { formatNumber } from "@/lib/utils/format";
-import { isRecentObservation } from "@/lib/metric-freshness";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type ViewerCountWidgetProps = {
@@ -19,61 +17,25 @@ const PERIODS = ["7d", "30d", "90d"] as const;
 export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
   const primaryPlatform = profile.primaryPlatform;
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>("30d");
+  // After the viewer touches the period selector, keep the widget visible even
+  // when the new period has no data — the sentinel would hide the whole card
+  // mid-interaction. The chart shows its own inline empty state instead.
+  const [hasInteracted, setHasInteracted] = useState(false);
 
-  const { data: snapshotData, isLoading } =
-    trpc.snapshot.getGrowthData.useQuery({
-      creatorProfileId: profile.id,
-      platform: primaryPlatform,
-      period,
-    });
+  // Server-side viewer extraction: MetricSnapshots when available, with a
+  // StreamHatchet daily-rollup fallback for platforms that aren't API-polled
+  // (e.g. the SH kick catalog).
+  const { data, isLoading } = trpc.snapshot.getViewerHistory.useQuery({
+    creatorProfileId: profile.id,
+    platform: primaryPlatform,
+    period,
+  });
 
-  // Extract viewer data from extendedMetrics
-  const chartData = useMemo(() => {
-    if (!snapshotData) return [];
+  const chartData = data?.points ?? [];
+  const liveInfo = data?.liveInfo ?? null;
+  const latestSnapshotAt = data?.latestAt ?? null;
 
-    return snapshotData
-      .map((s) => {
-        const ext = s.extendedMetrics as Record<string, unknown> | null;
-        const viewers =
-          typeof ext?.AVG_VIEWERS === "number"
-            ? ext.AVG_VIEWERS
-            : typeof ext?.LIVE_VIEWER_COUNT === "number"
-              ? ext.LIVE_VIEWER_COUNT
-              : null;
-
-        if (viewers === null) return null;
-
-        const game =
-          typeof ext?.CURRENT_GAME === "string" ? ext.CURRENT_GAME : undefined;
-        return game !== undefined
-          ? { date: new Date(s.snapshotAt).toISOString(), viewers, game }
-          : { date: new Date(s.snapshotAt).toISOString(), viewers };
-      })
-      .filter(
-        (d): d is { date: string; viewers: number; game?: string } =>
-          d !== null,
-      );
-  }, [snapshotData]);
-
-  // Check if currently live (from latest snapshot)
-  const liveInfo = useMemo(() => {
-    if (!snapshotData || snapshotData.length === 0) return null;
-
-    const latest = snapshotData[snapshotData.length - 1];
-    const ext = latest?.extendedMetrics as Record<string, unknown> | null;
-    if (!latest || !ext || !isRecentObservation(latest.snapshotAt)) return null;
-
-    const isLive = ext.IS_LIVE === 1 || ext.IS_LIVE === true;
-    const currentViewers =
-      typeof ext.LIVE_VIEWER_COUNT === "number" ? ext.LIVE_VIEWER_COUNT : null;
-
-    if (!isLive) return null;
-    return { viewers: currentViewers };
-  }, [snapshotData]);
-
-  const latestSnapshotAt = snapshotData?.at(-1)?.snapshotAt ?? null;
-
-  if (!isLoading && chartData.length === 0) {
+  if (!isLoading && chartData.length === 0 && !hasInteracted) {
     return <EmptyWidgetSentinel />;
   }
 
@@ -103,7 +65,10 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
           {PERIODS.map((p) => (
             <button
               key={p}
-              onClick={() => setPeriod(p)}
+              onClick={() => {
+                setHasInteracted(true);
+                setPeriod(p);
+              }}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 period === p
                   ? "bg-[#383A40] text-[#F2F3F5]"

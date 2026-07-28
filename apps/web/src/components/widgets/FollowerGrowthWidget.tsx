@@ -31,6 +31,15 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
     connectedPlatforms[0] ?? "twitch",
   );
   const [period, setPeriod] = useState("30d");
+  // Once the viewer touches the tabs, the widget must stay visible even when
+  // a selection has no data — returning the sentinel then would hide the
+  // whole card mid-interaction with no way to click back.
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  function selectPlatform(p: Platform | "all") {
+    setHasInteracted(true);
+    setPlatform(p);
+  }
 
   // Fetch data for selected platform (or primary when "all")
   const primaryQuery = trpc.snapshot.getGrowthData.useQuery(
@@ -70,11 +79,16 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
       ? allQueries.some((q) => q.isLoading)
       : primaryQuery.isLoading;
 
+  const isEmptySelection =
+    !isLoading && platform !== "all" && chartData.length === 0;
+
   if (connectedPlatforms.length === 0) {
     return <EmptyWidgetSentinel />;
   }
 
-  if (!isLoading && chartData.length === 0 && platform !== "all") {
+  // Hide the card only when the widget mounts with no data at all; after an
+  // interaction, show an inline empty state for the selected platform instead.
+  if (isEmptySelection && !hasInteracted) {
     return <EmptyWidgetSentinel />;
   }
 
@@ -84,7 +98,7 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
       <div className="mb-3 flex items-center gap-1">
         {connectedPlatforms.length > 1 && (
           <button
-            onClick={() => setPlatform("all")}
+            onClick={() => selectPlatform("all")}
             className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               platform === "all"
                 ? "bg-[#383A40] text-[#F2F3F5]"
@@ -97,7 +111,7 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
         {connectedPlatforms.map((p) => (
           <button
             key={p}
-            onClick={() => setPlatform(p)}
+            onClick={() => selectPlatform(p)}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               platform === p
                 ? "bg-[#383A40] text-[#F2F3F5]"
@@ -124,6 +138,18 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
           period={period}
           onPeriodChange={setPeriod}
         />
+      ) : isEmptySelection ? (
+        <div className="flex h-[400px] items-center justify-center rounded-lg border border-[#3F4147] bg-[#313338]">
+          <div className="px-6 text-center">
+            <p className="text-sm font-medium text-[#DBDEE1]">
+              No follower history for {PLATFORM_CONFIG[platform].name} yet
+            </p>
+            <p className="mt-1 text-xs text-[#949BA4]">
+              We track this account but haven&apos;t collected follower
+              snapshots for it.
+            </p>
+          </div>
+        </div>
       ) : (
         <FollowerGrowthChart
           data={chartData}

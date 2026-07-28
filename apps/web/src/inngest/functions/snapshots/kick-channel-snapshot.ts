@@ -194,11 +194,22 @@ export const kickChannelSnapshot = inngest.createFunction(
           };
         }
 
+        // Only poll accounts that need the Kick API: OAuth-connected or on a
+        // claimed profile. The full SH kick catalog (~88k accounts) gets its
+        // session/viewer data from the S3 daily-sessions import and follower
+        // counts from the SH live-channels sync — polling it here would blow
+        // Inngest's step-output and step-count limits (which is exactly what
+        // hung every run between 2026-07-13 and 2026-07-27).
         const accounts = (await step.run("load-kick-accounts", async () => {
           return prisma.platformAccount.findMany({
             where: {
               platform: "kick",
               platformUserId: { not: "" },
+              discoverySource: null,
+              OR: [
+                { isOAuthConnected: true },
+                { creatorProfile: { state: { in: ["claimed", "premium"] } } },
+              ],
             },
             select: {
               id: true,
