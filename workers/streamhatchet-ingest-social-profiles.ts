@@ -63,6 +63,7 @@ import {
   mergeProfiles,
   pickCanonical,
 } from "../apps/web/src/server/services/identity/merge";
+import { canonicalProfileId } from "../apps/web/src/server/services/identity/canonical-profile";
 
 const args = process.argv.slice(2);
 const BUCKET = "streamhatchet-social-profiles-data";
@@ -259,7 +260,11 @@ function extractContacts(config: Config, snapshot: string): void {
   log("info", "Extracted contacts (safe cols)");
 }
 
-/** Phase 2 — export our PlatformAccount rows for the 3 platforms to CSV for the join. */
+/**
+ * Phase 2 — export our PlatformAccount rows for the 3 platforms to CSV for the
+ * join. Accounts left on merge redirect stubs are attributed to their canonical
+ * creator so one Stream Hatchet contact does not look falsely ambiguous.
+ */
 async function exportOurAccounts(config: Config): Promise<number> {
   const path = `${config.workDir}/accounts.csv`;
   const platforms: Platform[] = ["twitch", "youtube", "kick"];
@@ -272,14 +277,22 @@ async function exportOurAccounts(config: Config): Promise<number> {
       id: string;
       platform: Platform;
       platformUserId: string;
-      creatorProfileId: string;
+      creatorProfile: {
+        id: string;
+        mergedIntoId: string | null;
+      };
     }[] = await prisma.platformAccount.findMany({
       where: { platform: { in: platforms } },
       select: {
         id: true,
         platform: true,
         platformUserId: true,
-        creatorProfileId: true,
+        creatorProfile: {
+          select: {
+            id: true,
+            mergedIntoId: true,
+          },
+        },
       },
       orderBy: { id: "asc" },
       take: pageSize,
@@ -291,7 +304,9 @@ async function exportOurAccounts(config: Config): Promise<number> {
       const uid = /[",]/.test(r.platformUserId)
         ? `"${r.platformUserId.replace(/"/g, '""')}"`
         : r.platformUserId;
-      lines.push(`${r.platform},${uid},${r.creatorProfileId}`);
+      lines.push(
+        `${r.platform},${uid},${canonicalProfileId(r.creatorProfile)}`,
+      );
     }
     total += rows.length;
     cursor = rows[rows.length - 1]!.id;
