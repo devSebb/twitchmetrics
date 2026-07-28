@@ -26,6 +26,7 @@ import { discoverCreators } from "./discovery/discover-creators";
 import { discoverGames } from "./discovery/discover-games";
 import { discoverSocialLinks } from "./discovery/discover-social-links";
 import { youtubeCrosslinkBackfill } from "./discovery/youtube-crosslink-backfill";
+import { finalizeStaleIngestionRuns } from "./maintenance/finalize-stale-runs";
 
 export const functions = [
   tier1Snapshot,
@@ -52,4 +53,5 @@ export const functions = [
   discoverGames,
   discoverSocialLinks,
   youtubeCrosslinkBackfill,
+  finalizeStaleIngestionRuns,
 ];
