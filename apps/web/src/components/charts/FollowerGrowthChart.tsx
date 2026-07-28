@@ -5,7 +5,9 @@ import type { EChartsOption } from "echarts";
 import type { Platform } from "@twitchmetrics/database";
 import { BaseChart } from "./BaseChart";
 import { CHART_PLATFORM_COLORS } from "./theme";
-import { formatNumber, formatDate } from "@/lib/utils/format";
+import { axisNumber, chartDateLabel, tooltipHtml, trendColor } from "./format";
+import { formatNumber } from "@/lib/utils/format";
+import { THEME } from "@/lib/constants/theme";
 
 const PERIODS = ["7d", "30d", "90d", "1y", "all"] as const;
 
@@ -47,14 +49,14 @@ export function FollowerGrowthChart({
         type: "category",
         data: dates,
         axisLabel: {
-          formatter: (val: string) => formatDate(val, "compact"),
+          formatter: (val: string) => chartDateLabel(val, "compact"),
         },
         boundaryGap: false,
       },
       yAxis: {
         type: "value",
         axisLabel: {
-          formatter: (val: number) => formatNumber(val),
+          formatter: axisNumber,
         },
         splitNumber: 4,
       },
@@ -68,21 +70,19 @@ export function FollowerGrowthChart({
           };
           const idx = p.dataIndex;
           const val = p.value;
-          const date = formatDate(p.axisValue);
           const prev = idx > 0 ? (values[idx - 1] ?? val) : val;
           const diff = val - prev;
           const sign = diff >= 0 ? "+" : "";
-          const deltaStr = `${sign}${formatNumber(diff)}`;
-          const deltaColor =
-            diff > 0 ? "#22c55e" : diff < 0 ? "#ef4444" : "#949BA4";
 
-          return `
-            <div style="font-size:13px">
-              <div style="margin-bottom:4px;color:#949BA4">${date}</div>
-              <div style="font-weight:600">${formatNumber(val)}</div>
-              <div style="color:${deltaColor};font-size:12px">${deltaStr} from previous</div>
-            </div>
-          `;
+          return tooltipHtml(chartDateLabel(p.axisValue, "full"), [
+            { value: formatNumber(val) },
+            {
+              value: `${sign}${formatNumber(diff)} from previous`,
+              color: trendColor(diff),
+              small: true,
+              plain: true,
+            },
+          ]);
         },
       },
       dataZoom: [
@@ -126,7 +126,7 @@ export function FollowerGrowthChart({
                   show: true,
                   formatter: () => formatNumber(peakValue),
                   position: "top" as const,
-                  color: "#F2F3F5",
+                  color: THEME.colors.textHeader,
                   fontSize: 11,
                 },
               },

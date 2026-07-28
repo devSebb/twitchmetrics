@@ -64,6 +64,7 @@ import {
   pickCanonical,
 } from "../apps/web/src/server/services/identity/merge";
 import { canonicalProfileId } from "../apps/web/src/server/services/identity/canonical-profile";
+import { normalizePlatformUrlForStorage } from "../apps/web/src/lib/platform-profile-url";
 
 const args = process.argv.slice(2);
 const BUCKET = "streamhatchet-social-profiles-data";
@@ -909,7 +910,10 @@ async function attachSocialLinks(
               platformUserId: link.user_id,
               platformUsername:
                 sanitizeText(link.username, 200) ?? link.user_id,
-              platformUrl: sanitizeText(link.raw_url, 500),
+              platformUrl: normalizePlatformUrlForStorage(
+                link.platform,
+                sanitizeText(link.raw_url, 500),
+              ),
               followerCount: reachToBigInt(link.reach),
               isOAuthConnected: false,
               discoverySource: DISCOVERY_SOURCE,
@@ -952,7 +956,10 @@ async function attachSocialLinks(
                     platformUserId: u.link.user_id,
                     platformUsername:
                       sanitizeText(u.link.username, 200) ?? u.link.user_id,
-                    platformUrl: sanitizeText(u.link.raw_url, 500),
+                    platformUrl: normalizePlatformUrlForStorage(
+                      u.link.platform,
+                      sanitizeText(u.link.raw_url, 500),
+                    ),
                     followerCount: reachToBigInt(u.link.reach),
                   },
                 }),

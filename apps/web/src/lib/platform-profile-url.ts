@@ -34,6 +34,32 @@ export function getSafePlatformProfileUrl(
   }
 }
 
+/**
+ * Write-side normalizer for vendor-supplied profile URLs. Accepts everything
+ * getSafePlatformProfileUrl accepts, plus the common raw forms Stream Hatchet
+ * ships (scheme-less "instagram.com/foo", http://), which are upgraded to
+ * https before validation. Returns the canonical serialized URL, or null when
+ * the value cannot be made safe — never store a URL this module would refuse
+ * to render.
+ */
+export function normalizePlatformUrlForStorage(
+  platform: Platform,
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const direct = getSafePlatformProfileUrl(platform, trimmed);
+  if (direct) return direct;
+
+  const upgraded = trimmed.replace(/^(https?:)?\/\//i, "https://");
+  const candidate = /^https:\/\//i.test(upgraded)
+    ? upgraded
+    : `https://${upgraded}`;
+  return getSafePlatformProfileUrl(platform, candidate);
+}
+
 /** Platforms whose profile URL can be derived from a bare handle. YouTube is
  *  excluded — its `platformUsername` is often a display name, not a handle. */
 const PLATFORM_USERNAME_URL: Partial<

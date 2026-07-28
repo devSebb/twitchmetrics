@@ -5,7 +5,9 @@ import type { EChartsOption } from "echarts";
 import type { Platform } from "@twitchmetrics/database";
 import { BaseChart } from "./BaseChart";
 import { CHART_PLATFORM_COLORS } from "./theme";
-import { formatNumber, formatDate } from "@/lib/utils/format";
+import { axisNumber, chartDateLabel, tooltipHtml } from "./format";
+import { formatNumber } from "@/lib/utils/format";
+import { THEME } from "@/lib/constants/theme";
 
 type ViewerCountChartProps = {
   data: { date: string; viewers: number; game?: string }[];
@@ -45,14 +47,14 @@ export function ViewerCountChart({
         type: "category",
         data: dates,
         axisLabel: {
-          formatter: (val: string) => formatDate(val, "compact"),
+          formatter: (val: string) => chartDateLabel(val, "compact"),
         },
         boundaryGap: false,
       },
       yAxis: {
         type: "value",
         axisLabel: {
-          formatter: (val: number) => formatNumber(val),
+          formatter: axisNumber,
         },
         splitNumber: 4,
       },
@@ -64,17 +66,21 @@ export function ViewerCountChart({
             value: number;
             axisValue: string;
           };
-          const date = formatDate(p.axisValue);
-          const viewers = formatNumber(p.value);
           const game = data[p.dataIndex]?.game;
 
-          return `
-            <div style="font-size:13px">
-              <div style="margin-bottom:4px;color:#949BA4">${date}</div>
-              <div style="font-weight:600">${viewers} viewers</div>
-              ${game ? `<div style="color:#949BA4;font-size:12px">${game}</div>` : ""}
-            </div>
-          `;
+          return tooltipHtml(chartDateLabel(p.axisValue, "full"), [
+            { value: `${formatNumber(p.value)} viewers` },
+            ...(game
+              ? [
+                  {
+                    value: game,
+                    color: THEME.colors.textMuted,
+                    small: true,
+                    plain: true,
+                  },
+                ]
+              : []),
+          ]);
         },
       },
       series: [
@@ -106,11 +112,11 @@ export function ViewerCountChart({
                 label: {
                   formatter: `Avg: ${formatNumber(avg)}`,
                   position: "insideEndTop" as const,
-                  color: "#949BA4",
+                  color: THEME.colors.textMuted,
                   fontSize: 11,
                 },
                 lineStyle: {
-                  color: "#949BA4",
+                  color: THEME.colors.textMuted,
                   type: "dashed" as const,
                   width: 1,
                 },
@@ -129,7 +135,7 @@ export function ViewerCountChart({
                   show: true,
                   formatter: () => formatNumber(peakValue),
                   position: "top" as const,
-                  color: "#F2F3F5",
+                  color: THEME.colors.textHeader,
                   fontSize: 11,
                 },
               },

@@ -12,6 +12,7 @@
  */
 
 import { PrismaClient, type Platform } from "@prisma/client";
+import { normalizePlatformUrlForStorage } from "../apps/web/src/lib/platform-profile-url";
 
 // ============================================================
 // CONFIGURATION
@@ -331,7 +332,10 @@ async function processCreator(
     let platformUserId = link.username;
     let platformUsername = link.username;
     let platformDisplayName: string | null = null;
-    let platformUrl: string | null = link.url;
+    let platformUrl: string | null = normalizePlatformUrlForStorage(
+      link.platform,
+      link.url,
+    );
     let platformAvatarUrl: string | null = null;
     let followerCount: bigint | null = null;
     let postCount: number | null = null;

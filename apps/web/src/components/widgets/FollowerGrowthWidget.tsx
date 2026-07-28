@@ -168,7 +168,12 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
 // ----------------------------------------------------------------
 
 import { BaseChart } from "@/components/charts";
-import { formatNumber, formatDate } from "@/lib/utils/format";
+import {
+  axisNumber,
+  chartDateLabel,
+  tooltipHtml,
+} from "@/components/charts/format";
+import { formatNumber } from "@/lib/utils/format";
 import type { EChartsOption } from "echarts";
 
 type AllPlatformsChartProps = {
@@ -241,20 +246,20 @@ function AllPlatformsChart({
 
     return {
       grid: { left: 60, right: 20, top: 30, bottom: 60 },
-      legend: {
-        show: true,
-        top: 0,
-        textStyle: { color: "#949BA4", fontSize: 11 },
-      },
+      legend: { show: true, top: 0, textStyle: { fontSize: 11 } },
       xAxis: {
         type: "category",
         data: sortedDates,
-        axisLabel: { formatter: (val: string) => formatDate(val, "compact") },
+        // Keys are UTC day buckets ("2026-07-20") — chartDateLabel formats
+        // them in UTC so the label always names the bucketed day.
+        axisLabel: {
+          formatter: (val: string) => chartDateLabel(val, "compact"),
+        },
         boundaryGap: false,
       },
       yAxis: {
         type: "value",
-        axisLabel: { formatter: (val: number) => formatNumber(val) },
+        axisLabel: { formatter: axisNumber },
         splitNumber: 4,
       },
       tooltip: {
@@ -262,18 +267,21 @@ function AllPlatformsChart({
         formatter: (params: unknown) => {
           const arr = Array.isArray(params) ? params : [params];
           const first = arr[0] as { axisValue: string };
-          let html = `<div style="font-size:13px"><div style="margin-bottom:4px;color:#949BA4">${formatDate(first.axisValue)}</div>`;
-          for (const item of arr as {
+          const items = arr as {
             seriesName: string;
             value: number | null;
             color: string;
-          }[]) {
-            if (item.value !== null) {
-              html += `<div><span style="color:${item.color}">●</span> ${item.seriesName}: <b>${formatNumber(item.value)}</b></div>`;
-            }
-          }
-          html += "</div>";
-          return html;
+          }[];
+          return tooltipHtml(
+            chartDateLabel(first.axisValue, "full"),
+            items
+              .filter((item) => item.value !== null)
+              .map((item) => ({
+                bullet: item.color,
+                label: item.seriesName,
+                value: formatNumber(item.value!),
+              })),
+          );
         },
       },
       dataZoom: [{ type: "slider", start: 0, end: 100, height: 24, bottom: 8 }],

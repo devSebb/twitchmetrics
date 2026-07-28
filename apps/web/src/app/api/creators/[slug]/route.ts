@@ -4,6 +4,7 @@ import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 import { resolveCreatorSlug } from "@/server/services/creator-visibility";
+import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
 
 export async function GET(
   request: Request,
@@ -34,7 +35,7 @@ export async function GET(
     );
   }
 
-  const cacheKey = `creator:v2:${resolution.canonicalSlug}`;
+  const cacheKey = `creator:v3:${resolution.canonicalSlug}`;
 
   // Check cache first
   const cached = await cacheGet(cacheKey);
@@ -131,7 +132,18 @@ export async function GET(
     );
   }
 
-  const serialized = serializeBigInt(creator);
+  // Public payload only ever carries render-safe profile URLs, regardless of
+  // what historical ingest wrote at rest.
+  const serialized = serializeBigInt({
+    ...creator,
+    platformAccounts: creator.platformAccounts.map((account) => ({
+      ...account,
+      platformUrl: getSafePlatformProfileUrl(
+        account.platform,
+        account.platformUrl,
+      ),
+    })),
+  });
 
   // Cache serialized result (non-blocking)
   await cacheSet(cacheKey, serialized, CACHE_TTL.CREATOR_PROFILE);

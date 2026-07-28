@@ -27,19 +27,15 @@ function ageGenderOption(
   const genders = Array.from(genderSet);
   return {
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    legend: { top: 0, textStyle: { color: "#DBDEE1" } },
+    legend: { top: 0 },
     grid: { left: 40, right: 24, top: 40, bottom: 30 },
     xAxis: {
       type: "category",
       data: ages,
-      axisLabel: { color: "#949BA4" },
     },
     yAxis: {
       type: "value",
-      axisLabel: {
-        color: "#949BA4",
-        formatter: "{value}%",
-      },
+      axisLabel: { formatter: "{value}%" },
     },
     series: genders.map((gender) => ({
       name: gender[0]?.toUpperCase() + gender.slice(1),
@@ -61,21 +57,17 @@ function distributionBarOption(
     title: {
       text: title,
       left: 0,
-      textStyle: { color: "#F2F3F5", fontSize: 14 },
+      textStyle: { fontSize: 14 },
     },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     grid: { left: 80, right: 20, top: 36, bottom: 24 },
     xAxis: {
       type: "value",
-      axisLabel: {
-        color: "#949BA4",
-        formatter: "{value}%",
-      },
+      axisLabel: { formatter: "{value}%" },
     },
     yAxis: {
       type: "category",
       data: entries.map(([label]) => label),
-      axisLabel: { color: "#949BA4" },
     },
     series: [
       {
@@ -92,16 +84,13 @@ function pieOption(title: string, data: Record<string, number>): EChartsOption {
     title: {
       text: title,
       left: 0,
-      textStyle: { color: "#F2F3F5", fontSize: 14 },
+      textStyle: { fontSize: 14 },
     },
     tooltip: {
       trigger: "item",
       formatter: "{b}: {d}%",
     },
-    legend: {
-      bottom: 0,
-      textStyle: { color: "#949BA4" },
-    },
+    legend: { bottom: 0 },
     series: [
       {
         type: "pie",
@@ -129,7 +118,19 @@ export function DemographicsCharts({
     Boolean(trafficSources && Object.keys(trafficSources).length > 0);
 
   if (!hasAnyData) {
-    return null;
+    return (
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold text-[#F2F3F5]">
+          Audience insights
+        </h2>
+        <div className="flex h-40 items-center justify-center rounded-lg border border-[#3F4147] bg-[#313338]">
+          <p className="max-w-md px-6 text-center text-sm text-[#949BA4]">
+            Audience demographics aren&apos;t available yet. They appear here
+            once a connected platform starts reporting them.
+          </p>
+        </div>
+      </section>
+    );
   }
 
   return (
