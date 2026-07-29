@@ -57,7 +57,8 @@ async function getLandingData() {
         c.growthRollups.find((g) => g.platform === c.primaryPlatform) ??
         c.growthRollups[0] ??
         null;
-      if (!r) return null;
+      // Null delta/pct = no comparison snapshot — render as missing data.
+      if (!r || r.delta7d === null || r.pct7d === null) return null;
       return {
         delta7d: String(r.delta7d),
         pct7d: r.pct7d,

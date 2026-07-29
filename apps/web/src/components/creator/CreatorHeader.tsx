@@ -211,14 +211,17 @@ export function CreatorHeader({
                 </div>
               )}
             </div>
-            {cornerHasContent && (
-              <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                {ownerActions}
-                {!hideStatusBadge && (
-                  <ClaimStatus state={creator.state} creatorId={creator.id} />
-                )}
-              </div>
-            )}
+            <div className="flex flex-shrink-0 flex-col items-start gap-2 sm:items-end">
+              {cornerHasContent && (
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  {ownerActions}
+                  {!hideStatusBadge && (
+                    <ClaimStatus state={creator.state} creatorId={creator.id} />
+                  )}
+                </div>
+              )}
+              <SyncStatus lastSyncedAt={creator.lastSnapshotAt} />
+            </div>
           </div>
 
           {/* Meta row: country, language, age */}
@@ -262,9 +265,6 @@ export function CreatorHeader({
                 <PlatformAccountStat key={account.platform} account={account} />
               ))}
             </div>
-          </div>
-          <div className="mt-3">
-            <SyncStatus lastSyncedAt={creator.lastSnapshotAt} />
           </div>
         </div>
       </div>

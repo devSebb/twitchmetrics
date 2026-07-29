@@ -11,6 +11,7 @@ import { getLatestTimestamp } from "@/lib/metric-freshness";
 import { CreatorHeader } from "@/components/creator";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
 import { creatorRobots } from "@/server/services/creator-visibility";
+import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -190,12 +191,14 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       totalViews: a.totalViews ? String(a.totalViews) : null,
       postCount: a.postCount ?? null,
     })),
-    growthRollups: creator.growthRollups.map((g) => ({
-      platform: g.platform,
-      delta7d: String(g.delta7d),
-      pct7d: g.pct7d,
-      trendDirection: g.trendDirection,
-    })),
+    growthRollups: creator.growthRollups
+      .filter(isKnownGrowthRollup)
+      .map((g) => ({
+        platform: g.platform,
+        delta7d: String(g.delta7d),
+        pct7d: g.pct7d,
+        trendDirection: g.trendDirection,
+      })),
   };
 
   const demographicAnalytics = creator.publicDemographicsEnabled

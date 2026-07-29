@@ -4,11 +4,12 @@
  * Standalone script that computes growth metrics (1d/7d/30d deltas)
  * from MetricSnapshot data and upserts into CreatorGrowthRollup.
  *
- * Handles edge cases:
- *   - New creators with < 2 snapshots → FLAT, all deltas 0
- *   - Missing historical snapshots → tolerance window (±2d for 7d, ±3d for 30d)
- *   - Outlier detection → >50% jump flagged, excluded from trend
- *   - Stale data → >48h since last snapshot logged as warning
+ * The delta math lives in the shared service
+ * (apps/web/src/server/services/creator-growth.ts) so this worker and the
+ * post-snapshot recompute hook can never drift. Semantics:
+ *   - No snapshots → skipped (no row)
+ *   - Missing comparison snapshot within tolerance → delta/pct = null (unknown)
+ *   - Stale data (>48h) and outliers (>50% jump) logged as warnings
  *
  * Usage:
  *   tsx workers/growth-rollup.ts                  # Full run
@@ -17,6 +18,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { computeGrowthFromSnapshots } from "../apps/web/src/server/services/creator-growth";
 
 // ============================================================
 // CONFIGURATION
@@ -49,44 +51,6 @@ function log(
   }
 }
 
-// ============================================================
-// SNAPSHOT TYPE
-// ============================================================
-
-type Snapshot = {
-  snapshotAt: Date;
-  followerCount: bigint | null;
-  totalViews: bigint | null;
-};
-
-// ============================================================
-// HELPERS
-// ============================================================
-
-/**
- * Find the snapshot closest to a target date within a tolerance window.
- */
-function findClosestSnapshot(
-  snapshots: Snapshot[],
-  targetDate: Date,
-  toleranceDays: number,
-): Snapshot | null {
-  const toleranceMs = toleranceDays * 24 * 60 * 60 * 1000;
-  const targetMs = targetDate.getTime();
-
-  let closest: Snapshot | null = null;
-  let closestDiff = Infinity;
-
-  for (const s of snapshots) {
-    const diff = Math.abs(s.snapshotAt.getTime() - targetMs);
-    if (diff <= toleranceMs && diff < closestDiff) {
-      closest = s;
-      closestDiff = diff;
-    }
-  }
-  return closest;
-}
-
 /**
  * Detect outlier: >50% change from previous value.
  */
@@ -97,55 +61,11 @@ function isOutlier(current: bigint, previous: bigint): boolean {
   return changePct > 50;
 }
 
-/**
- * Compute percentage change, handling zero base.
- */
-function pctChange(current: bigint | null, base: bigint | null): number {
-  if (!current || !base || base === 0n) return 0;
-  return (Number(current - base) / Number(base)) * 100;
-}
-
-/**
- * Determine trend direction from 7d percentage change.
- */
-function determineTrend(pct7d: number): string {
-  if (pct7d > 0.5) return "UP";
-  if (pct7d < -0.5) return "DOWN";
-  return "FLAT";
-}
-
-/**
- * Determine acceleration by comparing current 7d growth rate to previous 7d.
- */
-function determineAcceleration(pct7d: number, prevPct7d: number): string {
-  const diff = pct7d - prevPct7d;
-  if (diff > 0.5) return "ACCELERATING";
-  if (diff < -0.5) return "DECELERATING";
-  return "STABLE";
-}
-
 // ============================================================
 // ROLLUP COMPUTATION
 // ============================================================
 
-type RollupData = {
-  followerCount: bigint;
-  delta1d: bigint;
-  delta7d: bigint;
-  delta30d: bigint;
-  pct1d: number;
-  pct7d: number;
-  pct30d: number;
-  trendDirection: string;
-  acceleration: string;
-};
-
-async function computeRollup(
-  creatorProfileId: string,
-  platform: string,
-): Promise<RollupData | null> {
-  const now = new Date();
-
+async function computeRollup(creatorProfileId: string, platform: string) {
   const snapshots = await prisma.metricSnapshot.findMany({
     where: { creatorProfileId, platform: platform as never },
     orderBy: { snapshotAt: "desc" },
@@ -153,14 +73,12 @@ async function computeRollup(
     select: {
       snapshotAt: true,
       followerCount: true,
-      totalViews: true,
     },
   });
 
   if (snapshots.length === 0) return null;
 
   const latest = snapshots[0]!;
-  const latestFollowers = latest.followerCount ?? 0n;
 
   // Stale data detection
   const hoursSinceLastSnapshot =
@@ -173,95 +91,24 @@ async function computeRollup(
     });
   }
 
-  // New creator with < 2 snapshots
-  if (snapshots.length < 2) {
-    return {
-      followerCount: latestFollowers,
-      delta1d: 0n,
-      delta7d: 0n,
-      delta30d: 0n,
-      pct1d: 0,
-      pct7d: 0,
-      pct30d: 0,
-      trendDirection: "FLAT",
-      acceleration: "STABLE",
-    };
-  }
-
-  // Find reference snapshots with tolerance windows
-  const snap1d = findClosestSnapshot(
-    snapshots,
-    new Date(now.getTime() - 1 * 24 * 3600_000),
-    1,
-  );
-  const snap7d = findClosestSnapshot(
-    snapshots,
-    new Date(now.getTime() - 7 * 24 * 3600_000),
-    2,
-  );
-  const snap30d = findClosestSnapshot(
-    snapshots,
-    new Date(now.getTime() - 30 * 24 * 3600_000),
-    3,
-  );
-
-  // For acceleration: find the 7d snapshot from 7 days ago
-  const snap14d = findClosestSnapshot(
-    snapshots,
-    new Date(now.getTime() - 14 * 24 * 3600_000),
-    2,
-  );
-
-  // Outlier check against most recent previous snapshot
-  const previous = snapshots[1]!;
+  // Outlier check against most recent previous snapshot; the outlier is still
+  // stored in MetricSnapshot for admin review.
+  const previous = snapshots[1];
   if (
-    latestFollowers &&
+    previous &&
+    latest.followerCount &&
     previous.followerCount &&
-    isOutlier(latestFollowers, previous.followerCount)
+    isOutlier(latest.followerCount, previous.followerCount)
   ) {
     log("warn", "Outlier detected — >50% follower change", {
       creatorProfileId,
       platform,
-      current: latestFollowers.toString(),
+      current: latest.followerCount.toString(),
       previous: previous.followerCount.toString(),
     });
-    // Use the snapshot before the outlier for trend calculation
-    // The outlier is still stored in MetricSnapshot for admin review
   }
 
-  // Delta calculations
-  const delta1d = snap1d ? latestFollowers - (snap1d.followerCount ?? 0n) : 0n;
-  const delta7d = snap7d ? latestFollowers - (snap7d.followerCount ?? 0n) : 0n;
-  const delta30d = snap30d
-    ? latestFollowers - (snap30d.followerCount ?? 0n)
-    : 0n;
-
-  // Percentage calculations
-  const pct1d = pctChange(latestFollowers, snap1d?.followerCount ?? null);
-  const pct7d = pctChange(latestFollowers, snap7d?.followerCount ?? null);
-  const pct30d = pctChange(latestFollowers, snap30d?.followerCount ?? null);
-
-  // Trend direction from 7d growth
-  const trendDirection = determineTrend(pct7d);
-
-  // Acceleration: compare current 7d rate to previous 7d rate
-  const prevPct7d =
-    snap7d && snap14d
-      ? pctChange(snap7d.followerCount, snap14d.followerCount)
-      : 0;
-  const acceleration = determineAcceleration(pct7d, prevPct7d);
-
-  return {
-    followerCount: latestFollowers,
-    delta1d,
-    delta7d,
-    delta30d,
-    pct1d: Math.round(pct1d * 100) / 100,
-    pct7d: Math.round(pct7d * 100) / 100,
-    pct30d: Math.round(pct30d * 100) / 100,
-    trendDirection,
-    acceleration,
-  };
+  return computeGrowthFromSnapshots(snapshots);
 }
 
 // ============================================================
@@ -313,7 +160,7 @@ async function main() {
               slug: creator.slug,
               platform,
               followerCount: rollup.followerCount.toString(),
-              delta7d: rollup.delta7d.toString(),
+              delta7d: rollup.delta7d?.toString() ?? null,
               pct7d: rollup.pct7d,
               trend: rollup.trendDirection,
               acceleration: rollup.acceleration,

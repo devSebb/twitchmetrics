@@ -5,6 +5,13 @@ import { publicProcedure, router } from "../root";
 import { adminProcedure } from "../middleware";
 import { getTierForCreator } from "@/lib/constants/tiers";
 import { getPopularGames } from "@/server/services/popular-games";
+import {
+  aggregateShRollups,
+  combineViewerStats,
+  extractSnapshotViewerStats,
+  rollupWindowStart,
+  type ShRollupTotals,
+} from "@/server/services/streaming-stats";
 import { isRecentObservation } from "@/lib/metric-freshness";
 
 type StreamHatchetAccount = {
@@ -211,7 +218,9 @@ export const snapshotRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const days = { "7d": 7, "30d": 30, "90d": 90 }[input.period];
-      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      // UTC-midnight start so @db.Date rollup rows on the boundary day are
+      // included in the fallback query.
+      const since = rollupWindowStart(days);
 
       const snapshots = await ctx.prisma.metricSnapshot.findMany({
         where: {
@@ -223,7 +232,12 @@ export const snapshotRouter = router({
         orderBy: { snapshotAt: "asc" },
       });
 
-      const points: { date: string; viewers: number; game?: string }[] = [];
+      const points: {
+        date: string;
+        viewers: number;
+        peak?: number;
+        game?: string;
+      }[] = [];
       for (const snapshot of snapshots) {
         const ext = snapshot.extendedMetrics as Record<string, unknown> | null;
         const viewers =
@@ -234,11 +248,16 @@ export const snapshotRouter = router({
               : null;
         if (viewers === null) continue;
 
+        // True recorded peak (no live-count fallback — the chart series is
+        // averages, and the marker must not claim a peak we didn't measure).
+        const peak =
+          typeof ext?.PEAK_VIEWERS === "number" ? ext.PEAK_VIEWERS : undefined;
         const game =
           typeof ext?.CURRENT_GAME === "string" ? ext.CURRENT_GAME : undefined;
         points.push({
           date: snapshot.snapshotAt.toISOString(),
           viewers,
+          ...(peak !== undefined ? { peak } : {}),
           ...(game !== undefined ? { game } : {}),
         });
       }
@@ -275,6 +294,7 @@ export const snapshotRouter = router({
             select: {
               date: true,
               averageViewers: true,
+              peakViewers: true,
               primaryGameName: true,
             },
             orderBy: { date: "asc" },
@@ -283,18 +303,25 @@ export const snapshotRouter = router({
           // yt/ytg can both contribute rows for one day — keep the max.
           const byDay = new Map<
             string,
-            { viewers: number; game: string | null }
+            { viewers: number; peak: number | null; game: string | null }
           >();
           for (const rollup of rollups) {
             if (rollup.averageViewers == null) continue;
             const dayKey = rollup.date.toISOString();
             const viewers = Math.round(rollup.averageViewers);
             const existing = byDay.get(dayKey);
+            const peak =
+              rollup.peakViewers === null
+                ? (existing?.peak ?? null)
+                : Math.max(existing?.peak ?? 0, rollup.peakViewers);
             if (!existing || viewers > existing.viewers) {
               byDay.set(dayKey, {
                 viewers,
+                peak,
                 game: rollup.primaryGameName ?? null,
               });
+            } else if (peak !== existing.peak) {
+              existing.peak = peak;
             }
           }
 
@@ -302,6 +329,7 @@ export const snapshotRouter = router({
             points.push({
               date,
               viewers: entry.viewers,
+              ...(entry.peak !== null ? { peak: entry.peak } : {}),
               ...(entry.game !== null ? { game: entry.game } : {}),
             });
           }
@@ -659,7 +687,9 @@ export const snapshotRouter = router({
         "1y": 365,
       };
       const days = periodDays[input.period] ?? 30;
-      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      // UTC-midnight start so @db.Date rollup rows on the boundary day are
+      // included (a time-of-day timestamp silently drops the earliest day).
+      const since = rollupWindowStart(days);
       const now = new Date();
 
       // Fetch snapshots with extendedMetrics for viewer stats
@@ -678,37 +708,10 @@ export const snapshotRouter = router({
       });
 
       // Extract viewer stats from extendedMetrics
-      let peakViewers: number | null = null;
-      const viewerValues: number[] = [];
-      const platformsWithViewerData = new Set<Platform>();
-
-      for (const snap of snapshots) {
-        const ext = snap.extendedMetrics as Record<string, unknown> | null;
-        if (!ext) continue;
-
-        const peak =
-          typeof ext.PEAK_VIEWERS === "number"
-            ? ext.PEAK_VIEWERS
-            : typeof ext.LIVE_VIEWER_COUNT === "number"
-              ? ext.LIVE_VIEWER_COUNT
-              : null;
-
-        if (peak !== null) {
-          if (peakViewers === null || peak > peakViewers) peakViewers = peak;
-          platformsWithViewerData.add(snap.platform);
-        }
-
-        const avg =
-          typeof ext.AVG_VIEWERS === "number"
-            ? ext.AVG_VIEWERS
-            : typeof ext.LIVE_VIEWER_COUNT === "number"
-              ? ext.LIVE_VIEWER_COUNT
-              : null;
-
-        if (avg !== null && avg > 0) {
-          viewerValues.push(avg);
-        }
-      }
+      const snapshotViewer = extractSnapshotViewerStats(snapshots);
+      const platformsWithViewerData = new Set<Platform>(
+        snapshotViewer.platforms,
+      );
 
       // Followers gain: per-platform first/last followerCount diff
       const platformFirstLast = new Map<
@@ -789,6 +792,8 @@ export const snapshotRouter = router({
         streamHatchetAccounts,
       );
 
+      let shTotals: ShRollupTotals | null = null;
+
       if (streamHatchetWhere.length > 0) {
         const rollups = await ctx.prisma.channelDailyRollup.findMany({
           where: {
@@ -806,43 +811,12 @@ export const snapshotRouter = router({
 
         if (rollups.length > 0) {
           const streamHatchetRollupPlatforms = new Set<Platform>();
-          const streamHatchetAirtimeSeconds =
-            rollups.reduce((sum, row) => sum + row.airtimeMinutes, 0) * 60;
-          const streamHatchetMinutesWatched = rollups.reduce(
-            (sum, row) => sum + Number(row.minutesWatched),
-            0,
-          );
-          const streamHatchetStreamCount = rollups.reduce(
-            (sum, row) => sum + row.sessionCount,
-            0,
-          );
-          const streamHatchetPeak = rollups.reduce<number | null>(
-            (peak, row) =>
-              row.peakViewers === null
-                ? peak
-                : peak === null
-                  ? row.peakViewers
-                  : Math.max(peak, row.peakViewers),
-            null,
-          );
+          shTotals = aggregateShRollups(rollups);
 
-          airTimeSeconds = (airTimeSeconds ?? 0) + streamHatchetAirtimeSeconds;
-          streamCount += streamHatchetStreamCount;
+          airTimeSeconds = (airTimeSeconds ?? 0) + shTotals.airtimeSeconds;
+          streamCount += shTotals.streamCount;
           avgAirTimeSeconds =
             streamCount > 0 ? Math.round(airTimeSeconds / streamCount) : null;
-
-          if (streamHatchetPeak !== null) {
-            peakViewers =
-              peakViewers === null
-                ? streamHatchetPeak
-                : Math.max(peakViewers, streamHatchetPeak);
-          }
-
-          if (streamHatchetAirtimeSeconds > 0) {
-            viewerValues.push(
-              streamHatchetMinutesWatched / (streamHatchetAirtimeSeconds / 60),
-            );
-          }
 
           for (const row of rollups) {
             const platform = internalPlatformForStreamHatchet(row.platform);
@@ -881,12 +855,12 @@ export const snapshotRouter = router({
           streamCount > 0 ? Math.round(airTimeSeconds / streamCount) : null;
       }
 
-      const avgViewers =
-        viewerValues.length > 0
-          ? Math.round(
-              viewerValues.reduce((a, b) => a + b, 0) / viewerValues.length,
-            )
-          : null;
+      // SH watch-time-weighted average wins over the mean of per-poll
+      // samples; the two sources are never mixed into one mean.
+      const { peakViewers, avgViewers } = combineViewerStats(
+        snapshotViewer,
+        shTotals,
+      );
 
       return {
         airTimeSeconds,

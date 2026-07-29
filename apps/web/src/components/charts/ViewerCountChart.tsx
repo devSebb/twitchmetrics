@@ -10,7 +10,13 @@ import { formatNumber } from "@/lib/utils/format";
 import { THEME } from "@/lib/constants/theme";
 
 type ViewerCountChartProps = {
-  data: { date: string; viewers: number; game?: string }[];
+  data: {
+    date: string;
+    viewers: number;
+    /** True recorded peak for this point, when measured. */
+    peak?: number;
+    game?: string;
+  }[];
   platform: Platform;
   loading?: boolean;
   height?: number;
@@ -34,11 +40,26 @@ export function ViewerCountChart({
 
     const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 
-    const peakIndex = values.reduce(
+    // Prefer the true recorded peak; the plotted series is averages, so the
+    // max of the series is only a fallback label, not a real peak.
+    let peakIndex = values.reduce(
       (maxIdx, val, idx) => (val > (values[maxIdx] ?? 0) ? idx : maxIdx),
       0,
     );
+    let peakLabelValue = values[peakIndex] ?? 0;
+    let bestTruePeak = -Infinity;
+    data.forEach((point, idx) => {
+      if (point.peak !== undefined && point.peak > bestTruePeak) {
+        bestTruePeak = point.peak;
+        peakIndex = idx;
+      }
+    });
+    if (bestTruePeak > -Infinity) {
+      peakLabelValue = bestTruePeak;
+    }
     const peakDate = dates[peakIndex] ?? "";
+    // Marker sits on the plotted line at the peak day; its label carries the
+    // true peak value (which may exceed the averaged series).
     const peakValue = values[peakIndex] ?? 0;
 
     return {
@@ -66,14 +87,24 @@ export function ViewerCountChart({
             value: number;
             axisValue: string;
           };
-          const game = data[p.dataIndex]?.game;
+          const point = data[p.dataIndex];
 
           return tooltipHtml(chartDateLabel(p.axisValue, "full"), [
-            { value: `${formatNumber(p.value)} viewers` },
-            ...(game
+            { value: `${formatNumber(p.value)} avg viewers` },
+            ...(point?.peak !== undefined
               ? [
                   {
-                    value: game,
+                    value: `${formatNumber(point.peak)} peak`,
+                    color: THEME.colors.textMuted,
+                    small: true,
+                    plain: true,
+                  },
+                ]
+              : []),
+            ...(point?.game
+              ? [
+                  {
+                    value: point.game,
                     color: THEME.colors.textMuted,
                     small: true,
                     plain: true,
@@ -133,7 +164,7 @@ export function ViewerCountChart({
                 itemStyle: { color },
                 label: {
                   show: true,
-                  formatter: () => formatNumber(peakValue),
+                  formatter: () => `Peak ${formatNumber(peakLabelValue)}`,
                   position: "top" as const,
                   color: THEME.colors.textHeader,
                   fontSize: 11,

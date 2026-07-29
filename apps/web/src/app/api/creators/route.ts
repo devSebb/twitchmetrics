@@ -13,6 +13,7 @@ import {
   DISCOVERABLE_CREATOR_SQL,
   DISCOVERABLE_CREATOR_WHERE,
 } from "@/server/services/creator-visibility";
+import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -94,7 +95,7 @@ export async function GET(request: Request) {
 
   // Cache by normalized query params (view splits list/grid into separate keys
   // since list responses carry extra streaming-stat fields).
-  const cacheKey = `creators:list:v3:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
+  const cacheKey = `creators:list:v4:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -166,12 +167,16 @@ export async function GET(request: Request) {
       Boolean(creator),
     )
     .map((creator) => {
-      const growthRollup =
+      const rollupRow =
         creator.growthRollups.find(
           (rollup) => rollup.platform === creator.primaryPlatform,
         ) ??
         creator.growthRollups[0] ??
         null;
+      // Null delta7d means "no comparison snapshot" — treat as no rollup so
+      // the UI renders missing data instead of a fake flat 0 trend.
+      const growthRollup =
+        rollupRow && isKnownGrowthRollup(rollupRow) ? rollupRow : null;
 
       return {
         id: creator.id,

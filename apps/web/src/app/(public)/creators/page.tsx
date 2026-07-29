@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Platform, Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
+import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
@@ -152,12 +153,15 @@ async function getCreators({
       Boolean(creator),
     )
     .map((creator) => {
-      const growthRollup =
+      const rollupRow =
         creator.growthRollups.find(
           (r) => r.platform === creator.primaryPlatform,
         ) ??
         creator.growthRollups[0] ??
         null;
+      // Null delta/pct = no comparison snapshot — render as missing data.
+      const growthRollup =
+        rollupRow && isKnownGrowthRollup(rollupRow) ? rollupRow : null;
 
       return {
         displayName: creator.displayName,

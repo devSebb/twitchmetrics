@@ -954,12 +954,15 @@ model CreatorGrowthRollup {
   platform Platform
 
   followerCount BigInt @default(0)
-  delta1d       BigInt @default(0)
-  delta7d       BigInt @default(0)
-  delta30d      BigInt @default(0)
-  pct1d         Float  @default(0)
-  pct7d         Float  @default(0)
-  pct30d        Float  @default(0)
+  // Null delta/pct = "no comparison snapshot within tolerance" (unknown),
+  // distinct from a genuine 0 (measured flat). Consumers render unknowns as
+  // missing data, never as a flat trend.
+  delta1d       BigInt?
+  delta7d       BigInt?
+  delta30d     BigInt?
+  pct1d         Float?
+  pct7d         Float?
+  pct30d        Float?
 
   trendDirection String @default("FLAT")
   acceleration   String @default("STABLE")

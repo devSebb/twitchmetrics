@@ -5,6 +5,7 @@ import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { resolveAvatar } from "@/lib/avatar";
 import { getLatestTimestamp } from "@/lib/metric-freshness";
+import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 import {
   OwnerDashboardView,
   type SerializedProfile,
@@ -135,12 +136,14 @@ export default async function DashboardPage() {
       totalViews: account.totalViews ? String(account.totalViews) : null,
       postCount: account.postCount ?? null,
     })),
-    growthRollups: profile.growthRollups.map((rollup) => ({
-      platform: rollup.platform,
-      delta7d: String(rollup.delta7d),
-      pct7d: rollup.pct7d,
-      trendDirection: rollup.trendDirection,
-    })),
+    growthRollups: profile.growthRollups
+      .filter(isKnownGrowthRollup)
+      .map((rollup) => ({
+        platform: rollup.platform,
+        delta7d: String(rollup.delta7d),
+        pct7d: rollup.pct7d,
+        trendDirection: rollup.trendDirection,
+      })),
   };
 
   // serializeBigInt converts BigInt → string at runtime, but TS still sees the Prisma type.
