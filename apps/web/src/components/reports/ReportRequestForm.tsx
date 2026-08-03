@@ -148,11 +148,6 @@ export function ReportRequestForm({
   // ── Disabled metrics (by Q1) ──────────────────────────────────────────────
   const disabledMetrics = useMemo<Set<MetricKey>>(() => {
     const s = new Set<MetricKey>();
-    if (include === "games" || include === "channels") {
-      s.add("airtime");
-      s.add("subscribers");
-      s.add("topCategories");
-    }
     if (include === "channels") {
       s.add("topCreators");
     }
@@ -164,21 +159,8 @@ export function ReportRequestForm({
     const next = include === val ? null : val;
     setInclude(next);
     setEntities([]);
-    if (next) {
-      const willDisable = new Set<MetricKey>();
-      if (next === "games" || next === "channels") {
-        willDisable.add("airtime");
-        willDisable.add("subscribers");
-        willDisable.add("topCategories");
-      }
-      if (next === "channels") willDisable.add("topCreators");
-      setMetrics((m) => {
-        const updated = { ...m };
-        willDisable.forEach((k) => {
-          updated[k] = false;
-        });
-        return updated;
-      });
+    if (next === "channels") {
+      setMetrics((m) => ({ ...m, topCreators: false }));
     }
   }
 
@@ -336,14 +318,11 @@ export function ReportRequestForm({
       key: "topCreators",
       label: (inc) => topEntitiesLabel(inc ?? "games"),
     },
-    { key: "airtime", label: () => REPORT_METRIC_LABELS.airtime },
-    { key: "subscribers", label: () => REPORT_METRIC_LABELS.subscribers },
   ];
 
   const AUDIENCE_METRICS: { key: MetricKey; label: string }[] = [
     { key: "gender", label: REPORT_METRIC_LABELS.gender },
     { key: "country", label: REPORT_METRIC_LABELS.country },
-    { key: "topCategories", label: REPORT_METRIC_LABELS.topCategories },
   ];
 
   const pickerLabel = include === "games" ? "games" : "channels";

@@ -21,11 +21,11 @@ import { ReportLeadForm } from "@/components/reports";
 export const metadata: Metadata = {
   title: "Reports",
   description:
-    "Access in-depth streaming analytics reports. Game performance data, creator insights, and market analysis powered by Stream Hatchet.",
+    "Streaming analytics reports as instant CSV downloads — top Twitch games and channel performance — plus custom esports and market-share reports quoted within 24 hours.",
   openGraph: {
     title: `Reports | ${SITE_NAME}`,
     description:
-      "In-depth streaming analytics reports — game performance, creator insights, and market analysis.",
+      "Instant Twitch game and channel reports as CSV, plus custom esports and market-share reports quoted within 24 hours.",
     type: "website",
     url: `${SITE_URL}/reports`,
   },
@@ -37,17 +37,30 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/reports` },
 };
 
-// Real report categories — metrics map to what the configurator actually
-// produces (see lib/constants/report-templates.ts). No gated/blurred previews:
-// these reports are paid products, so we show what's inside rather than
-// pretending to hide it.
+// Real report categories — every card states exactly what its fulfillment
+// path delivers. "instant" cards mirror the green templates in
+// lib/constants/report-templates.ts and the columns report-generator.ts
+// actually writes; "quote" cards are scoped and built manually by the
+// Stream Hatchet team, so their copy promises a brief, not a download.
+const FULFILLMENT_BADGES = {
+  instant: {
+    label: "Instant CSV · $250",
+    className: "border-[#22c55e]/30 bg-[#22c55e]/10 text-[#22c55e]",
+  },
+  quote: {
+    label: "Custom quote · 24h",
+    className: "border-[#3F4147] bg-[#383A40] text-[#DBDEE1]",
+  },
+} as const;
+
 const REPORT_TYPES = [
   {
     icon: GameController,
     tag: "Games",
-    title: "Top Games",
+    fulfillment: "instant",
+    title: "Top Games on Twitch",
     description:
-      "The most-watched games across streaming platforms — viewer trends, peak hours, and channel counts.",
+      "The most-watched games on Twitch over the last 30 or 90 days — or your own hand-picked list — ranked by hours watched, with data-quality coverage flagged on every row.",
     metrics: [
       METRIC.hoursWatched,
       METRIC.avgViewers,
@@ -57,32 +70,36 @@ const REPORT_TYPES = [
   },
   {
     icon: ChartLineUp,
-    tag: "Creators",
-    title: "Creator Growth",
+    tag: "Channels",
+    fulfillment: "instant",
+    title: "Twitch Channel Performance",
     description:
-      "Cross-platform performance for the channels you care about — viewership, momentum, and audience makeup.",
+      "Top Twitch channels or your own shortlist — followers, average and peak live viewership, plus each channel's gender and country where available.",
     metrics: [
+      "Followers",
       METRIC.avgViewers,
       METRIC.peakViewers,
-      METRIC.country,
       METRIC.gender,
+      METRIC.country,
     ],
   },
   {
     icon: Trophy,
     tag: "Esports",
+    fulfillment: "quote",
     title: "Esports Viewership",
     description:
-      "Tournament and title viewership — peak viewers, hours watched, and how interest trends over time.",
-    metrics: [METRIC.peakViewers, METRIC.hoursWatched, METRIC.avgViewers],
+      "Tournament and event viewership built to your brief on Stream Hatchet's dataset — peak concurrents, hours watched, and how interest trends across a season. Scoped and quoted by our team within 24 hours.",
+    metrics: [METRIC.peakViewers, METRIC.hoursWatched, "Trend Over Time"],
   },
   {
     icon: ChartPieSlice,
     tag: "Market",
+    fulfillment: "quote",
     title: "Platform Market Share",
     description:
-      "How Twitch, YouTube, and Kick stack up — share of viewership, unique audience, and shifting trends.",
-    metrics: ["Share of Viewership", "Unique Viewers", "Trend Over Time"],
+      "How Twitch, YouTube, and Kick split live-streaming viewership — share of hours watched and shifts over time. Custom-built from Stream Hatchet's cross-platform data and quoted within 24 hours.",
+    metrics: ["Share of Viewership", METRIC.hoursWatched, "Trend Over Time"],
   },
 ] as const;
 
@@ -95,20 +112,20 @@ const STEPS = [
   {
     icon: Lightning,
     title: "Buy or get a quote",
-    body: "Standard combinations download instantly. Anything custom is quoted within 24 hours.",
+    body: "Twitch-standard combinations download instantly as CSV. Anything custom is quoted within 24 hours.",
   },
   {
     icon: ShieldCheck,
     title: "Trust the numbers",
-    body: "Every figure is backed by Stream Hatchet — trusted by publishers and global brands.",
+    body: "Instant reports are computed from TwitchMetrics' own 30-minute snapshot pipeline with per-row coverage flags; custom reports are built on Stream Hatchet data.",
   },
 ] as const;
 
 const TRUST_POINTS = [
-  "Cross-platform viewership data",
-  "Peak hours and audience overlap",
-  "Competitor benchmarking",
-  "Monthly trend analysis",
+  "Transparent methodology in every CSV",
+  "Per-row data-quality flags on instant reports",
+  "Cross-platform data for custom reports",
+  "Custom quotes within 24 hours",
 ] as const;
 
 export default function ReportsPage() {
@@ -125,15 +142,15 @@ export default function ReportsPage() {
           <span className="text-[#E32C19]">on demand.</span>
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#DBDEE1]">
-          Choose your games or channels, the metrics that matter, and the
-          timeframe. Standard reports download instantly — anything custom is
-          quoted within 24 hours.
+          Pick games or channels, the metrics you need, and a timeframe.
+          Standard Twitch reports download instantly as CSV — cross-platform and
+          custom asks are quoted within 24 hours.
         </p>
         <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#949BA4]">
-          <span>Powered by Stream Hatchet</span>
+          <span>Custom reports powered by Stream Hatchet</span>
           <span className="text-[#3F4147]">·</span>
           <span>
-            Standard reports from{" "}
+            Instant reports{" "}
             <span className="font-semibold text-[#F2F3F5]">$250</span>
           </span>
         </p>
@@ -151,15 +168,22 @@ export default function ReportsPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {REPORT_TYPES.map(
-            ({ icon: Icon, tag, title, description, metrics }) => (
+            ({ icon: Icon, tag, fulfillment, title, description, metrics }) => (
               <Card key={title} className="flex flex-col gap-4 p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#E32C19]/10 text-[#E32C19]">
                     <Icon size={22} weight="duotone" />
                   </div>
-                  <span className="rounded bg-[#383A40] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#949BA4]">
-                    {tag}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-[#383A40] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#949BA4]">
+                      {tag}
+                    </span>
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${FULFILLMENT_BADGES[fulfillment].className}`}
+                    >
+                      {FULFILLMENT_BADGES[fulfillment].label}
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-[#F2F3F5]">
@@ -236,9 +260,10 @@ export default function ReportsPage() {
             Backed by Stream Hatchet
           </h3>
           <p className="mt-2 text-sm leading-relaxed text-[#949BA4]">
-            Every report is built on Stream Hatchet&apos;s cross-platform
+            Custom and cross-platform reports are built on Stream Hatchet&apos;s
             dataset — the same source trusted by gaming publishers and global
-            brands.
+            brands. Instant Twitch reports come from TwitchMetrics&apos; own
+            snapshot pipeline, with the methodology printed in every file.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-[#DBDEE1]">
             {TRUST_POINTS.map((point) => (
