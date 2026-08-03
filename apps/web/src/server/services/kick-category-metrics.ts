@@ -262,11 +262,32 @@ export async function discoverKickCategoryMappings(): Promise<KickCategoryDiscov
   };
 }
 
-async function loadKickMappings(limit?: number): Promise<KickMapping[]> {
+/**
+ * Ordered id list for step-batched snapshotting: the Inngest cron chunks these
+ * across step.run calls because snapshotting every mapping in one invocation
+ * (~391 mappings x ~2s of throttled Kick API calls) exceeds maxDuration.
+ */
+export async function listKickCategoryMappingIds(): Promise<string[]> {
+  const mappings = await prisma.platformGameMapping.findMany({
+    where: {
+      platform: "kick",
+      source: { in: ["kick_api", "manual"] },
+    },
+    orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
+    select: { id: true },
+  });
+  return mappings.map((mapping) => mapping.id);
+}
+
+async function loadKickMappings(
+  limit?: number,
+  ids?: string[],
+): Promise<KickMapping[]> {
   return prisma.platformGameMapping.findMany({
     where: {
       platform: "kick",
       source: { in: ["kick_api", "manual"] },
+      ...(ids === undefined ? {} : { id: { in: ids } }),
     },
     orderBy: [{ lastSeenAt: "desc" }, { updatedAt: "desc" }],
     ...(limit === undefined ? {} : { take: limit }),
@@ -433,10 +454,14 @@ async function persistKickCategorySnapshot(
 export async function snapshotKickCategoryMappings(
   input: {
     limit?: number;
+    // Restrict to specific mapping ids (one step-batch of the cron sweep).
+    ids?: string[];
+    // Share one snapshot bucket across the batches of a single sweep.
+    snapshotAt?: Date;
   } = {},
 ): Promise<KickCategorySnapshotResult> {
-  const mappings = await loadKickMappings(input.limit);
-  const snapshotAt = new Date();
+  const mappings = await loadKickMappings(input.limit, input.ids);
+  const snapshotAt = input.snapshotAt ?? new Date();
   const touchedGamesById = new Map<string, GameMatch>();
   let written = 0;
   let snapshotted = 0;

@@ -39,6 +39,40 @@ const DEFAULT_PREFIX = "daily_sessions/summary";
 const DEFAULT_PROFILE = "streamhatchet-readonly";
 const SOURCE = "streamhatchet";
 const BATCH_SIZE = 1000;
+const DB_MAX_RETRIES = 5;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Same transient-Neon-error set as the social-profiles worker: the pooled
+// connection drops every ~15-20 min on long runs and killed multi-day
+// backfills mid-createMany.
+function isRetryableDbError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Server has closed the connection|Transaction already closed|Can't reach database server|Timed out fetching a new connection|connection pool|ECONNRESET|Response from the Engine was empty/i.test(
+    msg,
+  );
+}
+
+/** Retry any idempotent DB op on transient Neon connection/timeout errors. */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = DB_MAX_RETRIES,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!isRetryableDbError(e) || attempt > maxRetries) throw e;
+      log("warn", "Transient DB error — retrying", {
+        attempt,
+        error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+      });
+      await sleep(1000 * attempt);
+    }
+  }
+}
 
 type ImportConfig = {
   bucket: string;
@@ -222,15 +256,17 @@ async function loadExistingProfileMatches(
     return { byPlatformUserId: new Map(), byUsername: new Map() };
   }
 
-  const accounts = await prisma.platformAccount.findMany({
-    where: { platform: internalPlatform },
-    select: {
-      id: true,
-      platformUserId: true,
-      platformUsername: true,
-      creatorProfileId: true,
-    },
-  });
+  const accounts = await withRetry(() =>
+    prisma.platformAccount.findMany({
+      where: { platform: internalPlatform },
+      select: {
+        id: true,
+        platformUserId: true,
+        platformUsername: true,
+        creatorProfileId: true,
+      },
+    }),
+  );
 
   const byPlatformUserId = new Map<string, ExistingProfileMatch>();
   const byUsername = new Map<string, ExistingProfileMatch>();
@@ -348,42 +384,46 @@ async function recomputeRollups(input: {
   gameRollups: number;
   channelGameRollups: number;
 }> {
-  const sessions = await prisma.streamSessionFact.findMany({
-    where: {
-      source: SOURCE,
-      platform: input.platform,
-      partitionDate: input.partitionDate,
-    },
-    orderBy: { streamEndsAt: "asc" },
-  });
+  const sessions = await withRetry(() =>
+    prisma.streamSessionFact.findMany({
+      where: {
+        source: SOURCE,
+        platform: input.platform,
+        partitionDate: input.partitionDate,
+      },
+      orderBy: { streamEndsAt: "asc" },
+    }),
+  );
 
-  await prisma.$transaction([
-    prisma.channelDailyRollup.deleteMany({
-      where: {
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-      },
-    }),
-    ...(input.matchedOnly
-      ? []
-      : [
-          prisma.gameDailyRollup.deleteMany({
-            where: {
-              source: SOURCE,
-              platform: input.platform,
-              date: input.partitionDate,
-            },
-          }),
-        ]),
-    prisma.channelGameDailyRollup.deleteMany({
-      where: {
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-      },
-    }),
-  ]);
+  await withRetry(() =>
+    prisma.$transaction([
+      prisma.channelDailyRollup.deleteMany({
+        where: {
+          source: SOURCE,
+          platform: input.platform,
+          date: input.partitionDate,
+        },
+      }),
+      ...(input.matchedOnly
+        ? []
+        : [
+            prisma.gameDailyRollup.deleteMany({
+              where: {
+                source: SOURCE,
+                platform: input.platform,
+                date: input.partitionDate,
+              },
+            }),
+          ]),
+      prisma.channelGameDailyRollup.deleteMany({
+        where: {
+          source: SOURCE,
+          platform: input.platform,
+          date: input.partitionDate,
+        },
+      }),
+    ]),
+  );
 
   const byChannel = new Map<string, RollupSession[]>();
   const byGame = new Map<string, RollupSession[]>();
@@ -577,13 +617,27 @@ async function recomputeRollups(input: {
   }
 
   for (const batch of chunk(channelRollups, BATCH_SIZE)) {
-    await prisma.channelDailyRollup.createMany({ data: batch });
+    // skipDuplicates so a retried batch whose first attempt committed before
+    // the connection dropped doesn't trip the rollup unique keys.
+    await withRetry(() =>
+      prisma.channelDailyRollup.createMany({
+        data: batch,
+        skipDuplicates: true,
+      }),
+    );
   }
   for (const batch of chunk(gameRollups, BATCH_SIZE)) {
-    await prisma.gameDailyRollup.createMany({ data: batch });
+    await withRetry(() =>
+      prisma.gameDailyRollup.createMany({ data: batch, skipDuplicates: true }),
+    );
   }
   for (const batch of chunk(channelGameRollups, BATCH_SIZE)) {
-    await prisma.channelGameDailyRollup.createMany({ data: batch });
+    await withRetry(() =>
+      prisma.channelGameDailyRollup.createMany({
+        data: batch,
+        skipDuplicates: true,
+      }),
+    );
   }
 
   return {
@@ -612,9 +666,11 @@ async function importOneDate(config: ImportConfig, date: Date) {
     region: config.region,
   });
 
-  const existingObject = await prisma.streamHatchetSourceObject.findUnique({
-    where: { bucket_key: { bucket: config.bucket, key } },
-  });
+  const existingObject = await withRetry(() =>
+    prisma.streamHatchetSourceObject.findUnique({
+      where: { bucket_key: { bucket: config.bucket, key } },
+    }),
+  );
 
   if (
     config.write &&
@@ -684,56 +740,62 @@ async function importOneDate(config: ImportConfig, date: Date) {
     };
   }
 
-  const sourceObject = await prisma.streamHatchetSourceObject.upsert({
-    where: { bucket_key: { bucket: config.bucket, key } },
-    update: {
-      etag: metadata.etag,
-      size: metadata.size,
-      lastModified: metadata.lastModified,
-      platform: config.platform,
-      partitionDate: date,
-      status: "running",
-      rowCount: s3RowCount,
-      errorSummary: null,
-      metadata: {
-        s3RowCount,
-        rowLimit: config.rowLimit ?? null,
-        importMode: mode,
-        matchedOnly: config.matchedOnly,
-      } satisfies Prisma.InputJsonValue,
-    },
-    create: {
-      bucket: config.bucket,
-      key,
-      etag: metadata.etag,
-      size: metadata.size,
-      lastModified: metadata.lastModified,
-      platform: config.platform,
-      partitionDate: date,
-      status: "running",
-      rowCount: s3RowCount,
-      metadata: {
-        s3RowCount,
-        rowLimit: config.rowLimit ?? null,
-        importMode: mode,
-        matchedOnly: config.matchedOnly,
-      } satisfies Prisma.InputJsonValue,
-    },
-  });
+  const sourceObject = await withRetry(() =>
+    prisma.streamHatchetSourceObject.upsert({
+      where: { bucket_key: { bucket: config.bucket, key } },
+      update: {
+        etag: metadata.etag,
+        size: metadata.size,
+        lastModified: metadata.lastModified,
+        platform: config.platform,
+        partitionDate: date,
+        status: "running",
+        rowCount: s3RowCount,
+        errorSummary: null,
+        metadata: {
+          s3RowCount,
+          rowLimit: config.rowLimit ?? null,
+          importMode: mode,
+          matchedOnly: config.matchedOnly,
+        } satisfies Prisma.InputJsonValue,
+      },
+      create: {
+        bucket: config.bucket,
+        key,
+        etag: metadata.etag,
+        size: metadata.size,
+        lastModified: metadata.lastModified,
+        platform: config.platform,
+        partitionDate: date,
+        status: "running",
+        rowCount: s3RowCount,
+        metadata: {
+          s3RowCount,
+          rowLimit: config.rowLimit ?? null,
+          importMode: mode,
+          matchedOnly: config.matchedOnly,
+        } satisfies Prisma.InputJsonValue,
+      },
+    }),
+  );
   sourceObjectId = sourceObject.id;
 
   if (config.force) {
-    await prisma.streamSessionFact.deleteMany({
-      where: { sourceObjectId: sourceObject.id },
-    });
+    await withRetry(() =>
+      prisma.streamSessionFact.deleteMany({
+        where: { sourceObjectId: sourceObject.id },
+      }),
+    );
   }
 
   async function flushPendingBatch() {
     if (pendingBatch.length === 0) return;
-    const result = await prisma.streamSessionFact.createMany({
-      data: pendingBatch,
-      skipDuplicates: true,
-    });
+    const result = await withRetry(() =>
+      prisma.streamSessionFact.createMany({
+        data: pendingBatch,
+        skipDuplicates: true,
+      }),
+    );
     written += result.count;
     pendingBatch = [];
   }
@@ -763,26 +825,28 @@ async function importOneDate(config: ImportConfig, date: Date) {
     matchedOnly: config.matchedOnly,
   });
 
-  await prisma.streamHatchetSourceObject.update({
-    where: { id: sourceObject.id },
-    data: {
-      status: "completed",
-      rowCount: s3RowCount ?? parseStats.rowsScanned,
-      importedRows: written,
-      skippedRows: parseStats.rowsAccepted - written,
-      failedRows: parseStats.rowsRejected,
-      lastImportedAt: new Date(),
-      metadata: {
-        s3RowCount,
-        parsedRows: parseStats.rowsAccepted,
-        matchedExistingProfiles: matchedSessions,
-        matchedOnly: config.matchedOnly,
-        importMode: mode,
-        sourceObjectId,
-        rollups,
-      } satisfies Prisma.InputJsonValue,
-    },
-  });
+  await withRetry(() =>
+    prisma.streamHatchetSourceObject.update({
+      where: { id: sourceObject.id },
+      data: {
+        status: "completed",
+        rowCount: s3RowCount ?? parseStats.rowsScanned,
+        importedRows: written,
+        skippedRows: parseStats.rowsAccepted - written,
+        failedRows: parseStats.rowsRejected,
+        lastImportedAt: new Date(),
+        metadata: {
+          s3RowCount,
+          parsedRows: parseStats.rowsAccepted,
+          matchedExistingProfiles: matchedSessions,
+          matchedOnly: config.matchedOnly,
+          importMode: mode,
+          sourceObjectId,
+          rollups,
+        } satisfies Prisma.InputJsonValue,
+      },
+    }),
+  );
 
   log("info", "Import complete for date", {
     date: formatDate(date),

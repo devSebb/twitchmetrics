@@ -1,6 +1,7 @@
 import { inngest } from "../../client";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 import {
+  finalizeStreamHatchetDailySessionRollups,
   formatPartitionDate,
   ingestStreamHatchetDailySessionObject,
   type StreamHatchetDailySessionImportResult,
@@ -10,6 +11,13 @@ import {
 type CronPlatformTarget = {
   platform: StreamHatchetDailySessionPlatform;
   matchedOnly: boolean;
+};
+
+type CronStepFailure = {
+  platform: string;
+  date: string;
+  stage: "import" | "rollups";
+  error: string;
 };
 
 type StreamHatchetS3CronResult =
@@ -25,6 +33,7 @@ type StreamHatchetS3CronResult =
       dates: string[];
       targets: CronPlatformTarget[];
       results: StreamHatchetDailySessionImportResult[];
+      failures: CronStepFailure[];
       summary: ReturnType<typeof summarizeResults>;
     };
 
@@ -33,11 +42,17 @@ const DEFAULT_RETRY_DAYS = 3;
 // not just ones already matched to a CreatorProfile. `yt` is the canonical
 // YouTube creator feed; `ytg` (YouTube Gaming) is opt-in via env because of its
 // ~10x row volume and is used for game-level data rather than the creator catalog.
+// Ordered smallest-first so the heaviest platform (twitch) can never starve the
+// others of run time (twitch failing daily silently froze yt for 3 weeks).
 const BASE_TARGETS: CronPlatformTarget[] = [
   { platform: "kick", matchedOnly: false },
-  { platform: "twitch", matchedOnly: false },
   { platform: "yt", matchedOnly: false },
+  { platform: "twitch", matchedOnly: false },
 ];
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -152,20 +167,55 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
         );
         const dates = recentPartitionDates(retryDays);
         const results: StreamHatchetDailySessionImportResult[] = [];
+        const failures: CronStepFailure[] = [];
 
+        // Each (platform, date) runs as two steps — facts import, then rollup
+        // recompute — so each fits maxDuration. Failures are caught per pair:
+        // one platform crashing must not abort the rest of the sweep.
         for (const date of dates) {
+          const dateKey = formatPartitionDate(date);
           for (const target of targets) {
-            const result = (await step.run(
-              `import-${target.platform}-${formatPartitionDate(date)}`,
-              () =>
-                ingestStreamHatchetDailySessionObject({
+            let importResult: StreamHatchetDailySessionImportResult;
+            try {
+              importResult = (await step.run(
+                `import-${target.platform}-${dateKey}`,
+                () =>
+                  ingestStreamHatchetDailySessionObject({
+                    platform: target.platform,
+                    date,
+                    matchedOnly: target.matchedOnly,
+                    force: false,
+                    skipRollups: true,
+                  }),
+              )) as StreamHatchetDailySessionImportResult;
+            } catch (error) {
+              failures.push({
+                platform: target.platform,
+                date: dateKey,
+                stage: "import",
+                error: errorMessage(error),
+              });
+              continue;
+            }
+            results.push(importResult);
+            if (importResult.skippedExisting) continue;
+
+            try {
+              await step.run(`rollups-${target.platform}-${dateKey}`, () =>
+                finalizeStreamHatchetDailySessionRollups({
                   platform: target.platform,
                   date,
                   matchedOnly: target.matchedOnly,
-                  force: false,
                 }),
-            )) as StreamHatchetDailySessionImportResult;
-            results.push(result);
+              );
+            } catch (error) {
+              failures.push({
+                platform: target.platform,
+                date: dateKey,
+                stage: "rollups",
+                error: errorMessage(error),
+              });
+            }
           }
         }
 
@@ -177,6 +227,7 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
             dates: dates.map(formatPartitionDate),
             targets,
             results,
+            failures,
             summary,
           },
           summary: {
@@ -184,12 +235,14 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
             recordsWritten: summary.recordsWritten,
             recordsSkipped: summary.recordsSkipped,
             recordsFailed: summary.recordsFailed,
+            partialCount: failures.length,
             metadata: {
               dates: dates.map(formatPartitionDate),
               targets,
               matchedExistingProfiles: summary.matched,
               existingObjectsSkipped: summary.existingObjectsSkipped,
               retryDays,
+              ...(failures.length > 0 ? { failures } : {}),
             },
           },
         };

@@ -41,6 +41,10 @@ type ImportConfig = {
   date: Date;
   matchedOnly: boolean;
   force?: boolean;
+  // Import facts only and leave the source object "running"; the caller must
+  // follow up with finalizeStreamHatchetDailySessionRollups. Lets serverless
+  // callers split the work across two invocations that each fit maxDuration.
+  skipRollups?: boolean;
 };
 
 type StreamHatchetDailySession = {
@@ -76,14 +80,30 @@ type StreamHatchetDailySession = {
   rowHash: string;
 };
 
-type ExistingProfileMatch = {
-  creatorProfileId: string;
-  accountId: string;
-};
+const ROLLUP_SESSION_SELECT = {
+  creatorProfileId: true,
+  platformUserId: true,
+  platformUsername: true,
+  platformDisplayName: true,
+  platformLogoUrl: true,
+  country: true,
+  streamEndsAt: true,
+  peakViewersAt: true,
+  primaryGameName: true,
+  allGameNames: true,
+  airtimeMinutes: true,
+  minutesWatched: true,
+  sessionViews: true,
+  averageViewersGlobal: true,
+  peakViewers: true,
+  bestRank: true,
+  averageRank: true,
+  worstRank: true,
+} satisfies Prisma.StreamSessionFactSelect;
 
-type RollupSession = Awaited<
-  ReturnType<typeof prisma.streamSessionFact.findMany>
->[number];
+type RollupSession = Prisma.StreamSessionFactGetPayload<{
+  select: typeof ROLLUP_SESSION_SELECT;
+}>;
 
 const SOURCE = "streamhatchet";
 const DEFAULT_BUCKET = "streamhatchet-aggregations";
@@ -170,54 +190,72 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-async function loadExistingProfileMatches(
+/**
+ * Resolve creatorProfileIds for one flush batch via indexed lookups. Replaces
+ * the old whole-platform preload: since the SH catalogs landed, loading every
+ * account for a platform (578k twitch rows) no longer fits the serverless
+ * time/memory budget.
+ */
+async function resolveBatchProfileMatches(
   platform: StreamHatchetDailySessionPlatform,
-): Promise<{
-  byPlatformUserId: Map<string, ExistingProfileMatch>;
-  byUsername: Map<string, ExistingProfileMatch>;
-}> {
+  sessions: StreamHatchetDailySession[],
+): Promise<Map<string, string>> {
   const internalPlatform = toInternalPlatform(platform);
-  if (!internalPlatform) {
-    return { byPlatformUserId: new Map(), byUsername: new Map() };
-  }
+  const resolved = new Map<string, string>();
+  if (!internalPlatform || sessions.length === 0) return resolved;
+
+  const userIds = [...new Set(sessions.map((s) => s.platformUserId))];
+  // Kick facts can carry a different id than our catalog row; kick (only)
+  // falls back to case-insensitive username matching.
+  const usernames =
+    platform === "kick"
+      ? [...new Set(sessions.map((s) => s.platformUsername.toLowerCase()))]
+      : [];
 
   const accounts = await prisma.platformAccount.findMany({
-    where: { platform: internalPlatform },
+    where: {
+      platform: internalPlatform,
+      OR: [
+        { platformUserId: { in: userIds } },
+        ...(usernames.length > 0
+          ? [
+              {
+                platformUsername: {
+                  in: usernames,
+                  mode: "insensitive" as const,
+                },
+              },
+            ]
+          : []),
+      ],
+    },
     select: {
-      id: true,
       platformUserId: true,
       platformUsername: true,
       creatorProfileId: true,
     },
   });
 
-  const byPlatformUserId = new Map<string, ExistingProfileMatch>();
-  const byUsername = new Map<string, ExistingProfileMatch>();
-
+  const byUserId = new Map<string, string>();
+  const byUsername = new Map<string, string>();
   for (const account of accounts) {
-    const match = {
-      accountId: account.id,
-      creatorProfileId: account.creatorProfileId,
-    };
-    byPlatformUserId.set(account.platformUserId, match);
-    byUsername.set(account.platformUsername.toLowerCase(), match);
+    byUserId.set(account.platformUserId, account.creatorProfileId);
+    byUsername.set(
+      account.platformUsername.toLowerCase(),
+      account.creatorProfileId,
+    );
   }
 
-  return { byPlatformUserId, byUsername };
-}
+  for (const session of sessions) {
+    const match =
+      byUserId.get(session.platformUserId) ??
+      (platform === "kick"
+        ? byUsername.get(session.platformUsername.toLowerCase())
+        : undefined);
+    if (match) resolved.set(session.rowHash, match);
+  }
 
-function resolveCreatorProfileId(
-  session: StreamHatchetDailySession,
-  matches: Awaited<ReturnType<typeof loadExistingProfileMatches>>,
-): string | null {
-  const idMatch = matches.byPlatformUserId.get(session.platformUserId);
-  if (idMatch) return idMatch.creatorProfileId;
-
-  if (session.platform !== "kick") return null;
-  return (
-    matches.byUsername.get(session.platformUsername.toLowerCase())
-      ?.creatorProfileId ?? null
-  );
+  return resolved;
 }
 
 function sessionCreateInput(
@@ -299,6 +337,8 @@ async function recomputeRollups(input: {
   gameRollups: number;
   channelGameRollups: number;
 }> {
+  // Select only rollup inputs — the full row drags rawData/contentLabel JSON
+  // for every session (~82k rows for twitch), which alone blew the step budget.
   const sessions = await prisma.streamSessionFact.findMany({
     where: {
       source: SOURCE,
@@ -306,6 +346,7 @@ async function recomputeRollups(input: {
       partitionDate: input.partitionDate,
     },
     orderBy: { streamEndsAt: "asc" },
+    select: ROLLUP_SESSION_SELECT,
   });
 
   await prisma.$transaction([
@@ -806,7 +847,10 @@ async function parseDailySessionCsv(input: {
 
 export async function ingestStreamHatchetDailySessionObject(
   input: Partial<Pick<ImportConfig, "bucket" | "prefix" | "region">> &
-    Pick<ImportConfig, "platform" | "date" | "matchedOnly" | "force">,
+    Pick<
+      ImportConfig,
+      "platform" | "date" | "matchedOnly" | "force" | "skipRollups"
+    >,
 ): Promise<StreamHatchetDailySessionImportResult> {
   const bucket =
     input.bucket ?? process.env.STREAMHATCHET_S3_BUCKET ?? DEFAULT_BUCKET;
@@ -913,19 +957,36 @@ export async function ingestStreamHatchetDailySessionObject(
       throw new Error(`S3 object has no body: s3://${bucket}/${key}`);
     }
 
-    const matches = await loadExistingProfileMatches(input.platform);
     let matchedSessions = 0;
     let written = 0;
-    let pendingBatch: Prisma.StreamSessionFactCreateManyInput[] = [];
+    let pendingSessions: StreamHatchetDailySession[] = [];
 
-    async function flushPendingBatch() {
-      if (pendingBatch.length === 0) return;
+    async function flushPendingSessions() {
+      if (pendingSessions.length === 0) return;
+      const batch = pendingSessions;
+      pendingSessions = [];
+
+      const matches = await resolveBatchProfileMatches(input.platform, batch);
+      for (const session of batch) {
+        if (matches.has(session.rowHash)) matchedSessions++;
+      }
+
+      const rows = batch
+        .filter((session) => !input.matchedOnly || matches.has(session.rowHash))
+        .map((session) =>
+          sessionCreateInput(
+            session,
+            sourceObject.id,
+            matches.get(session.rowHash) ?? null,
+          ),
+        );
+      if (rows.length === 0) return;
+
       const result = await prisma.streamSessionFact.createMany({
-        data: pendingBatch,
+        data: rows,
         skipDuplicates: true,
       });
       written += result.count;
-      pendingBatch = [];
     }
 
     const parseStats = await parseDailySessionCsv({
@@ -933,30 +994,28 @@ export async function ingestStreamHatchetDailySessionObject(
       platform: input.platform,
       partitionDate,
       onSession: async (session) => {
-        const creatorProfileId = resolveCreatorProfileId(session, matches);
-        if (creatorProfileId) matchedSessions++;
-        if (input.matchedOnly && !creatorProfileId) return;
-
-        pendingBatch.push(
-          sessionCreateInput(session, sourceObject.id, creatorProfileId),
-        );
-        if (pendingBatch.length >= BATCH_SIZE) {
-          await flushPendingBatch();
+        pendingSessions.push(session);
+        if (pendingSessions.length >= BATCH_SIZE) {
+          await flushPendingSessions();
         }
       },
     });
-    await flushPendingBatch();
+    await flushPendingSessions();
 
-    const rollups = await recomputeRollups({
-      platform: input.platform,
-      partitionDate,
-      matchedOnly: input.matchedOnly,
-    });
+    const rollups = input.skipRollups
+      ? null
+      : await recomputeRollups({
+          platform: input.platform,
+          partitionDate,
+          matchedOnly: input.matchedOnly,
+        });
 
     await prisma.streamHatchetSourceObject.update({
       where: { id: sourceObject.id },
       data: {
-        status: "completed",
+        // Facts-only imports stay "running"; the follow-up rollup step
+        // (finalizeStreamHatchetDailySessionRollups) marks them completed.
+        status: input.skipRollups ? "running" : "completed",
         rowCount: parseStats.rowsScanned,
         importedRows: written,
         skippedRows: parseStats.rowsAccepted - written,
@@ -969,7 +1028,7 @@ export async function ingestStreamHatchetDailySessionObject(
           importMode: mode,
           sourceObjectId: sourceObject.id,
           trigger: "inngest",
-          rollups,
+          ...(rollups ? { rollups } : {}),
         } satisfies Prisma.InputJsonValue,
       },
     });
@@ -998,4 +1057,56 @@ export async function ingestStreamHatchetDailySessionObject(
     });
     throw error;
   }
+}
+
+/**
+ * Recompute the three daily rollup tables for an already-imported partition
+ * and mark its source object completed. Split out of the facts import so each
+ * half fits the serverless step budget — the combined twitch run exceeded
+ * maxDuration daily, leaving objects stuck "running" and blocking later
+ * platforms in the cron loop.
+ */
+export async function finalizeStreamHatchetDailySessionRollups(
+  input: Partial<Pick<ImportConfig, "bucket" | "prefix">> &
+    Pick<ImportConfig, "platform" | "date" | "matchedOnly">,
+): Promise<{
+  channelRollups: number;
+  gameRollups: number;
+  channelGameRollups: number;
+} | null> {
+  const bucket =
+    input.bucket ?? process.env.STREAMHATCHET_S3_BUCKET ?? DEFAULT_BUCKET;
+  const prefix =
+    input.prefix ?? process.env.STREAMHATCHET_S3_PREFIX ?? DEFAULT_PREFIX;
+  const partitionDate = new Date(input.date);
+  partitionDate.setUTCHours(0, 0, 0, 0);
+  const key = buildDailySessionKey(prefix, partitionDate, input.platform);
+
+  const sourceObject = await prisma.streamHatchetSourceObject.findUnique({
+    where: { bucket_key: { bucket, key } },
+  });
+  if (!sourceObject) return null;
+
+  const rollups = await recomputeRollups({
+    platform: input.platform,
+    partitionDate,
+    matchedOnly: input.matchedOnly,
+  });
+
+  const existingMetadata =
+    sourceObject.metadata &&
+    typeof sourceObject.metadata === "object" &&
+    !Array.isArray(sourceObject.metadata)
+      ? sourceObject.metadata
+      : {};
+
+  await prisma.streamHatchetSourceObject.update({
+    where: { id: sourceObject.id },
+    data: {
+      status: "completed",
+      metadata: { ...existingMetadata, rollups } as Prisma.InputJsonValue,
+    },
+  });
+
+  return rollups;
 }

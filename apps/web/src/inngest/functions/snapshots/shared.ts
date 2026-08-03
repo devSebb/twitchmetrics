@@ -48,88 +48,51 @@ export async function runTierSnapshot(
   tier: SnapshotTier,
   step: StepTools,
 ): Promise<{ processed: number; errors: number; tier: SnapshotTier }> {
-  const profiles = (await step.run(`fetch-${tier}-profiles`, async () => {
-    return prisma.creatorProfile.findMany({
-      where: { snapshotTier: tier },
-      select: {
-        id: true,
-        totalFollowers: true,
-        snapshotTier: true,
-        platformAccounts: {
-          select: {
-            id: true,
-            platform: true,
-            platformUserId: true,
-            isOAuthConnected: true,
-            accessToken: true,
-          },
-        },
+  // Only profile ids go through the step output: full rows (accounts + tokens)
+  // for a whole tier blow Inngest's 4MB step-output cap — tier3 died this way
+  // for months once the catalog passed ~30k profiles.
+  const profileIds = (await step.run(`fetch-${tier}-profiles`, async () => {
+    const rows = await prisma.creatorProfile.findMany({
+      where: {
+        snapshotTier: tier,
+        mergedIntoId: null,
+        // Unclaimed StreamHatchet-catalog profiles get sessions/viewers from
+        // the SH S3 pipeline; polling ~1M of them here can never fit API
+        // quotas or Inngest step caps. API-poll only API-born profiles plus
+        // anything claimed or OAuth-connected.
+        OR: [
+          { catalogSource: { not: "streamhatchet" } },
+          { catalogSource: null },
+          { state: { in: ["claimed", "premium"] } },
+          { userId: { not: null } },
+          { platformAccounts: { some: { isOAuthConnected: true } } },
+        ],
       },
+      select: { id: true },
+      orderBy: { id: "asc" },
     });
-  })) as SnapshotableProfile[];
+    return rows.map((row) => row.id);
+  })) as string[];
 
   let processed = 0;
   let errors = 0;
 
-  // Process in batches to respect rate limits
-  for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
-    const batch = profiles.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < profileIds.length; i += BATCH_SIZE) {
+    const batchIds = profileIds.slice(i, i + BATCH_SIZE);
     const batchIndex = Math.floor(i / BATCH_SIZE);
 
-    await step.run(`snapshot-batch-${tier}-${batchIndex}`, async () => {
-      for (const profile of batch) {
-        for (const account of profile.platformAccounts) {
-          try {
-            await snapshotPlatformAccount(profile.id, account);
-            processed++;
-          } catch (err) {
-            errors++;
-            log.error(
-              {
-                err,
-                creatorProfileId: profile.id,
-                platform: account.platform,
-                platformUserId: account.platformUserId,
-              },
-              "Failed to snapshot platform account",
-            );
-          }
-        }
+    // Each batch step loads its own accounts and returns its counts —
+    // mutating outer counters inside step.run loses them on memoized
+    // replays. No dedicated sleep steps: they doubled the step count past
+    // Inngest's 1000-step cap, and a batch already takes long enough to
+    // pace the platform APIs.
+    const batchResult = (await step.run(
+      `snapshot-batch-${tier}-${batchIndex}`,
+      () => snapshotProfileBatch(batchIds),
+    )) as { processed: number; errors: number };
 
-        // Update aggregate totals and evaluate tier changes
-        try {
-          await recomputeCreatorAggregates(profile.id);
-          await recomputeCreatorGrowthRollups(
-            profile.id,
-            profile.platformAccounts.map((account) => account.platform),
-          );
-        } catch (err) {
-          log.error(
-            { err, creatorProfileId: profile.id },
-            "Failed to update profile aggregates",
-          );
-        }
-
-        // Invalidate cache for this creator (non-blocking)
-        try {
-          const slug = await getCreatorSlug(profile.id);
-          if (slug) {
-            await cacheInvalidate(`creator:${slug}`);
-            await cacheInvalidate(`creator:${slug}:*`);
-          }
-        } catch (err) {
-          log.warn(
-            { err, creatorProfileId: profile.id },
-            "Cache invalidation failed — continuing",
-          );
-        }
-      }
-    });
-
-    // Sleep between batches to respect rate limits (except for the last batch)
-    if (i + BATCH_SIZE < profiles.length) {
-      await step.sleep(`rate-limit-pause-${tier}-${batchIndex}`, "5s");
-    }
+    processed += batchResult.processed;
+    errors += batchResult.errors;
   }
 
   // Invalidate trending/landing cache after a full tier batch
@@ -140,11 +103,86 @@ export async function runTierSnapshot(
   }
 
   log.info(
-    { tier, total: profiles.length, processed, errors },
+    { tier, total: profileIds.length, processed, errors },
     "Tier snapshot completed",
   );
 
   return { processed, errors, tier };
+}
+
+async function snapshotProfileBatch(
+  profileIds: string[],
+): Promise<{ processed: number; errors: number }> {
+  const profiles: SnapshotableProfile[] = await prisma.creatorProfile.findMany({
+    where: { id: { in: profileIds } },
+    select: {
+      id: true,
+      totalFollowers: true,
+      snapshotTier: true,
+      platformAccounts: {
+        select: {
+          id: true,
+          platform: true,
+          platformUserId: true,
+          isOAuthConnected: true,
+          accessToken: true,
+        },
+      },
+    },
+  });
+
+  let processed = 0;
+  let errors = 0;
+
+  for (const profile of profiles) {
+    for (const account of profile.platformAccounts) {
+      try {
+        await snapshotPlatformAccount(profile.id, account);
+        processed++;
+      } catch (err) {
+        errors++;
+        log.error(
+          {
+            err,
+            creatorProfileId: profile.id,
+            platform: account.platform,
+            platformUserId: account.platformUserId,
+          },
+          "Failed to snapshot platform account",
+        );
+      }
+    }
+
+    // Update aggregate totals and evaluate tier changes
+    try {
+      await recomputeCreatorAggregates(profile.id);
+      await recomputeCreatorGrowthRollups(
+        profile.id,
+        profile.platformAccounts.map((account) => account.platform),
+      );
+    } catch (err) {
+      log.error(
+        { err, creatorProfileId: profile.id },
+        "Failed to update profile aggregates",
+      );
+    }
+
+    // Invalidate cache for this creator (non-blocking)
+    try {
+      const slug = await getCreatorSlug(profile.id);
+      if (slug) {
+        await cacheInvalidate(`creator:${slug}`);
+        await cacheInvalidate(`creator:${slug}:*`);
+      }
+    } catch (err) {
+      log.warn(
+        { err, creatorProfileId: profile.id },
+        "Cache invalidation failed — continuing",
+      );
+    }
+  }
+
+  return { processed, errors };
 }
 
 export async function snapshotPlatformAccount(
