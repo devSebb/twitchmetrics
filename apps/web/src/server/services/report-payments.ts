@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { prisma } from "@twitchmetrics/database";
 import { stripe } from "@/lib/stripe";
 import { syncPurchasePaidToHubspot } from "@/server/services/hubspot";
+import { sendReportPurchaseConfirmation } from "@/server/services/report-purchase-notifications";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("report-payments");
@@ -103,6 +104,15 @@ export async function fulfillStripeCheckoutSession(
   }
 
   after(() => syncPurchasePaidToHubspot(purchase.id));
+  after(() =>
+    sendReportPurchaseConfirmation({
+      purchaseId: purchase.id,
+      name: purchase.name,
+      email: purchase.email,
+      templateName: purchase.template.name,
+      amountInCents: session.amount_total ?? purchase.template.priceInCents,
+    }),
+  );
 
   log.info(
     {

@@ -522,7 +522,11 @@ export async function findCrossPlatformMatches(
         if (confidence) {
           results.push({
             platform,
-            url: buildPlatformUrl(platform, result.platformUsername),
+            url: buildPlatformUrl(
+              platform,
+              result.platformUsername,
+              result.platformUserId,
+            ),
             username: result.platformUsername.toLowerCase(),
             confidence,
             source: "fuzzy_match",
@@ -540,12 +544,21 @@ export async function findCrossPlatformMatches(
   return results;
 }
 
-function buildPlatformUrl(platform: Platform, username: string): string {
+function buildPlatformUrl(
+  platform: Platform,
+  username: string,
+  platformUserId?: string,
+): string {
   switch (platform) {
     case "twitch":
       return `https://twitch.tv/${username}`;
     case "youtube":
-      return `https://youtube.com/@${username}`;
+      // Search results return the channel TITLE as platformUsername, not the
+      // @handle — a title-built @URL points at the wrong channel (or nowhere).
+      // The channel-id URL is always correct.
+      return platformUserId && /^UC[\w-]{22}$/.test(platformUserId)
+        ? `https://www.youtube.com/channel/${platformUserId}`
+        : `https://youtube.com/@${username}`;
     case "instagram":
       return `https://instagram.com/${username}`;
     case "tiktok":

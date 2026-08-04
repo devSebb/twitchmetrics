@@ -7,6 +7,7 @@ import {
 } from "@/lib/constants/report-templates";
 import type { FormSnapshot } from "@/lib/constants/report-templates";
 import { syncCheckoutStartedToHubspot } from "@/server/services/hubspot";
+import { sendReportPurchaseConfirmation } from "@/server/services/report-purchase-notifications";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("report-checkout");
@@ -75,6 +76,17 @@ export async function POST(request: Request) {
       log.info(
         { purchaseId: purchase.id, mock: true },
         "Mock purchase created",
+      );
+      // Mock purchases skip fulfillStripeCheckoutSession, so mirror its
+      // confirmation side effect here to keep the two paths behaviorally equal.
+      after(() =>
+        sendReportPurchaseConfirmation({
+          purchaseId: purchase.id,
+          name: purchase.name,
+          email: purchase.email,
+          templateName: template.name,
+          amountInCents: template.priceInCents,
+        }),
       );
       return NextResponse.json({
         mode: "mock",

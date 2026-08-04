@@ -252,14 +252,22 @@ function buildSlug(pf: Platform, puid: string, username: string): string {
   return `${base}-${slugSuffix(pf, puid)}`;
 }
 
-function platformUrl(pf: Platform, username: string): string | null {
+function platformUrl(
+  pf: Platform,
+  puid: string,
+  username: string,
+): string | null {
   switch (pf) {
     case "kick":
       return `https://kick.com/${username}`;
     case "twitch":
       return `https://twitch.tv/${username}`;
     case "youtube":
-      return `https://youtube.com/@${username}`;
+      // SH's yt `username` is the channel TITLE, not the @handle — an @URL
+      // built from it points at the wrong channel. The id URL always works.
+      return /^UC[\w-]{22}$/.test(puid)
+        ? `https://www.youtube.com/channel/${puid}`
+        : null;
     default:
       return null;
   }
@@ -485,7 +493,7 @@ function accountCreateInput(row: CandidateRow, creatorProfileId: string) {
     platformUserId: row.puid,
     platformUsername: row.username,
     platformDisplayName: row.display_name ?? row.username,
-    platformUrl: platformUrl(row.pf, row.username),
+    platformUrl: platformUrl(row.pf, row.puid, row.username),
     platformAvatarUrl: row.logo,
     lastSyncedAt: row.last_stream_at ?? new Date(),
   };

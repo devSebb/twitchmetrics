@@ -51,7 +51,8 @@ export function PlatformCard({
     connection?.profileUrl,
   );
   const isConnected = Boolean(connection?.isConnected);
-  const showBetaBadge = platform === "instagram" || platform === "tiktok";
+  const showBetaBadge =
+    platform === "instagram" || platform === "tiktok" || platform === "youtube";
   const isUnavailable = !config.oauthSupported || !oauthProviderReady;
   const connectedUsername =
     isConnected && connection?.username ? connection.username : null;

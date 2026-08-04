@@ -24,10 +24,18 @@ export function isOAuthProviderConfigured(provider: OAuthProviderId): boolean {
   );
 }
 
-export function getConfiguredSocialLoginProviders(): Array<
-  "google" | "twitch" | "kick" | "tiktok"
-> {
-  return (["google", "twitch", "kick", "tiktok"] as const).filter(
-    isOAuthProviderConfigured,
-  );
+export type SocialLoginProviderId = "google" | "twitch" | "kick" | "tiktok";
+
+/**
+ * Providers offered on the login/register pages. YouTube (google) and TikTok
+ * remain fully wired in auth.ts and on the connections page — they are just
+ * hidden from sign-in until their flows are ready. Re-add them here to restore.
+ */
+const SOCIAL_LOGIN_PROVIDERS = [
+  "twitch",
+  "kick",
+] as const satisfies readonly SocialLoginProviderId[];
+
+export function getConfiguredSocialLoginProviders(): SocialLoginProviderId[] {
+  return SOCIAL_LOGIN_PROVIDERS.filter(isOAuthProviderConfigured);
 }

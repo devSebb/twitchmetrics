@@ -248,7 +248,8 @@ export function ReportSuccessContent() {
             )}
 
             <p className="mt-6 text-xs text-[#4E5058]">
-              You can re-download this report at any time using this page link.
+              You can re-download this report at any time using this page link —
+              we&apos;ve also emailed you a confirmation that includes it.
             </p>
           </>
         )}
