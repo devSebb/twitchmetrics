@@ -81,9 +81,6 @@ export const metadata: Metadata = {
     creator: TWITTER_HANDLE,
     images: [DEFAULT_OG_IMAGE],
   },
-  alternates: {
-    canonical: SITE_URL,
-  },
 };
 
 export default function RootLayout({

@@ -395,7 +395,7 @@ async function generateGamesReport(
       ),
     );
   }
-  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.vercel.app"));
+  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.net"));
 
   return lines.join("\n");
 }
@@ -622,7 +622,7 @@ async function generateChannelsReport(
       `Total followers across ${creators.length} channels: ${fmt(Number(totalFollowers))}`,
     ),
   );
-  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.vercel.app"));
+  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.net"));
 
   return lines.join("\n");
 }

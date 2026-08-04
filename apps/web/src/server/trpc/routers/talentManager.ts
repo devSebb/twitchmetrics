@@ -274,7 +274,7 @@ async function generatePdfExport(args: {
       growth7dPct: primaryRollup?.pct7d ?? null,
       topGame:
         topGameByCreator.get(creator.id) ?? creator.primaryGameName ?? null,
-      profileUrl: `${baseUrl}/creators/${creator.slug}`,
+      profileUrl: `${baseUrl}/creator/${creator.slug}`,
     };
   });
 
@@ -695,7 +695,7 @@ export const talentManagerRouter = router({
         return [
           creator.displayName,
           creator.slug,
-          `${baseUrl}/creators/${creator.slug}`,
+          `${baseUrl}/creator/${creator.slug}`,
           inviteState,
           isoOrEmpty(access.acceptedAt),
           creator.state,

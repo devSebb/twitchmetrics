@@ -14,6 +14,7 @@ export const metadata: Metadata = {
     languages: {
       en: `${SITE_URL}/cookies`,
       es: `${SITE_URL}/es/cookies`,
+      "x-default": `${SITE_URL}/cookies`,
     },
   },
 };

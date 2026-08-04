@@ -1,6 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { RegisterFlow } from "@/components/auth";
 import { getConfiguredSocialLoginProviders } from "@/lib/oauth-providers";
+
+export const metadata: Metadata = {
+  title: "Create Account",
+  robots: { index: false, follow: false },
+};
 
 type RegisterPageProps = {
   searchParams: Promise<{

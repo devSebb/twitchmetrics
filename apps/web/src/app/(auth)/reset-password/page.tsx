@@ -1,5 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { ResetPasswordForm } from "@/components/auth";
+
+export const metadata: Metadata = {
+  title: "Reset Password",
+  robots: { index: false, follow: false },
+};
 
 type ResetPasswordPageProps = {
   searchParams: Promise<{

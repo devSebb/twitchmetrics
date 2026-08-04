@@ -156,6 +156,15 @@ export const METRICS = {
     requiresOAuth: false,
     snapshotField: "extendedMetrics",
   },
+  LISTED_COUNT: {
+    key: "LISTED_COUNT",
+    label: "Listed",
+    description: "Number of public X Lists that include this account",
+    format: "number",
+    platforms: ["x"] as const satisfies readonly Platform[],
+    requiresOAuth: false,
+    snapshotField: "extendedMetrics",
+  },
   COMMENTS: {
     key: "COMMENTS",
     label: "Comments",

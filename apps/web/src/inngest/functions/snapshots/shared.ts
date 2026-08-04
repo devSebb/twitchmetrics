@@ -348,6 +348,67 @@ export async function snapshotPlatformAccount(
       });
     }
   }
+
+  if (account.platform === "x") {
+    const ext = snapshotData.extendedMetrics as Record<string, unknown>;
+    const resolvedId =
+      typeof ext._resolvedUserId === "string" ? ext._resolvedUserId : null;
+    const freshUsername =
+      typeof ext._username === "string" ? ext._username : null;
+    const freshDisplayName =
+      typeof ext._displayName === "string" ? ext._displayName : null;
+    const freshAvatar =
+      typeof ext._avatarUrl === "string" ? ext._avatarUrl : null;
+
+    const accountUpdate: Record<string, string> = {};
+
+    // Discovery keys X rows by @handle; heal to the immutable numeric ID so
+    // renames can't orphan the row. (platform, platformUserId) is unique and
+    // a link-only sh-social row may already hold the same numeric ID, so
+    // only heal when the slot is free.
+    if (resolvedId !== null && resolvedId !== account.platformUserId) {
+      const conflict = await prisma.platformAccount.findUnique({
+        where: {
+          platform_platformUserId: {
+            platform: "x",
+            platformUserId: resolvedId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!conflict) {
+        accountUpdate.platformUserId = resolvedId;
+      } else {
+        log.warn(
+          {
+            creatorProfileId,
+            accountId: account.id,
+            resolvedId,
+            conflictAccountId: conflict.id,
+          },
+          "X numeric ID already keyed by another account — keeping handle key",
+        );
+      }
+    }
+
+    if (freshUsername !== null) {
+      accountUpdate.platformUsername = freshUsername;
+      accountUpdate.platformUrl = `https://x.com/${freshUsername}`;
+    }
+    if (freshDisplayName !== null) {
+      accountUpdate.platformDisplayName = freshDisplayName;
+    }
+    if (freshAvatar !== null) {
+      accountUpdate.platformAvatarUrl = freshAvatar;
+    }
+
+    if (Object.keys(accountUpdate).length > 0) {
+      await prisma.platformAccount.update({
+        where: { id: account.id },
+        data: accountUpdate,
+      });
+    }
+  }
 }
 
 async function getCreatorSlug(

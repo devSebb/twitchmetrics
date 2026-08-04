@@ -1,5 +1,11 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { ReportSuccessContent } from "./ReportSuccessContent";
+
+export const metadata: Metadata = {
+  title: "Report Ready",
+  robots: { index: false, follow: false },
+};
 
 export default function ReportSuccessPage() {
   return (

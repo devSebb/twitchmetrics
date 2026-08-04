@@ -52,12 +52,15 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   },
   x: {
     supportsPublicProfile: true,
-    supportsPublicSnapshot: false,
+    // Public reads go through the app-level TWITTER_BEARER_TOKEN — no
+    // per-user OAuth needed, but the X API Basic tier caps reads, so only
+    // the ~dozens of real (non-link-only) X accounts may flow through here.
+    supportsPublicSnapshot: true,
     supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: false,
     supportsTokenRefresh: true,
-    requiresOAuthForBaseline: true,
-    quotaSensitive: false,
+    requiresOAuthForBaseline: false,
+    quotaSensitive: true,
   },
   kick: {
     supportsPublicProfile: false,

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { LoginForm, SocialLoginButtons } from "@/components/auth";
 import { getConfiguredSocialLoginProviders } from "@/lib/oauth-providers";
+
+export const metadata: Metadata = {
+  title: "Log In",
+  robots: { index: false, follow: false },
+};
 
 type LoginPageProps = {
   searchParams: Promise<{

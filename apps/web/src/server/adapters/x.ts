@@ -172,15 +172,22 @@ class XAdapter implements PlatformAdapter {
     _options: { isOAuthConnected: boolean; accessToken?: string },
   ): Promise<CreatorSnapshotData> {
     return withRetry(async () => {
+      // Link-discovery stores the @handle in platformUserId; the numeric X ID
+      // only exists once a snapshot has resolved it. Route by shape, and hand
+      // the resolved ID back so the snapshot worker can heal the row.
+      const isNumericId = /^\d+$/.test(platformUserId);
+      const path = isNumericId
+        ? `/users/${encodeURIComponent(platformUserId)}`
+        : `/users/by/username/${encodeURIComponent(platformUserId.replace(/^@/, ""))}`;
       const data = await xApiFetch<XUserResponse>(
-        `/users/${encodeURIComponent(platformUserId)}?user.fields=${USER_FIELDS}`,
+        `${path}?user.fields=${USER_FIELDS}`,
       );
 
       if (!data.data) {
         throw new AdapterError(
           "x",
           "not_found",
-          `X user ID '${platformUserId}' not found`,
+          `X user '${platformUserId}' not found`,
         );
       }
 
@@ -197,9 +204,16 @@ class XAdapter implements PlatformAdapter {
         subscriberCount: null, // Not applicable
         postCount: metrics?.tweet_count ?? null,
         extendedMetrics: {
-          // Store listed_count as extended metric for reference
           ...(metrics?.listed_count != null
-            ? { LIKES: BigInt(metrics.listed_count) }
+            ? { LISTED_COUNT: BigInt(metrics.listed_count) }
+            : {}),
+          // Transport fields (stripped before persisting): let the snapshot
+          // worker heal handle-keyed rows and refresh display metadata.
+          _resolvedUserId: user.id,
+          _username: user.username,
+          _displayName: user.name,
+          ...(user.profile_image_url
+            ? { _avatarUrl: user.profile_image_url }
             : {}),
         },
       };

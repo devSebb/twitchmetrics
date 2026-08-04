@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { prisma } from "@twitchmetrics/database";
 import { OnboardingWizard } from "@/components/onboarding";
 import { auth } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Onboarding",
+  robots: { index: false, follow: false },
+};
 
 export default async function OnboardingPage() {
   const session = await auth();

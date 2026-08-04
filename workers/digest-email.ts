@@ -115,7 +115,7 @@ async function main() {
         const absGrowth = Math.abs(totalGrowth).toLocaleString();
         const displayName =
           user.creatorProfile.displayName || user.name || "Creator";
-        const profileUrl = `https://twitchmetrics.net/creators/${user.creatorProfile.slug}`;
+        const profileUrl = `https://twitchmetrics.net/creator/${user.creatorProfile.slug}`;
 
         const subject = `Your weekly digest: ${growthDirection} ${absGrowth} followers this week`;
 

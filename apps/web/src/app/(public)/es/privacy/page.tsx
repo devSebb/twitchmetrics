@@ -14,6 +14,7 @@ export const metadata: Metadata = {
     languages: {
       en: `${SITE_URL}/privacy`,
       es: `${SITE_URL}/es/privacy`,
+      "x-default": `${SITE_URL}/privacy`,
     },
   },
 };
