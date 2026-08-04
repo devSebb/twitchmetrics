@@ -70,7 +70,7 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
       if (platform) params.set("platform", platform);
       params.set("sort", sort);
       params.set("page", String(page));
-      params.set("limit", "20");
+      params.set("limit", "32");
       if (view === "list") params.set("view", "list");
       const res = await fetch(`/api/creators?${params.toString()}`);
       return res.json() as Promise<ApiResponse>;

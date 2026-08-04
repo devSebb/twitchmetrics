@@ -81,7 +81,7 @@ async function getCreators({
   sort: SortOption;
   page: number;
 }) {
-  const take = 20;
+  const take = 32;
   const skip = (page - 1) * take;
   const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
   if (platform) {
@@ -212,8 +212,8 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
   const initialMeta = {
     total,
     page,
-    limit: 20,
-    totalPages: Math.ceil(total / 20),
+    limit: 32,
+    totalPages: Math.ceil(total / 32),
   };
 
   return (
