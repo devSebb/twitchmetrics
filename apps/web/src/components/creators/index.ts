@@ -1,3 +1,4 @@
+export { CreatorGameFilter } from "./CreatorGameFilter";
 export { CreatorPlatformPills } from "./CreatorPlatformPills";
 export { CreatorSortControls } from "./CreatorSortControls";
 export { CreatorViewToggle } from "./CreatorViewToggle";

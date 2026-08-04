@@ -10,6 +10,15 @@ import {
   DISCOVERABLE_CREATOR_WHERE,
 } from "@/server/services/creator-visibility";
 import {
+  getTopGameFilters,
+  getViewershipRankedIds,
+  hasViewershipData,
+  isViewershipSort,
+  resolveGameFilter,
+  type GameFilter,
+} from "@/server/services/creator-ranking";
+import {
+  CreatorGameFilter,
   CreatorPlatformPills,
   CreatorSortControls,
   CreatorViewToggle,
@@ -18,7 +27,7 @@ import {
 
 export const revalidate = 300; // ISR: revalidate every 5 minutes
 
-type SortOption = "followers" | "trending" | "recent";
+type SortOption = "followers" | "viewership" | "peak" | "trending" | "recent";
 type CreatorRecord = Prisma.CreatorProfileGetPayload<{
   include: {
     platformAccounts: true;
@@ -45,12 +54,64 @@ function parsePlatform(value?: string): Platform | undefined {
 }
 
 function parseSort(value?: string): SortOption {
-  return value === "trending" || value === "recent" ? value : "followers";
+  return value === "trending" ||
+    value === "recent" ||
+    value === "viewership" ||
+    value === "peak"
+    ? value
+    : "followers";
 }
 
 function parsePage(value?: string): number {
   const page = Number(value);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
+const PLATFORM_LABELS: Record<Platform, string> = {
+  twitch: "Twitch",
+  youtube: "YouTube",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  x: "X",
+  kick: "Kick",
+};
+
+/** Platforms where "Streamers" is the right noun; social platforms and the
+ * unfiltered followers list say "Creators". */
+const STREAMING_PLATFORMS: ReadonlySet<Platform> = new Set([
+  "twitch",
+  "youtube",
+  "kick",
+]);
+
+function monthStamp(): string {
+  const now = new Date();
+  const month = now.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  return `${month} ${now.getUTCFullYear()}`;
+}
+
+/**
+ * Month-stamped ranking titles matching the legacy twitchmetrics.net pattern
+ * ("The Most Watched Twitch Streamers, August 2026") — the stamp regenerates
+ * monthly as a freshness signal. Trending/recent keep the generic title.
+ */
+function rankingTitle(
+  sort: SortOption,
+  platform: Platform | undefined,
+  game: GameFilter | null,
+): string {
+  if (sort === "trending" || sort === "recent") return "Top Creators";
+  const subject = game
+    ? `${game.name} Streamers`
+    : platform
+      ? `${PLATFORM_LABELS[platform]} ${STREAMING_PLATFORMS.has(platform) ? "Streamers" : "Creators"}`
+      : sort === "followers"
+        ? "Creators"
+        : "Streamers";
+  const stamp = monthStamp();
+  if (sort === "viewership") return `The Most Watched ${subject}, ${stamp}`;
+  if (sort === "peak") return `Top ${subject} by Peak Viewers, ${stamp}`;
+  return `The Most Followed ${subject}, ${stamp}`;
 }
 
 export async function generateMetadata({
@@ -60,25 +121,30 @@ export async function generateMetadata({
     platform: platformParam,
     sort: sortParam,
     page: pageParam,
+    game: gameParam,
   } = await searchParams;
   const platform = parsePlatform(platformParam);
   const sort = parseSort(sortParam);
   const page = parsePage(pageParam);
+  const game = await resolveGameFilter(gameParam);
 
   // Canonical: page 1 keeps the clean URL; deeper pages self-canonicalize so
-  // Google crawls the full catalog. Platform-filtered lists are distinct
-  // content, so the platform param stays in the canonical. The default sort
-  // ("followers") is omitted.
+  // Google crawls the full catalog. Platform- and game-filtered lists are
+  // distinct content, so those params stay in the canonical. The default sort
+  // ("followers") is omitted; unknown game slugs are ignored entirely.
   const params = new URLSearchParams();
   if (platform) params.set("platform", platform);
   if (sort !== "followers") params.set("sort", sort);
+  if (game) params.set("game", game.slug);
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
   const url = query ? `${SITE_URL}/creators?${query}` : `${SITE_URL}/creators`;
 
-  const title = page > 1 ? `Top Creators - Page ${page}` : "Top Creators";
-  const description =
-    "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more. Latest follower snapshots and growth trends.";
+  const baseTitle = rankingTitle(sort, platform, game);
+  const title = page > 1 ? `${baseTitle} - Page ${page}` : baseTitle;
+  const description = game
+    ? `Browse the most watched ${game.name} streamers ranked by recent viewership. Updated follower snapshots and growth trends.`
+    : "Browse the top creators across Twitch, YouTube, Instagram, TikTok, and more. Latest follower snapshots and growth trends.";
 
   return {
     title,
@@ -103,57 +169,87 @@ async function getCreators({
   platform,
   sort,
   page,
+  game,
 }: {
   platform: Platform | undefined;
   sort: SortOption;
   page: number;
+  game: GameFilter | null;
 }) {
   const take = 32;
   const skip = (page - 1) * take;
-  // Platform filtering joins PlatformAccount (unique on creatorProfileId +
-  // platform, so no row fanout) so ranking can use that platform's own count
-  // instead of the cross-platform total.
-  const joinClause = platform
-    ? Prisma.sql`
-        JOIN "PlatformAccount" pa
-          ON pa."creatorProfileId" = cp.id
-         AND pa.platform = ${platform}::"Platform"
-      `
-    : Prisma.empty;
-  const whereClause = Prisma.sql`WHERE ${DISCOVERABLE_CREATOR_SQL}`;
-  // YouTube stores audience size in subscriberCount, others in followerCount.
-  const platformFollowersSql = Prisma.sql`COALESCE(pa."followerCount", pa."subscriberCount")`;
-  const orderClause =
-    sort === "trending"
+
+  // Viewership/peak rank from Stream Hatchet daily rollups; platforms without
+  // stream data (instagram/tiktok/x) fall back to the followers ordering.
+  const effectiveSort =
+    isViewershipSort(sort) && !hasViewershipData(platform) ? "followers" : sort;
+
+  let ids: string[];
+  if (isViewershipSort(effectiveSort)) {
+    ids = await getViewershipRankedIds({
+      sort: effectiveSort,
+      platform,
+      gameName: game?.name ?? null,
+      take,
+      skip,
+    });
+  } else {
+    // Platform filtering joins PlatformAccount (unique on creatorProfileId +
+    // platform, so no row fanout) so ranking can use that platform's own count
+    // instead of the cross-platform total.
+    const joinClause = platform
       ? Prisma.sql`
-          ORDER BY COALESCE(
-            (
-              SELECT cgr."delta7d"
-              FROM "CreatorGrowthRollup" cgr
-              WHERE cgr."creatorProfileId" = cp.id
-                AND cgr.platform = ${platform ? Prisma.sql`${platform}::"Platform"` : Prisma.sql`cp."primaryPlatform"`}
-              LIMIT 1
-            ),
-            0
-          ) DESC, ${platform ? Prisma.sql`${platformFollowersSql} DESC NULLS LAST` : Prisma.sql`cp."totalFollowers" DESC`}
+          JOIN "PlatformAccount" pa
+            ON pa."creatorProfileId" = cp.id
+           AND pa.platform = ${platform}::"Platform"
         `
-      : sort === "recent"
-        ? Prisma.sql`ORDER BY cp."createdAt" DESC`
-        : platform
-          ? Prisma.sql`ORDER BY ${platformFollowersSql} DESC NULLS LAST, cp."totalFollowers" DESC`
-          : Prisma.sql`ORDER BY cp."totalFollowers" DESC`;
+      : Prisma.empty;
+    const gameClause = game
+      ? Prisma.sql` AND cp."primaryGameSlug" = ${game.slug}`
+      : Prisma.empty;
+    const whereClause = Prisma.sql`WHERE ${DISCOVERABLE_CREATOR_SQL}${gameClause}`;
+    // YouTube stores audience size in subscriberCount, others in followerCount.
+    const platformFollowersSql = Prisma.sql`COALESCE(pa."followerCount", pa."subscriberCount")`;
+    const orderClause =
+      effectiveSort === "trending"
+        ? Prisma.sql`
+            ORDER BY COALESCE(
+              (
+                SELECT cgr."delta7d"
+                FROM "CreatorGrowthRollup" cgr
+                WHERE cgr."creatorProfileId" = cp.id
+                  AND cgr.platform = ${platform ? Prisma.sql`${platform}::"Platform"` : Prisma.sql`cp."primaryPlatform"`}
+                LIMIT 1
+              ),
+              0
+            ) DESC, ${platform ? Prisma.sql`${platformFollowersSql} DESC NULLS LAST` : Prisma.sql`cp."totalFollowers" DESC`}
+          `
+        : effectiveSort === "recent"
+          ? Prisma.sql`ORDER BY cp."createdAt" DESC`
+          : platform
+            ? Prisma.sql`ORDER BY ${platformFollowersSql} DESC NULLS LAST, cp."totalFollowers" DESC`
+            : Prisma.sql`ORDER BY cp."totalFollowers" DESC`;
 
-  const idRows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT cp.id
-    FROM "CreatorProfile" cp
-    ${joinClause}
-    ${whereClause}
-    ${orderClause}
-    LIMIT ${take}
-    OFFSET ${skip}
-  `);
+    const idRows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT cp.id
+      FROM "CreatorProfile" cp
+      ${joinClause}
+      ${whereClause}
+      ${orderClause}
+      LIMIT ${take}
+      OFFSET ${skip}
+    `);
+    ids = idRows.map((row) => row.id);
+  }
 
-  const ids = idRows.map((row) => row.id);
+  // Count: game-filtered totals use the primary-game cohort (approximate for
+  // viewership sorts, which rank by who streamed the game recently).
+  const countWhere = {
+    ...DISCOVERABLE_CREATOR_WHERE,
+    ...(game ? { primaryGameSlug: game.slug } : {}),
+    ...(platform ? { platformAccounts: { some: { platform } } } : {}),
+  };
+
   const [creators, countResult]: [CreatorRecord[], number] = await Promise.all([
     ids.length
       ? db.creatorProfile.findMany({
@@ -166,14 +262,7 @@ async function getCreators({
           },
         })
       : Promise.resolve([] as CreatorRecord[]),
-    platform
-      ? db.creatorProfile.count({
-          where: {
-            ...DISCOVERABLE_CREATOR_WHERE,
-            platformAccounts: { some: { platform } },
-          },
-        })
-      : db.creatorProfile.count({ where: DISCOVERABLE_CREATOR_WHERE }),
+    db.creatorProfile.count({ where: countWhere }),
   ]);
 
   const creatorById = new Map(creators.map((creator) => [creator.id, creator]));
@@ -235,6 +324,7 @@ type PageProps = {
     platform?: string;
     sort?: string;
     page?: string;
+    game?: string;
   }>;
 };
 
@@ -271,15 +361,26 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
     platform: platformParam,
     sort: sortParam,
     page: pageParam,
+    game: gameParam,
   } = await searchParams;
   const platform = parsePlatform(platformParam);
   const sort = parseSort(sortParam);
   const page = parsePage(pageParam);
-  const { data: initialCreators, total } = await getCreators({
-    platform,
-    sort,
-    page,
-  });
+  const game = await resolveGameFilter(gameParam);
+  const [{ data: initialCreators, total }, topGames] = await Promise.all([
+    getCreators({
+      platform,
+      sort,
+      page,
+      game,
+    }),
+    getTopGameFilters(),
+  ]);
+
+  const heading =
+    sort === "trending" || sort === "recent"
+      ? "Top Channels"
+      : rankingTitle(sort, platform, game);
 
   const initialMeta = {
     total,
@@ -299,7 +400,7 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold text-[#F2F3F5]">Top Channels</h1>
+          <h1 className="text-2xl font-bold text-[#F2F3F5]">{heading}</h1>
           <p className="mt-2 text-sm text-[#949BA4]">
             Browse creator profiles by platform, follow growth momentum, and
             sort the directory by scale or recent movement.
@@ -313,6 +414,7 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
       <Suspense>
         <div className="mb-4 flex items-center gap-3">
           <CreatorViewToggle />
+          <CreatorGameFilter games={topGames} activeGame={game} />
           <CreatorSortControls />
         </div>
       </Suspense>

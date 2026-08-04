@@ -82,4 +82,71 @@ describe("creator visibility policies", () => {
       redirect: false,
     });
   });
+
+  it("follows a slug redirect left behind by a rename", async () => {
+    const prisma = {
+      creatorProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+      slugRedirect: {
+        findUnique: vi.fn().mockResolvedValue({
+          creatorProfile: {
+            id: "creator-id",
+            slug: "clean-slug",
+            listed: true,
+            mergedInto: null,
+          },
+        }),
+      },
+    } as unknown as PrismaClient;
+
+    await expect(
+      resolveCreatorSlug(prisma, "clean-slug-0123456789abcdef"),
+    ).resolves.toEqual({
+      found: true,
+      id: "creator-id",
+      listed: true,
+      canonicalSlug: "clean-slug",
+      redirect: true,
+    });
+  });
+
+  it("follows a slug redirect through a merge pointer", async () => {
+    const prisma = {
+      creatorProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+      slugRedirect: {
+        findUnique: vi.fn().mockResolvedValue({
+          creatorProfile: {
+            id: "stub-id",
+            slug: "clean-slug",
+            listed: false,
+            mergedInto: {
+              id: "canonical-id",
+              slug: "canonical-slug",
+              listed: true,
+            },
+          },
+        }),
+      },
+    } as unknown as PrismaClient;
+
+    await expect(
+      resolveCreatorSlug(prisma, "clean-slug-0123456789abcdef"),
+    ).resolves.toEqual({
+      found: true,
+      id: "canonical-id",
+      listed: true,
+      canonicalSlug: "canonical-slug",
+      redirect: true,
+    });
+  });
+
+  it("reports a miss when no profile or redirect matches", async () => {
+    const prisma = {
+      creatorProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+      slugRedirect: { findUnique: vi.fn().mockResolvedValue(null) },
+    } as unknown as PrismaClient;
+
+    await expect(resolveCreatorSlug(prisma, "missing")).resolves.toEqual({
+      found: false,
+    });
+  });
 });

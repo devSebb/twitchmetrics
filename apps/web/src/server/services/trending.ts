@@ -1,12 +1,9 @@
 import { Prisma } from "@twitchmetrics/database";
 import { db } from "@/server/db";
-import { cacheGet, cacheSet, CACHE_TTL } from "./cache";
 import { createLogger } from "@/lib/logger";
 import { DISCOVERABLE_CREATOR_SQL } from "./creator-visibility";
 
 const log = createLogger("trending");
-
-const CACHE_KEY = "trending:landing:v2";
 
 export type TrendingCreator = {
   id: string;
@@ -38,14 +35,14 @@ type Row = {
  * landing card matches what users see in the browse "Trending" filter.
  *
  * Floors: delta7d > 100 and totalFollowers > 500 to keep tiny-base outliers out.
- * Results are cached for 10 minutes.
+ *
+ * Deliberately DB-only: the sole caller is the ISR'd landing page, which
+ * caches the whole render for 10 minutes. The Upstash client's no-store
+ * fetch would opt the page out of static rendering, so no Redis here.
  */
 export async function getTrendingCreators(
   limit = 9,
 ): Promise<TrendingCreator[]> {
-  const cached = await cacheGet<TrendingCreator[]>(CACHE_KEY);
-  if (cached) return cached;
-
   const rows = await db.$queryRaw<Row[]>(Prisma.sql`
     SELECT cp.id,
            cp.slug,
@@ -82,8 +79,6 @@ export async function getTrendingCreators(
     trendDirection: r.trendDirection ?? "FLAT",
     primaryPlatform: r.primaryPlatform,
   }));
-
-  await cacheSet(CACHE_KEY, trending, CACHE_TTL.TRENDING_LANDING);
 
   log.info({ count: trending.length }, "Trending creators computed");
   return trending;

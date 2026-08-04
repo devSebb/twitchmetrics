@@ -14,6 +14,13 @@ import {
   DISCOVERABLE_CREATOR_WHERE,
 } from "@/server/services/creator-visibility";
 import { isKnownGrowthRollup } from "@/server/services/creator-growth";
+import {
+  getViewershipRankedIds,
+  hasViewershipData,
+  isViewershipSort,
+  resolveGameFilter,
+  type GameFilter,
+} from "@/server/services/creator-ranking";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -45,13 +52,17 @@ function buildPlatformJoin(platform: Platform | null): Prisma.Sql {
   `;
 }
 
-function buildWhereClause(query: string | null) {
+function buildWhereClause(query: string | null, game: GameFilter | null) {
   const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
 
   if (query) {
     conditions.push(
       Prisma.sql`(cp."searchText" % ${query} OR cp."searchText" ILIKE '%' || ${query} || '%')`,
     );
+  }
+
+  if (game) {
+    conditions.push(Prisma.sql`cp."primaryGameSlug" = ${game.slug}`);
   }
 
   return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
@@ -100,29 +111,47 @@ export async function GET(request: Request) {
   const platform = parsePlatform(searchParams.get("platform"));
   const sort = searchParams.get("sort");
   const view = searchParams.get("view") === "list" ? "list" : "grid";
+  const gameParam = searchParams.get("game");
 
   // Cache by normalized query params (view splits list/grid into separate keys
   // since list responses carry extra streaming-stat fields).
-  const cacheKey = `creators:list:v5:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
+  const cacheKey = `creators:list:v6:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:g${gameParam ?? ""}:v${view}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
   }
 
+  // Unknown game slugs are ignored (filter dropped), matching /creators.
+  const game = await resolveGameFilter(gameParam);
+
   const joinClause = buildPlatformJoin(platform);
-  const whereClause = buildWhereClause(query);
-  const orderClause = getOrderClause(sort, platform);
+  const whereClause = buildWhereClause(query, game);
+
+  // Viewership/peak rank from Stream Hatchet daily rollups (see
+  // services/creator-ranking); platforms without stream data fall back to
+  // the followers ordering. The free-text query param is not supported for
+  // these sorts (the ranked candidate set ignores it), so it also falls back.
+  const useViewershipRanking =
+    isViewershipSort(sort) && hasViewershipData(platform) && !query;
 
   const [idRows, totalRows] = await Promise.all([
-    db.$queryRaw<CreatorIdRow[]>(Prisma.sql`
-      SELECT cp.id
-      FROM "CreatorProfile" cp
-      ${joinClause}
-      ${whereClause}
-      ${orderClause}
-      LIMIT ${limit}
-      OFFSET ${skip}
-    `),
+    useViewershipRanking
+      ? getViewershipRankedIds({
+          sort,
+          platform: platform ?? undefined,
+          gameName: game?.name ?? null,
+          take: limit,
+          skip,
+        }).then((ids) => ids.map((id) => ({ id })))
+      : db.$queryRaw<CreatorIdRow[]>(Prisma.sql`
+          SELECT cp.id
+          FROM "CreatorProfile" cp
+          ${joinClause}
+          ${whereClause}
+          ${getOrderClause(sort && isViewershipSort(sort) ? "followers" : sort, platform)}
+          LIMIT ${limit}
+          OFFSET ${skip}
+        `),
     db.$queryRaw<TotalRow[]>(Prisma.sql`
       SELECT COUNT(*)::bigint AS total
       FROM "CreatorProfile" cp

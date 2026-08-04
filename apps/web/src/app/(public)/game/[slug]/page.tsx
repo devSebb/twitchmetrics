@@ -18,6 +18,14 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
+// ISR: game pages cache for an hour between rollup refreshes.
+// Empty generateStaticParams opts the route into on-demand static
+// generation — without it every request re-renders from scratch.
+export const revalidate = 3600;
+export function generateStaticParams() {
+  return [];
+}
+
 async function getGame(slug: string) {
   const game = await db.game.findUnique({
     where: { slug },

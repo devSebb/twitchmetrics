@@ -10,12 +10,23 @@ import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { getLatestTimestamp } from "@/lib/metric-freshness";
 import { CreatorHeader } from "@/components/creator";
 import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
-import { creatorRobots } from "@/server/services/creator-visibility";
+import {
+  creatorRobots,
+  resolveCreatorSlug,
+} from "@/server/services/creator-visibility";
 import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
+
+// ISR: profile shells cache for an hour; live widgets hydrate via tRPC.
+// Empty generateStaticParams opts the route into on-demand static
+// generation — without it every request re-renders from scratch.
+export const revalidate = 3600;
+export function generateStaticParams() {
+  return [];
+}
 
 const getCreator = cache(async (slug: string) => {
   const creator = await db.creatorProfile.findUnique({
@@ -78,6 +89,17 @@ export async function generateMetadata({
   const creator = await getCreator(slug);
 
   if (!creator) {
+    // Renamed slugs (SlugRedirect) canonicalize to the new URL.
+    const resolved = await resolveCreatorSlug(db, slug);
+    if (resolved.found && resolved.redirect) {
+      return {
+        title: `Creator Profile | ${SITE_NAME}`,
+        robots: { index: false, follow: true },
+        alternates: {
+          canonical: `${SITE_URL}/creator/${resolved.canonicalSlug}`,
+        },
+      };
+    }
     return { title: "Creator Not Found | TwitchMetrics" };
   }
 
@@ -149,6 +171,11 @@ export default async function CreatorProfilePage({ params }: PageProps) {
   const creator = await getCreator(slug);
 
   if (!creator) {
+    // Renamed slugs (SlugRedirect) 308 to the canonical URL.
+    const resolved = await resolveCreatorSlug(db, slug);
+    if (resolved.found && resolved.redirect) {
+      permanentRedirect(`/creator/${resolved.canonicalSlug}`);
+    }
     notFound();
   }
 

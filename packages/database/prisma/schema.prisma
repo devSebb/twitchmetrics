@@ -261,6 +261,8 @@ model CreatorProfile {
   identityLinksAsCanonical IdentityLink[] @relation("IdentityLinkCanonical")
   identityLinksAsOther     IdentityLink[] @relation("IdentityLinkOther")
 
+  slugRedirects SlugRedirect[]
+
   @@index([state])
   @@index([snapshotTier])
   @@index([primaryPlatform])
@@ -271,6 +273,22 @@ model CreatorProfile {
   @@index([listed, totalFollowers(sort: Desc)])
   @@index([catalogSource])
   @@index([mergedIntoId])
+  // Trigram index backing /search (similarity % + ILIKE). Declared here so
+  // schema drift never drops it again (the raw 2026-03 version was dropped
+  // by the generated 20260312174050_add_report_lead migration).
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// Durable slug redirects: when a profile's slug is renamed (e.g. the pre-launch
+// machine-slug cleanup), the old slug is kept here so /creator/<oldSlug> can
+// 308 to the canonical profile forever.
+model SlugRedirect {
+  oldSlug          String         @id
+  creatorProfileId String         @db.Uuid
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+
+  @@index([creatorProfileId])
 }
 
 // Proposed / decided cross-platform identity links between two solo profiles.
@@ -546,6 +564,7 @@ model Game {
   @@index([currentViewers(sort: Desc)])
   @@index([name])
   @@index([vertical, currentViewers(sort: Desc)])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model PlatformGameMapping {

@@ -32,7 +32,7 @@ async function getLandingData() {
         },
       },
     }),
-    // Trending creators via scoring service (cached)
+    // Trending creators via scoring service (page-level ISR caches this)
     getTrendingCreators(9),
     // Top games by current viewers
     db.game.findMany({

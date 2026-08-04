@@ -216,12 +216,12 @@ export async function resolveLegacyGameName(
  * long-lived backlinks.
  */
 export const LEGACY_CHANNEL_LISTS: Record<string, string> = {
-  viewership: "/creators",
+  viewership: "/creators?sort=viewership",
   follower: "/creators",
   growth: "/creators?sort=trending",
-  peak: "/creators",
+  peak: "/creators?sort=peak",
   popularity: "/creators",
-  most_watched: "/creators",
+  most_watched: "/creators?sort=viewership",
   most_followed: "/creators",
   fastest_growing: "/creators?sort=trending",
 };

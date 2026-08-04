@@ -46,12 +46,13 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   const searchParams = useSearchParams();
   const platform = searchParams.get("platform") ?? "";
   const sort = searchParams.get("sort") ?? "followers";
+  const game = searchParams.get("game") ?? "";
   const view = searchParams.get("view") === "list" ? "list" : "grid";
   const pageParam = Number(searchParams.get("page") ?? "1");
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
   const isDefaultParams =
-    page === 1 && !platform && sort === "followers" && view === "grid";
+    page === 1 && !platform && !game && sort === "followers" && view === "grid";
 
   function buildCreatorsUrl(nextPage: number) {
     const params = new URLSearchParams(searchParams.toString());
@@ -65,11 +66,12 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ["creators", platform, sort, page, view],
+    queryKey: ["creators", platform, sort, game, page, view],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
       if (platform) params.set("platform", platform);
       params.set("sort", sort);
+      if (game) params.set("game", game);
       params.set("page", String(page));
       params.set("limit", "32");
       if (view === "list") params.set("view", "list");

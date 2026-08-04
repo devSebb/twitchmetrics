@@ -3,22 +3,32 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-type SortValue = "followers" | "trending" | "recent";
+type SortValue = "followers" | "viewership" | "peak" | "trending" | "recent";
 
 const SORTS: { label: string; value: SortValue }[] = [
   { label: "Followers", value: "followers" },
+  { label: "Viewership", value: "viewership" },
+  { label: "Peak", value: "peak" },
   { label: "Trending", value: "trending" },
   { label: "Recent", value: "recent" },
 ];
 
 const TIMEFRAME: Record<SortValue, string> = {
   followers: "Latest snapshots",
+  viewership: "Avg viewers, last 7 days",
+  peak: "Peak viewers, last 7 days",
   trending: "Last 7 days",
   recent: "Recently added",
 };
 
 function isSortValue(value: string | null): value is SortValue {
-  return value === "followers" || value === "trending" || value === "recent";
+  return (
+    value === "followers" ||
+    value === "viewership" ||
+    value === "peak" ||
+    value === "trending" ||
+    value === "recent"
+  );
 }
 
 export function CreatorSortControls() {
