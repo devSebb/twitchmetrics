@@ -16,6 +16,14 @@ export const twitchApiLimiter = new Ratelimit({
   prefix: "ratelimit:twitch",
 });
 
+// Legacy /c/ redirect on-miss ingestion: deliberately far below the Twitch
+// budget so a crawler storm on dead legacy URLs can't exhaust API quota.
+export const legacyIngestLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(30, "60 s"),
+  prefix: "ratelimit:legacy-ingest",
+});
+
 // YouTube Data API v3: 10,000 quota units per day
 export const youtubeApiLimiter = new Ratelimit({
   redis,

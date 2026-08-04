@@ -1,4 +1,9 @@
 import type { PrismaClient } from "@twitchmetrics/database";
+import { legacyIngestLimiter } from "@/lib/redis";
+import { createLogger } from "@/lib/logger";
+import { cacheGet, cacheSet } from "@/server/services/cache";
+
+const log = createLogger("legacy-redirects");
 
 /**
  * Resolution for legacy twitchmetrics.net (Rails) URLs.
@@ -78,6 +83,79 @@ export async function resolveLegacyChannel(
   }
 
   return null;
+}
+
+/** Confirmed-dead Twitch IDs are negative-cached to avoid repeat API calls. */
+const INGEST_MISS_TTL = 7 * 24 * 3600;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), ms),
+    ),
+  ]);
+}
+
+// Per-instance fallback when Redis is unreachable: still bounds Twitch API
+// usage (per serverless instance) instead of disabling self-heal entirely.
+let memoryWindowStart = 0;
+let memoryWindowCount = 0;
+function memoryRateLimit(limit: number): boolean {
+  const now = Date.now();
+  if (now - memoryWindowStart > 60_000) {
+    memoryWindowStart = now;
+    memoryWindowCount = 0;
+  }
+  memoryWindowCount += 1;
+  return memoryWindowCount <= limit;
+}
+
+/**
+ * Catalog self-heal: when a legacy /c/ URL carries a Twitch ID we don't have,
+ * ingest the channel live from the Twitch API (creates an unlisted profile)
+ * and redirect to it. Guardrails, in order:
+ *   1. sane numeric ID only (no API call for garbage)
+ *   2. negative cache — a confirmed-dead ID is not re-checked for 7 days
+ *   3. global rate limit (30/min) — a crawler storm on dead legacy URLs
+ *      degrades to plain 404s instead of burning Twitch quota / DB writes;
+ *      those URLs recover on a later crawl. Fails closed if Redis is down.
+ * Returns the new (or raced-concurrent) slug, or null.
+ */
+export async function ingestLegacyChannelGuarded(
+  segment: string,
+): Promise<string | null> {
+  const platformUserId = LEGACY_SEGMENT.exec(segment)?.[1];
+  if (!platformUserId || platformUserId.length > 12) return null;
+
+  const missKey = `legacy:ingest-miss:${platformUserId}`;
+  try {
+    if (await withTimeout(cacheGet<number>(missKey), 1500)) return null;
+  } catch {
+    // Cache unreachable — proceed; the rate limit still bounds API usage.
+  }
+
+  let allowed: boolean;
+  try {
+    allowed = (await withTimeout(legacyIngestLimiter.limit("global"), 1500))
+      .success;
+  } catch {
+    allowed = memoryRateLimit(30);
+  }
+  if (!allowed) return null;
+
+  try {
+    const { ingestCreatorByTwitchId } = await import("./creator-ingest");
+    const result = await ingestCreatorByTwitchId(platformUserId);
+    if (!result) {
+      await cacheSet(missKey, 1, INGEST_MISS_TTL);
+      return null;
+    }
+    return result.slug;
+  } catch (err) {
+    log.warn({ err, platformUserId }, "Legacy on-miss ingestion failed");
+    return null;
+  }
 }
 
 /**
