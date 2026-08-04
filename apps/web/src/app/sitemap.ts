@@ -2,11 +2,7 @@ import type { MetadataRoute } from "next";
 import { db } from "@/server/db";
 import { SITE_URL } from "@/lib/constants/seo";
 import { DISCOVERABLE_CREATOR_WHERE } from "@/server/services/creator-visibility";
-
-// URLs per child sitemap. Kept well under both the sitemaps.org limit (50,000
-// URLs / 50MB) and Vercel's 19.07MB ISR fallback body cap — at ~200 bytes per
-// entry, 25k URLs is roughly 5MB per file.
-const CHUNK_SIZE = 25_000;
+import { CHUNK_SIZE, getChunkPlan } from "@/server/services/sitemap-chunks";
 
 const staticPages: MetadataRoute.Sitemap = [
   {
@@ -71,34 +67,21 @@ const staticPages: MetadataRoute.Sitemap = [
   },
 ];
 
-// Chunk layout: ids [0 .. creatorChunks-1] carry creators (chunk 0 also carries
-// the static pages), then [creatorChunks .. creatorChunks+gameChunks-1] carry
-// games. Computed once at build/regeneration time from live row counts.
-async function getChunkPlan() {
-  const [creatorCount, gameCount] = await Promise.all([
-    db.creatorProfile.count({ where: DISCOVERABLE_CREATOR_WHERE }),
-    db.game.count(),
-  ]);
-
-  // At least one creator chunk so chunk 0 always exists to host static pages,
-  // even before any creators are ingested.
-  const creatorChunks = Math.max(1, Math.ceil(creatorCount / CHUNK_SIZE));
-  const gameChunks = Math.ceil(gameCount / CHUNK_SIZE);
-
-  return { creatorChunks, gameChunks };
-}
-
+// Chunk-count/layout logic lives in @/server/services/sitemap-chunks so the
+// /sitemap.xml index route handler shares it and the two can never drift.
 export async function generateSitemaps(): Promise<{ id: number }[]> {
-  const { creatorChunks, gameChunks } = await getChunkPlan();
-  const total = creatorChunks + gameChunks;
-  return Array.from({ length: total }, (_, id) => ({ id }));
+  const { totalChunks } = await getChunkPlan();
+  return Array.from({ length: totalChunks }, (_, id) => ({ id }));
 }
 
 export default async function sitemap({
-  id,
+  id: rawId,
 }: {
   id: number;
 }): Promise<MetadataRoute.Sitemap> {
+  // Next passes id as a string in dev (route param), a number in prod builds.
+  // Coerce so `id === 0` / arithmetic behave identically in both.
+  const id = Number(rawId);
   const { creatorChunks } = await getChunkPlan();
 
   // ── Creator chunk ──────────────────────────────────────────────────────────

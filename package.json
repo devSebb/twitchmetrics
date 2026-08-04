@@ -26,6 +26,7 @@
     "worker:streamhatchet-catalog": "tsx --env-file=apps/web/.env.local workers/streamhatchet-build-catalog.ts",
     "worker:streamhatchet-identity": "tsx --env-file=apps/web/.env.local workers/streamhatchet-resolve-identities.ts",
     "worker:streamhatchet-social": "tsx --env-file=apps/web/.env.local workers/streamhatchet-ingest-social-profiles.ts",
+    "worker:sh-refresh-followers": "tsx --env-file=apps/web/.env.local workers/streamhatchet-ingest-social-profiles.ts --refresh-followers",
     "worker:cleanup-invalid-accounts": "tsx --env-file=apps/web/.env.local workers/cleanup-invalid-platform-accounts.ts",
     "worker:reconcile-visibility": "tsx --env-file=apps/web/.env.local workers/reconcile-creator-listing.ts",
     "worker:repair-visibility": "tsx --env-file=apps/web/.env.local workers/repair-creator-visibility.ts",

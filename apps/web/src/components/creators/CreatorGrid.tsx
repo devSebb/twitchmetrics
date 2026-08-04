@@ -13,6 +13,7 @@ type CreatorData = {
   slug: string;
   avatarUrl: string | null;
   totalFollowers: string;
+  displayFollowers?: string;
   primaryPlatform: Platform;
   platformAccounts: { platform: Platform; platformUsername: string }[];
   growthRollup: {

@@ -41,8 +41,21 @@
  *   pnpm worker:streamhatchet-social -- --social-links           # dry run: attach IG/TikTok/X links
  *   pnpm worker:streamhatchet-social -- --social-links --write   # apply link-only social accounts
  *
+ *   pnpm worker:sh-refresh-followers                             # dry run: follower freshness sweep
+ *   pnpm worker:sh-refresh-followers -- --write                  # apply refreshed counts
+ *
+ * --refresh-followers is the RECURRING freshness mode (run weekly): joins the
+ * latest daily export's reach against the twitch/youtube/kick accounts the API
+ * tier crons never touch (SH-catalog, unclaimed, no OAuth), updates changed
+ * followerCounts, stamps lastSyncedAt on every match ("verified as of"), and
+ * accrues one follower MetricSnapshot per changed account per export date so
+ * catalog creators build real follower history over time. Only needs the
+ * social_profiles extract (contacts is skipped). Re-running --social-links
+ * against a fresh snapshot is the matching refresh for IG/TikTok/X links.
+ *
  * Flags: --write --sample --snapshot <name> --limit <n> --work-dir <path>
  *        --aws-profile <name> --bio-max-len <n> --skip-extract --social-links
+ *        --refresh-followers
  *
  * NOTE: --social-links needs a FRESH extract (all 6 platforms). Don't combine it
  * with --skip-extract against a parquet extracted before social platforms existed.
@@ -56,7 +69,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createInterface } from "node:readline";
-import { prisma, type Platform } from "@twitchmetrics/database";
+import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
 import {
   ClaimLockedError,
   isClaimLocked,
@@ -105,6 +118,9 @@ type Config = {
   // creators. Needs a fresh (6-platform) extract — do NOT pass --skip-extract
   // against a parquet that was extracted before social platforms were included.
   socialLinks: boolean;
+  // Recurring freshness mode: refresh twitch/youtube/kick followerCounts from
+  // the export's reach for accounts the API tier crons never touch.
+  refreshFollowers: boolean;
 };
 
 function argValue(name: string): string | undefined {
@@ -131,6 +147,7 @@ function parseConfig(): Config {
     bioMaxLen: parsePositiveInt(argValue("--bio-max-len"), 500),
     skipExtract: args.includes("--skip-extract"),
     socialLinks: args.includes("--social-links"),
+    refreshFollowers: args.includes("--refresh-followers"),
   };
 }
 
@@ -802,6 +819,7 @@ type SocialAccountCreate = {
   followerCount: bigint | null;
   isOAuthConnected: boolean;
   discoverySource: string;
+  lastSyncedAt: Date;
 };
 
 function reachToBigInt(reach: number | null): bigint | null {
@@ -819,9 +837,13 @@ function reachToBigInt(reach: number | null): bigint | null {
 async function attachSocialLinks(
   plan: PlanGroup[],
   config: Config,
+  snapshot: string,
 ): Promise<void> {
   const groups = config.limit ? plan.slice(0, config.limit) : plan;
   const socialSet = new Set<string>(SOCIAL_LINK_PLATFORMS);
+  // Stamp with the export's as-of date so the UI can say how fresh a
+  // link-only follower count actually is.
+  const syncedAt = snapshotExportDate(snapshot);
 
   // Resolve each contact to its single canonical creator + best link per platform.
   const targets: AttachTarget[] = [];
@@ -917,6 +939,7 @@ async function attachSocialLinks(
               followerCount: reachToBigInt(link.reach),
               isOAuthConnected: false,
               discoverySource: DISCOVERY_SOURCE,
+              lastSyncedAt: syncedAt,
             });
           } else if (existingSource.get(k) === DISCOVERY_SOURCE) {
             toUpdate.push({ canonicalId: t.canonicalId, link });
@@ -961,6 +984,7 @@ async function attachSocialLinks(
                       sanitizeText(u.link.raw_url, 500),
                     ),
                     followerCount: reachToBigInt(u.link.reach),
+                    lastSyncedAt: syncedAt,
                   },
                 }),
               );
@@ -1005,20 +1029,334 @@ async function attachSocialLinks(
   });
 }
 
+// ─── Refresh-followers mode ──────────────────────────────────────────────────
+//
+// The recurring complement to the one-time catalog build: every SH daily export
+// carries a fresh `reach` per profile, so a weekly sweep keeps the ~1M
+// SH-catalog twitch/youtube/kick follower counts honest. Scope is strictly the
+// accounts the API tier crons never touch — SH-catalog, unclaimed, no user, no
+// OAuth anywhere on the profile — so the two supply lines can never fight over
+// the same row. Changed counts also accrue one MetricSnapshot per account per
+// export date (deterministic timestamp → idempotent re-runs), which is what
+// eventually lights up follower history and growth for catalog creators.
+
+const REFRESH_PLATFORMS: Platform[] = ["twitch", "youtube", "kick"];
+const REFRESH_SNAPSHOT_SOURCE = "streamhatchet_social_profiles";
+const UPDATE_BATCH = 1000;
+const TOUCH_BATCH = 5000;
+
+/** The export folder name carries the data's as-of date — stamp with that, not now. */
+function snapshotExportDate(snapshot: string): Date {
+  const m = snapshot.match(/(\d{4}-\d{2}-\d{2})/);
+  if (m) return new Date(`${m[1]}T00:00:00.000Z`);
+  log("warn", "Snapshot name has no date — stamping freshness with now", {
+    snapshot,
+  });
+  return new Date();
+}
+
+/** Phase R2 — export the refresh-eligible accounts (the API crons' complement). */
+async function exportRefreshAccounts(config: Config): Promise<number> {
+  const path = `${config.workDir}/refresh-accounts.csv`;
+  const pageSize = 50_000;
+  let cursor: string | null = null;
+  let total = 0;
+  const lines: string[] = [
+    "id,platform,user_id,creator_profile_id,follower_count",
+  ];
+  for (;;) {
+    const rows: {
+      id: string;
+      platform: Platform;
+      platformUserId: string;
+      creatorProfileId: string;
+      followerCount: bigint | null;
+    }[] = await prisma.platformAccount.findMany({
+      where: {
+        platform: { in: REFRESH_PLATFORMS },
+        discoverySource: null,
+        isOAuthConnected: false,
+        creatorProfile: {
+          catalogSource: "streamhatchet",
+          state: { notIn: ["claimed", "premium"] },
+          userId: null,
+          mergedIntoId: null,
+          platformAccounts: { none: { isOAuthConnected: true } },
+        },
+      },
+      select: {
+        id: true,
+        platform: true,
+        platformUserId: true,
+        creatorProfileId: true,
+        followerCount: true,
+      },
+      orderBy: { id: "asc" },
+      take: pageSize,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    if (rows.length === 0) break;
+    for (const r of rows) {
+      const uid = /[",]/.test(r.platformUserId)
+        ? `"${r.platformUserId.replace(/"/g, '""')}"`
+        : r.platformUserId;
+      lines.push(
+        `${r.id},${r.platform},${uid},${r.creatorProfileId},${r.followerCount?.toString() ?? ""}`,
+      );
+    }
+    total += rows.length;
+    cursor = rows[rows.length - 1]!.id;
+    if (rows.length < pageSize) break;
+  }
+  writeFileSync(path, lines.join("\n"));
+  log("info", "Exported refresh-eligible accounts", { rows: total });
+  return total;
+}
+
+type RefreshRow = {
+  accountId: string;
+  creatorProfileId: string;
+  platform: Platform;
+  reach: string; // bigint-as-string, straight into a ::bigint cast
+  current: string | null;
+};
+
+/** Phase R3 — DuckDB join of export reach against our eligible accounts. */
+async function buildRefreshPlan(
+  config: Config,
+): Promise<{ changed: RefreshRow[]; unchangedIds: string[] }> {
+  const planPath = `${config.workDir}/refresh-plan.csv`;
+  const platformList = REFRESH_PLATFORMS.map((p) => `'${p}'`).join(",");
+  duckdb(
+    `COPY (
+      WITH sp AS (
+        SELECT platform, user_id, MAX(reach) AS reach
+        FROM read_parquet('${config.workDir}/sp.parquet')
+        WHERE platform IN (${platformList})
+          AND reach IS NOT NULL AND reach >= 0
+        GROUP BY platform, user_id
+      )
+      SELECT a.id AS account_id, a.creator_profile_id, a.platform,
+             sp.reach AS reach, a.follower_count AS current_count
+      FROM read_csv('${config.workDir}/refresh-accounts.csv', header=true, all_varchar=true) a
+      JOIN sp ON sp.platform = a.platform AND sp.user_id = a.user_id
+    ) TO '${planPath}' (FORMAT csv, HEADER);`,
+    config.awsProfile,
+  );
+
+  const changed: RefreshRow[] = [];
+  const unchangedIds: string[] = [];
+  const rl = createInterface({ input: createReadStream(planPath) });
+  let header = true;
+  for await (const line of rl) {
+    if (header) {
+      header = false;
+      continue;
+    }
+    if (!line.trim()) continue;
+    // All five output columns are comma-free (uuids, platform, digits).
+    const parts = line.split(",");
+    if (parts.length < 5) continue;
+    const [accountId, creatorProfileId, platform, reach, current] = parts as [
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
+    if (!/^\d+$/.test(reach)) continue;
+    if (current !== "" && BigInt(current) === BigInt(reach)) {
+      unchangedIds.push(accountId);
+    } else {
+      changed.push({
+        accountId,
+        creatorProfileId,
+        platform: platform as Platform,
+        reach,
+        current: current === "" ? null : current,
+      });
+    }
+  }
+  return { changed, unchangedIds };
+}
+
+/** Phase R4 — apply: changed counts, freshness stamps, snapshots, aggregates. */
+async function refreshFollowersFromExport(
+  config: Config,
+  snapshot: string,
+): Promise<void> {
+  const snapshotAt = snapshotExportDate(snapshot);
+  await exportRefreshAccounts(config);
+  const { changed: allChanged, unchangedIds } = await buildRefreshPlan(config);
+  const changed = config.limit ? allChanged.slice(0, config.limit) : allChanged;
+
+  log("info", "Refresh plan built", {
+    matched: allChanged.length + unchangedIds.length,
+    changed: allChanged.length,
+    unchanged: unchangedIds.length,
+    applying: changed.length,
+    snapshotDate: snapshotAt.toISOString(),
+    examples: changed.slice(0, 5).map((r) => ({
+      platform: r.platform,
+      current: r.current,
+      fresh: r.reach,
+    })),
+  });
+
+  if (!config.write) return;
+
+  // 1. Changed counts — set-based batches. The lastSyncedAt guard means an
+  // older export can never clobber a value something fresher (e.g. the
+  // live-channels harvest) wrote after the export date.
+  let updatedRows = 0;
+  for (let i = 0; i < changed.length; i += UPDATE_BATCH) {
+    const chunk = changed.slice(i, i + UPDATE_BATCH);
+    const tuples = Prisma.join(
+      chunk.map((r) => Prisma.sql`(${r.accountId}::uuid, ${r.reach}::bigint)`),
+    );
+    const count = await withRetry(() =>
+      prisma.$executeRaw(Prisma.sql`
+        UPDATE "PlatformAccount" AS a
+        SET "followerCount" = v.reach, "lastSyncedAt" = ${snapshotAt}
+        FROM (VALUES ${tuples}) AS v(id, reach)
+        WHERE a."id" = v.id
+          AND (a."lastSyncedAt" IS NULL OR a."lastSyncedAt" < ${snapshotAt})
+      `),
+    );
+    updatedRows += count;
+    log("info", "Follower updates applied", {
+      processed: Math.min(i + UPDATE_BATCH, changed.length),
+      total: changed.length,
+      updatedRows,
+    });
+  }
+
+  // 2. Follower history — one snapshot per (creator, platform) per export
+  // date. Deterministic snapshotAt + existence check = idempotent re-runs.
+  let snapshotsCreated = 0;
+  for (let i = 0; i < changed.length; i += UPDATE_BATCH) {
+    const chunk = changed.slice(i, i + UPDATE_BATCH);
+    const existing = await withRetry(() =>
+      prisma.metricSnapshot.findMany({
+        where: {
+          snapshotAt,
+          creatorProfileId: { in: chunk.map((r) => r.creatorProfileId) },
+          platform: { in: REFRESH_PLATFORMS },
+        },
+        select: { creatorProfileId: true, platform: true },
+      }),
+    );
+    const seen = new Set(
+      existing.map((s) => `${s.creatorProfileId}:${s.platform}`),
+    );
+    const rows = chunk
+      .filter((r) => !seen.has(`${r.creatorProfileId}:${r.platform}`))
+      .map((r) => ({
+        creatorProfileId: r.creatorProfileId,
+        platform: r.platform,
+        snapshotAt,
+        followerCount: BigInt(r.reach),
+        extendedMetrics: { SOURCE: REFRESH_SNAPSHOT_SOURCE },
+      }));
+    if (rows.length > 0) {
+      const res = await withRetry(() =>
+        prisma.metricSnapshot.createMany({ data: rows }),
+      );
+      snapshotsCreated += res.count;
+    }
+  }
+  log("info", "Follower snapshots accrued", { snapshotsCreated });
+
+  // 3. Unchanged matches — stamp "verified as of" without touching the value.
+  let touched = 0;
+  for (let i = 0; i < unchangedIds.length; i += TOUCH_BATCH) {
+    const ids = unchangedIds.slice(i, i + TOUCH_BATCH);
+    const res = await withRetry(() =>
+      prisma.platformAccount.updateMany({
+        where: {
+          id: { in: ids },
+          OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: snapshotAt } }],
+        },
+        data: { lastSyncedAt: snapshotAt },
+      }),
+    );
+    touched += res.count;
+  }
+  log("info", "Freshness stamped on unchanged matches", { touched });
+
+  // 4. Profile aggregates for changed creators — set-based, same exclusion
+  // rule as recomputeCreatorAggregates (link-only accounts never count).
+  const profileIds = [...new Set(changed.map((r) => r.creatorProfileId))];
+  for (let i = 0; i < profileIds.length; i += UPDATE_BATCH) {
+    const ids = profileIds.slice(i, i + UPDATE_BATCH);
+    await withRetry(() =>
+      prisma.$executeRaw(Prisma.sql`
+        UPDATE "CreatorProfile" AS p
+        SET "totalFollowers" = agg.total
+        FROM (
+          SELECT "creatorProfileId" AS id,
+                 COALESCE(SUM("followerCount"), 0) AS total
+          FROM "PlatformAccount"
+          WHERE "creatorProfileId" = ANY(${ids}::uuid[])
+            AND "discoverySource" IS NULL
+          GROUP BY "creatorProfileId"
+        ) AS agg
+        WHERE p."id" = agg.id
+      `),
+    );
+  }
+  log("info", "Refresh complete", {
+    updatedRows,
+    snapshotsCreated,
+    touched,
+    profilesRecomputed: profileIds.length,
+  });
+}
+
 async function main() {
   const config = parseConfig();
   if (!existsSync(config.workDir))
     mkdirSync(config.workDir, { recursive: true });
 
+  if (config.refreshFollowers && config.socialLinks) {
+    throw new Error(
+      "--refresh-followers and --social-links are separate runs — pass one at a time.",
+    );
+  }
+
   const snapshot = resolveSnapshot(config);
   log("info", "Starting SH social-profiles ingestion", {
     snapshot,
-    mode: config.socialLinks ? "social-links" : "merge+enrich",
+    mode: config.refreshFollowers
+      ? "refresh-followers"
+      : config.socialLinks
+        ? "social-links"
+        : "merge+enrich",
     write: config.write,
     sample: config.sample,
     limit: config.limit,
     workDir: config.workDir,
   });
+
+  if (config.refreshFollowers) {
+    const spPath = `${config.workDir}/sp.parquet`;
+    if (config.skipExtract) {
+      if (!existsSync(spPath)) {
+        throw new Error(
+          `--skip-extract needs ${spPath} to already exist. Run once without --skip-extract first.`,
+        );
+      }
+      log("info", "Skipping S3 extract — reusing local parquet", { spPath });
+    } else {
+      extractSocialProfiles(config, snapshot);
+    }
+    await refreshFollowersFromExport(config, snapshot);
+    if (!config.write) {
+      log("info", "Dry run complete — pass --write to apply.");
+    }
+    await prisma.$disconnect();
+    return;
+  }
 
   if (config.skipExtract) {
     const spPath = `${config.workDir}/sp.parquet`;
@@ -1040,7 +1378,7 @@ async function main() {
   const plan = await buildPlan(config);
 
   if (config.socialLinks) {
-    await attachSocialLinks(plan, config);
+    await attachSocialLinks(plan, config, snapshot);
   } else {
     await applyPlan(plan, config);
   }

@@ -111,7 +111,15 @@ export async function middleware(request: NextRequest) {
   const blocked = checkBasicAuth(request);
   if (blocked) return blocked;
 
-  // 2. Session-protected routes only
+  // 2. Sitemap index: /sitemap.xml is claimed by app/sitemap.ts (Next metadata
+  //    route, which only serves the /sitemap/<id>.xml chunks), so the
+  //    <sitemapindex> handler lives at /sitemap-index.xml. Rewrite so the
+  //    canonical URL advertised in robots.txt serves the index.
+  if (request.nextUrl.pathname === "/sitemap.xml") {
+    return NextResponse.rewrite(new URL("/sitemap-index.xml", request.url));
+  }
+
+  // 3. Session-protected routes only
   if (needsSessionAuth(request.nextUrl.pathname)) {
     return sessionAuth(request, {} as never);
   }

@@ -11,6 +11,48 @@ const nextConfig: NextConfig = {
         destination: "/browse",
         permanent: true,
       },
+      // ---- Legacy twitchmetrics.net (Rails) URLs, static mappings.
+      // DB-backed legacy routes (/c, /g, /channels) live in app/(legacy)/.
+      {
+        source: "/games/:list",
+        destination: "/browse",
+        permanent: true,
+      },
+      {
+        source: "/kick_channels/:list",
+        destination: "/creators?platform=kick",
+        permanent: true,
+      },
+      {
+        source: "/overviews/twitch",
+        destination: "/creators?platform=twitch",
+        permanent: true,
+      },
+      {
+        source: "/overviews/kick",
+        destination: "/creators?platform=kick",
+        permanent: true,
+      },
+      {
+        source: "/auth/signin",
+        destination: "/login",
+        permanent: true,
+      },
+      {
+        source: "/auth/sign_up",
+        destination: "/register",
+        permanent: true,
+      },
+      {
+        source: "/auth/password/:path*",
+        destination: "/forgot-password",
+        permanent: true,
+      },
+      {
+        source: "/faq",
+        destination: "/about",
+        permanent: true,
+      },
     ];
   },
   async headers() {

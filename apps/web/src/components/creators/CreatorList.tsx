@@ -19,6 +19,8 @@ export type CreatorListRow = {
   avatarUrl: string | null;
   primaryPlatform: Platform;
   totalFollowers: string;
+  /** Follower count for the active platform filter; falls back to totalFollowers. */
+  displayFollowers?: string;
   platformAccounts: { platform: Platform; platformUsername: string }[];
   growthRollup: {
     delta7d: string;
@@ -191,7 +193,9 @@ export function CreatorList({ rows }: Props) {
                   <PlatformLogos accounts={row.platformAccounts} />
                 </td>
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
-                  {formatNumber(Number(row.totalFollowers))}
+                  {formatNumber(
+                    Number(row.displayFollowers ?? row.totalFollowers),
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
                   {row.growthRollup ? (
@@ -243,7 +247,10 @@ export function CreatorList({ rows }: Props) {
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[#949BA4]">
                 <span>
-                  {formatNumber(Number(row.totalFollowers))} followers
+                  {formatNumber(
+                    Number(row.displayFollowers ?? row.totalFollowers),
+                  )}{" "}
+                  followers
                 </span>
                 {row.growthRollup && (
                   <TrendIndicator

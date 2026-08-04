@@ -15,6 +15,8 @@ type CreatorCardProps = {
     slug: string;
     avatarUrl: string | null;
     totalFollowers: string;
+    /** Follower count for the active platform filter; falls back to totalFollowers. */
+    displayFollowers?: string;
     primaryPlatform: Platform;
     platformAccounts: { platform: Platform; platformUsername: string }[];
     growthRollup: {
@@ -60,7 +62,7 @@ export function TrendIndicator({ delta, pct }: { delta: string; pct: number }) {
 }
 
 export function CreatorCard({ creator, compact = false }: CreatorCardProps) {
-  const followers = Number(creator.totalFollowers);
+  const followers = Number(creator.displayFollowers ?? creator.totalFollowers);
   const primaryConfig = PLATFORM_CONFIG[creator.primaryPlatform];
   const safeAvatarUrl = getSafeImageSrc(creator.avatarUrl);
 

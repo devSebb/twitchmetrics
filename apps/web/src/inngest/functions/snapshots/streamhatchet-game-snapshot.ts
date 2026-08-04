@@ -317,20 +317,51 @@ async function persistDiscoveryRow(
   });
 }
 
-// Kick has no other follower source: the official Kick API returns no
-// follower counts and the S3 daily-sessions feed has no follower field. SH
-// live-channel rows DO carry `followers`, so harvest them here — refresh the
+// SH live-channel rows carry `followers`, so harvest them here — refresh the
 // matched PlatformAccount and accrue at most one follower MetricSnapshot per
-// account per ~day so kick follower history builds up organically.
-const KICK_FOLLOWER_SNAPSHOT_MIN_AGE_MS = 20 * 60 * 60 * 1000;
+// account per ~day so follower history builds up organically for creators the
+// API tier crons never poll. Kick rows always apply (the official Kick API
+// returns no follower counts, so live-channels is Kick's ONLY source, even
+// for claimed profiles). Twitch/YouTube rows apply only to SH-catalog
+// unclaimed accounts — API-polled accounts get fresher numbers from the tier
+// crons and the two sources must never fight over a row.
+const FOLLOWER_SNAPSHOT_MIN_AGE_MS = 20 * 60 * 60 * 1000;
 
-async function syncKickFollowersFromLiveChannels(
+type HarvestAccount = {
+  id: string;
+  creatorProfileId: string;
+  platformUserId: string;
+  platform: "twitch" | "youtube" | "kick";
+  isOAuthConnected: boolean;
+  creatorProfile: {
+    catalogSource: string | null;
+    state: string;
+    userId: string | null;
+  };
+};
+
+function isApiPolledAccount(account: HarvestAccount): boolean {
+  const profile = account.creatorProfile;
+  return (
+    account.isOAuthConnected ||
+    profile.catalogSource !== "streamhatchet" ||
+    profile.userId !== null ||
+    profile.state === "claimed" ||
+    profile.state === "premium"
+  );
+}
+
+async function syncFollowersFromLiveChannels(
   channels: StreamHatchetLiveChannel[],
   snapshotAt: Date,
 ) {
-  const followersByUserId = new Map<string, number>();
+  const followersByKey = new Map<
+    string,
+    { platform: "twitch" | "youtube" | "kick"; followers: number }
+  >();
   for (const channel of channels) {
-    if (internalPlatformForStreamHatchet(channel.platform) !== "kick") continue;
+    const platform = internalPlatformForStreamHatchet(channel.platform);
+    if (!platform) continue;
     const followers = channel.followers;
     if (
       typeof followers !== "number" ||
@@ -339,36 +370,63 @@ async function syncKickFollowersFromLiveChannels(
     ) {
       continue;
     }
-    followersByUserId.set(String(channel.user_id), Math.round(followers));
+    followersByKey.set(`${platform}:${String(channel.user_id)}`, {
+      platform,
+      followers: Math.round(followers),
+    });
   }
-  if (followersByUserId.size === 0) return;
+  if (followersByKey.size === 0) return;
 
-  const accounts = await prisma.platformAccount.findMany({
+  const idsByPlatform = new Map<string, string[]>();
+  for (const [key] of followersByKey) {
+    const [platform, userId] = key.split(":", 2) as [string, string];
+    const list = idsByPlatform.get(platform) ?? [];
+    list.push(userId);
+    idsByPlatform.set(platform, list);
+  }
+
+  const accounts = (await prisma.platformAccount.findMany({
     where: {
-      platform: "kick",
-      platformUserId: { in: [...followersByUserId.keys()] },
+      discoverySource: null,
+      OR: [...idsByPlatform.entries()].map(([platform, userIds]) => ({
+        platform: platform as "twitch" | "youtube" | "kick",
+        platformUserId: { in: userIds },
+      })),
     },
-    select: { id: true, creatorProfileId: true, platformUserId: true },
-  });
+    select: {
+      id: true,
+      creatorProfileId: true,
+      platformUserId: true,
+      platform: true,
+      isOAuthConnected: true,
+      creatorProfile: {
+        select: { catalogSource: true, state: true, userId: true },
+      },
+    },
+  })) as HarvestAccount[];
 
   for (const account of accounts) {
-    const followers = followersByUserId.get(account.platformUserId);
-    if (followers === undefined) continue;
+    const entry = followersByKey.get(
+      `${account.platform}:${account.platformUserId}`,
+    );
+    if (!entry) continue;
+    if (account.platform !== "kick" && isApiPolledAccount(account)) continue;
 
     await prisma.platformAccount.update({
       where: { id: account.id },
-      data: { followerCount: BigInt(followers), lastSyncedAt: snapshotAt },
+      data: {
+        followerCount: BigInt(entry.followers),
+        lastSyncedAt: snapshotAt,
+      },
     });
 
     const recentSnapshot = await prisma.metricSnapshot.findFirst({
       where: {
         creatorProfileId: account.creatorProfileId,
-        platform: "kick",
+        platform: account.platform,
         followerCount: { not: null },
         snapshotAt: {
-          gte: new Date(
-            snapshotAt.getTime() - KICK_FOLLOWER_SNAPSHOT_MIN_AGE_MS,
-          ),
+          gte: new Date(snapshotAt.getTime() - FOLLOWER_SNAPSHOT_MIN_AGE_MS),
         },
       },
       select: { id: true },
@@ -378,9 +436,9 @@ async function syncKickFollowersFromLiveChannels(
     await prisma.metricSnapshot.create({
       data: {
         creatorProfileId: account.creatorProfileId,
-        platform: "kick",
+        platform: account.platform,
         snapshotAt,
-        followerCount: BigInt(followers),
+        followerCount: BigInt(entry.followers),
         extendedMetrics: { SOURCE: "streamhatchet_live_channels" },
       },
     });
@@ -447,7 +505,7 @@ async function persistLiveChannels(
   }
 
   try {
-    await syncKickFollowersFromLiveChannels(channels, snapshotAt);
+    await syncFollowersFromLiveChannels(channels, snapshotAt);
   } catch (error) {
     // Follower harvesting is best-effort; never fail the game persist over it.
     log.warn(

@@ -96,6 +96,34 @@ async function getGenresForVertical(
   return [...new Set(all)].sort();
 }
 
+function ItemListJsonLd({
+  games,
+  page,
+  perPage,
+}: {
+  games: Array<{ slug: string; name: string }>;
+  page: number;
+  perPage: number;
+}) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: games.map((game, i) => ({
+      "@type": "ListItem",
+      position: (page - 1) * perPage + i + 1,
+      url: `${SITE_URL}/game/${game.slug}`,
+      name: game.name,
+    })),
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
+}
+
 export default async function BrowsePage({ searchParams }: PageProps) {
   const {
     sort: sortParam,
@@ -128,6 +156,11 @@ export default async function BrowsePage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <ItemListJsonLd
+        games={serializedGames}
+        page={filters.page}
+        perPage={filters.limit}
+      />
       <Suspense>
         <div className="mb-6">
           <VerticalPills />

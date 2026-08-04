@@ -33,19 +33,20 @@ function parsePlatform(value: string | null): Platform | null {
   return value as Platform;
 }
 
-function buildWhereClause(platform: Platform | null, query: string | null) {
-  const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
+// Platform filtering joins PlatformAccount (unique on creatorProfileId +
+// platform, so no row fanout) so ranking can use that platform's own count
+// instead of the cross-platform total.
+function buildPlatformJoin(platform: Platform | null): Prisma.Sql {
+  if (!platform) return Prisma.empty;
+  return Prisma.sql`
+    JOIN "PlatformAccount" pa
+      ON pa."creatorProfileId" = cp.id
+     AND pa.platform = ${platform}::"Platform"
+  `;
+}
 
-  if (platform) {
-    conditions.push(Prisma.sql`
-      EXISTS (
-        SELECT 1
-        FROM "PlatformAccount" pa
-        WHERE pa."creatorProfileId" = cp.id
-          AND pa.platform = ${platform}::"Platform"
-      )
-    `);
-  }
+function buildWhereClause(query: string | null) {
+  const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
 
   if (query) {
     conditions.push(
@@ -56,7 +57,12 @@ function buildWhereClause(platform: Platform | null, query: string | null) {
   return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
 }
 
-function getOrderClause(sort: string | null): Prisma.Sql {
+function getOrderClause(
+  sort: string | null,
+  platform: Platform | null,
+): Prisma.Sql {
+  // YouTube stores audience size in subscriberCount, others in followerCount.
+  const platformFollowersSql = Prisma.sql`COALESCE(pa."followerCount", pa."subscriberCount")`;
   switch (sort) {
     case "trending":
       return Prisma.sql`
@@ -65,17 +71,19 @@ function getOrderClause(sort: string | null): Prisma.Sql {
             SELECT cgr."delta7d"
             FROM "CreatorGrowthRollup" cgr
             WHERE cgr."creatorProfileId" = cp.id
-              AND cgr.platform = cp."primaryPlatform"
+              AND cgr.platform = ${platform ? Prisma.sql`${platform}::"Platform"` : Prisma.sql`cp."primaryPlatform"`}
             LIMIT 1
           ),
           0
-        ) DESC, cp."totalFollowers" DESC
+        ) DESC, ${platform ? Prisma.sql`${platformFollowersSql} DESC NULLS LAST` : Prisma.sql`cp."totalFollowers" DESC`}
       `;
     case "recent":
       return Prisma.sql`ORDER BY cp."createdAt" DESC`;
     case "followers":
     default:
-      return Prisma.sql`ORDER BY cp."totalFollowers" DESC`;
+      return platform
+        ? Prisma.sql`ORDER BY ${platformFollowersSql} DESC NULLS LAST, cp."totalFollowers" DESC`
+        : Prisma.sql`ORDER BY cp."totalFollowers" DESC`;
   }
 }
 
@@ -95,19 +103,21 @@ export async function GET(request: Request) {
 
   // Cache by normalized query params (view splits list/grid into separate keys
   // since list responses carry extra streaming-stat fields).
-  const cacheKey = `creators:list:v4:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
+  const cacheKey = `creators:list:v5:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:v${view}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
   }
 
-  const whereClause = buildWhereClause(platform, query);
-  const orderClause = getOrderClause(sort);
+  const joinClause = buildPlatformJoin(platform);
+  const whereClause = buildWhereClause(query);
+  const orderClause = getOrderClause(sort, platform);
 
   const [idRows, totalRows] = await Promise.all([
     db.$queryRaw<CreatorIdRow[]>(Prisma.sql`
       SELECT cp.id
       FROM "CreatorProfile" cp
+      ${joinClause}
       ${whereClause}
       ${orderClause}
       LIMIT ${limit}
@@ -116,6 +126,7 @@ export async function GET(request: Request) {
     db.$queryRaw<TotalRow[]>(Prisma.sql`
       SELECT COUNT(*)::bigint AS total
       FROM "CreatorProfile" cp
+      ${joinClause}
       ${whereClause}
     `),
   ]);
@@ -146,6 +157,7 @@ export async function GET(request: Request) {
           platform: true,
           platformUsername: true,
           followerCount: true,
+          subscriberCount: true,
         },
       },
       growthRollups: {
@@ -167,16 +179,32 @@ export async function GET(request: Request) {
       Boolean(creator),
     )
     .map((creator) => {
-      const rollupRow =
-        creator.growthRollups.find(
-          (rollup) => rollup.platform === creator.primaryPlatform,
-        ) ??
-        creator.growthRollups[0] ??
-        null;
+      // On a platform tab, trend and follower count both come from that
+      // platform (matching the sort); no cross-platform fallback.
+      const rollupRow = platform
+        ? (creator.growthRollups.find(
+            (rollup) => rollup.platform === platform,
+          ) ?? null)
+        : (creator.growthRollups.find(
+            (rollup) => rollup.platform === creator.primaryPlatform,
+          ) ??
+          creator.growthRollups[0] ??
+          null);
       // Null delta7d means "no comparison snapshot" — treat as no rollup so
       // the UI renders missing data instead of a fake flat 0 trend.
       const growthRollup =
         rollupRow && isKnownGrowthRollup(rollupRow) ? rollupRow : null;
+
+      const platformAccount = platform
+        ? creator.platformAccounts.find(
+            (account) => account.platform === platform,
+          )
+        : undefined;
+      const displayFollowers = platformAccount
+        ? (platformAccount.followerCount ??
+          platformAccount.subscriberCount ??
+          0n)
+        : creator.totalFollowers;
 
       return {
         id: creator.id,
@@ -185,6 +213,7 @@ export async function GET(request: Request) {
         avatarUrl: creator.avatarUrl,
         primaryPlatform: creator.primaryPlatform,
         totalFollowers: creator.totalFollowers.toString(),
+        displayFollowers: displayFollowers.toString(),
         state: creator.state,
         snapshotTier: creator.snapshotTier,
         platformAccounts: creator.platformAccounts.map((account) => ({

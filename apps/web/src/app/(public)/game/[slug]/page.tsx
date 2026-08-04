@@ -207,11 +207,36 @@ export default async function GamePage({ params }: PageProps) {
     ...(game.releaseDate ? { datePublished: String(game.releaseDate) } : {}),
   };
 
+  // BreadcrumbList JSON-LD for search result breadcrumbs
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Browse",
+        item: `${SITE_URL}/browse`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: game.name,
+        item: `${SITE_URL}/game/${game.slug}`,
+      },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
 
       <GameHeader game={headerData} />
