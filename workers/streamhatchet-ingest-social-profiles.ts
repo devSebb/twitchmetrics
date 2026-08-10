@@ -107,7 +107,9 @@ type Config = {
   sample: boolean; // read only the first parquet part per table (fast dev)
   limit: number | null; // cap contact groups in the apply phase
   workDir: string;
-  awsProfile: string;
+  // Named AWS profile for S3/KMS access, or null to use ambient env
+  // credentials (AWS_ACCESS_KEY_ID/…) — the CI path, where no profile exists.
+  awsProfile: string | null;
   bioMaxLen: number;
   // Reuse the sp.parquet / contacts.parquet already in workDir instead of
   // re-scanning ~50GB from S3 — for cheaply resuming an interrupted run. The
@@ -143,7 +145,11 @@ function parseConfig(): Config {
       ? parsePositiveInt(argValue("--limit"), 0) || null
       : null,
     workDir: argValue("--work-dir") ?? "/tmp/sh-social",
-    awsProfile: argValue("--aws-profile") ?? "streamhatchet-readonly",
+    // Explicit flag wins; otherwise prefer env credentials when present
+    // (CI runners), else the local named profile.
+    awsProfile:
+      argValue("--aws-profile") ??
+      (process.env.AWS_ACCESS_KEY_ID ? null : "streamhatchet-readonly"),
     bioMaxLen: parsePositiveInt(argValue("--bio-max-len"), 500),
     skipExtract: args.includes("--skip-extract"),
     socialLinks: args.includes("--social-links"),
@@ -163,34 +169,39 @@ function log(
   console[level](`[${ts}] [sh-social-ingest] ${message}${extra}`);
 }
 
-function aws(argv: string[], profile: string): string {
+function awsEnv(profile: string | null): NodeJS.ProcessEnv {
+  return profile ? { ...process.env, AWS_PROFILE: profile } : process.env;
+}
+
+function aws(argv: string[], profile: string | null): string {
   return execFileSync("aws", argv, {
-    env: { ...process.env, AWS_PROFILE: profile },
+    env: awsEnv(profile),
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
   });
 }
 
-function duckdb(sql: string, profile: string): string {
+function duckdb(sql: string, profile: string | null): string {
   return execFileSync("duckdb", ["-c", sql], {
-    env: { ...process.env, AWS_PROFILE: profile },
+    env: awsEnv(profile),
     encoding: "utf8",
     maxBuffer: 512 * 1024 * 1024,
   });
 }
 
 /** Run a single-value query and return the raw scalar (no ASCII-box framing). */
-function duckdbScalar(sql: string, profile: string): string {
+function duckdbScalar(sql: string, profile: string | null): string {
   return execFileSync("duckdb", ["-noheader", "-csv", "-c", sql], {
-    env: { ...process.env, AWS_PROFILE: profile },
+    env: awsEnv(profile),
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
   }).trim();
 }
 
-const S3_SETUP = (profile: string) =>
+// Without a named profile, credential_chain falls through to env credentials.
+const S3_SETUP = (profile: string | null) =>
   `INSTALL httpfs; LOAD httpfs; SET s3_region='us-east-1';
-   CREATE SECRET (TYPE s3, PROVIDER credential_chain, PROFILE '${profile}');`;
+   CREATE SECRET (TYPE s3, PROVIDER credential_chain${profile ? `, PROFILE '${profile}'` : ""});`;
 
 /** Phase 0 — pick the snapshot folder (explicit, or the latest daily that has both tables). */
 function resolveSnapshot(config: Config): string {

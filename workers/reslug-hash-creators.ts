@@ -61,6 +61,12 @@ const HASH_SLUG_PATTERN = "-[0-9a-f]{16}$";
 const HASH_SLUG_REGEX = /-[0-9a-f]{16}$/;
 const MAX_SUFFIX = 100;
 
+// Bases with thousands of identically-named profiles (junk display names).
+// Probing 100 suffixes for each is ~300k queries per run and every candidate
+// is taken anyway — `youtube-73` would be no better than the hash. Skip
+// instantly; they keep their hash slugs.
+const GENERIC_BASES = new Set(["youtube", "ch", "vtuber", "tv"]);
+
 function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
@@ -188,6 +194,10 @@ async function main() {
         );
         continue;
       }
+      if (GENERIC_BASES.has(base)) {
+        skipped += 1;
+        continue;
+      }
       pending.push({ id: row.id, oldSlug: row.slug, base, n: 1 });
     }
 
@@ -229,21 +239,41 @@ async function main() {
     }
 
     if (write && mappings.length > 0) {
-      const [createResult] = await prisma.$transaction([
-        prisma.slugRedirect.createMany({
-          data: mappings.map((m) => ({
-            oldSlug: m.oldSlug,
-            creatorProfileId: m.id,
-          })),
-          skipDuplicates: true,
-        }),
-        ...mappings.map((m) =>
-          prisma.creatorProfile.update({
-            where: { id: m.id },
-            data: { slug: m.newSlug },
-          }),
-        ),
-      ]);
+      // P1017 (server closed the connection) shows up when the pooled Neon
+      // connection idles out during long skip-only stretches — reconnect and
+      // retry rather than dying mid-run. skipDuplicates keeps retries safe.
+      let createResult: { count: number } | undefined;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          [createResult] = await prisma.$transaction([
+            prisma.slugRedirect.createMany({
+              data: mappings.map((m) => ({
+                oldSlug: m.oldSlug,
+                creatorProfileId: m.id,
+              })),
+              skipDuplicates: true,
+            }),
+            ...mappings.map((m) =>
+              prisma.creatorProfile.update({
+                where: { id: m.id },
+                data: { slug: m.newSlug },
+              }),
+            ),
+          ]);
+          break;
+        } catch (err) {
+          if (attempt >= 4) throw err;
+          console.warn(
+            JSON.stringify({
+              retry: attempt,
+              error:
+                err instanceof Error ? err.message.split("\n")[0] : String(err),
+            }),
+          );
+          await prisma.$disconnect().catch(() => {});
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        }
+      }
       redirectsCreated += createResult.count;
       renamed += mappings.length;
     }
