@@ -257,6 +257,7 @@ model CreatorProfile {
   growthRollups     CreatorGrowthRollup[]
   clips             CreatorClip[]
   streamSessions    StreamSessionFact[]
+  audienceDemographics AudienceDemographics[]
 
   identityLinksAsCanonical IdentityLink[] @relation("IdentityLinkCanonical")
   identityLinksAsOther     IdentityLink[] @relation("IdentityLinkOther")
@@ -273,6 +274,10 @@ model CreatorProfile {
   @@index([listed, totalFollowers(sort: Desc)])
   @@index([catalogSource])
   @@index([mergedIntoId])
+  // Backs /creators?sort=recent. Without it the ORDER BY createdAt DESC LIMIT 32
+  // parallel seq-scans ~1M rows (383ms measured); index scan is 0.3ms.
+  // createdAt is NOT NULL, so plain DESC (nulls first) matches the query.
+  @@index([createdAt(sort: Desc)])
   // Trigram index backing /search (similarity % + ILIKE). Declared here so
   // schema drift never drops it again (the raw 2026-03 version was dropped
   // by the generated 20260312174050_add_report_lead migration).
@@ -361,6 +366,42 @@ model CreatorAnalytics {
   @@index([periodStart])
 }
 
+// Audience demographics per (creator, social network), from the Stream Hatchet
+// contact_demographics S3 export — DemographicsPro estimates of a creator's
+// SOCIAL audience. DP never profiles Twitch/Kick, so rows exist only for
+// instagram/x/tiktok/youtube. Distributions are bucket→percent (0-100),
+// zero-filled to the full bucket vocabulary at ingest. Kept separate from
+// CreatorAnalytics (first-party OAuth analytics): different provenance,
+// different shape (marginals, not an age×gender cross-tab), and public
+// visibility rules differ.
+model AudienceDemographics {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creatorProfileId String         @db.Uuid
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  platform Platform
+  source   String   @default("demographics_pro")
+
+  ages        Json?
+  genders     Json?
+  countries   Json?
+  income      Json?
+  ethnicities Json? // US-audience-slice only; suppress in UI when US share is small
+
+  // Follower count of the source social profile at export time — used to pick
+  // the primary network for display.
+  reach    BigInt?
+  reportId String?
+  // DP's own refresh timestamp — the honest "as of" date. Reports refresh
+  // opportunistically, so this can be years old; surface it.
+  dpUpdatedAt DateTime?
+  ingestedAt  DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([creatorProfileId, platform])
+  @@index([platform])
+}
+
 // ============================================================
 // PLATFORM ACCOUNTS
 // ============================================================
@@ -406,6 +447,24 @@ model PlatformAccount {
   @@unique([creatorProfileId, platform])
   @@index([platform])
   @@index([platformUsername])
+  // ---------------------------------------------------------------------
+  // RAW INDEXES THAT PRISMA CANNOT DECLARE — DO NOT LET A GENERATED
+  // MIGRATION DROP THESE. `prisma migrate dev` sees them as drift and will
+  // emit DROP INDEX; delete those lines before applying. (This is exactly
+  // how 20260312174050_add_report_lead destroyed the trigram search
+  // indexes in 2026-03.) Both are created in
+  // 20260810120000_add_creator_list_sort_indexes.
+  //
+  //   PlatformAccount_platform_audience_idx
+  //     (platform, (COALESCE("followerCount","subscriberCount")) DESC NULLS LAST)
+  //     INCLUDE ("creatorProfileId")
+  //     Backs the /creators platform tabs. Prisma cannot express either the
+  //     COALESCE expression or NULLS LAST. 563ms -> 2.2ms measured.
+  //
+  //   PlatformAccount_discoverySource_idx
+  //     (discoverySource) WHERE discoverySource IS NOT NULL
+  //     Pre-existing partial index; Prisma cannot express partial indexes.
+  // ---------------------------------------------------------------------
 }
 
 // ============================================================

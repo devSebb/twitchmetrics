@@ -8,6 +8,10 @@ const EXACT_ALLOWED_HOSTS = new Set([
 
 const ALLOWED_HOST_SUFFIXES = [
   ".jtvnw.net",
+  // YouTube serves channel avatars from both googleusercontent.com and the
+  // older ggpht.com CDN; the entire Stream Hatchet catalog uses yt3.ggpht.com.
+  ".ggpht.com",
+  ".googleusercontent.com",
   ".cdninstagram.com",
   ".fbcdn.net",
   ".r2.dev",

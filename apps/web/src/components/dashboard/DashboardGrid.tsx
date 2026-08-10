@@ -72,6 +72,19 @@ export type SerializedDemographicAnalytics = {
   countryData: unknown;
 };
 
+// Third-party social-audience estimates (AudienceDemographics rows from the
+// Stream Hatchet / DemographicsPro feed). Distributions are bucket→percent
+// (0-100). One row per social network; ordered by reach desc server-side.
+export type SerializedAudienceDemographics = {
+  platform: Platform;
+  ages: unknown;
+  genders: unknown;
+  countries: unknown;
+  income: unknown;
+  reach: string | null;
+  dpUpdatedAt: string | null;
+};
+
 export type SerializedProfile = {
   id: string;
   displayName: string;
@@ -95,6 +108,7 @@ export type SerializedProfile = {
   growthRollups: SerializedGrowthRollup[];
   brandPartnerships: SerializedBrandPartnership[];
   demographicAnalytics?: SerializedDemographicAnalytics[];
+  audienceDemographics?: SerializedAudienceDemographics[];
 };
 
 type DashboardGridProps = {

@@ -2,8 +2,11 @@
 
 import { useMemo } from "react";
 import { EmptyState } from "@/components/widgets/EmptyState";
+import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
+import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { trpc } from "@/lib/trpc";
 import type {
+  SerializedAudienceDemographics,
   SerializedDemographicAnalytics,
   SerializedProfile,
 } from "@/components/dashboard/DashboardGrid";
@@ -266,6 +269,142 @@ function CountryRows({
 }
 
 // ----------------------------------------------------------------
+// Social-audience estimates (AudienceDemographics / DemographicsPro)
+// ----------------------------------------------------------------
+
+// DP bucket keys → compact display labels, in display order.
+const SOCIAL_AGE_LABELS: [string, string][] = [
+  ["age 17 and under", "17 & under"],
+  ["age 18 to 20", "18-20"],
+  ["age 21 to 24", "21-24"],
+  ["age 25 to 29", "25-29"],
+  ["age 30 to 34", "30-34"],
+  ["age 35 to 44", "35-44"],
+  ["age 45 to 54", "45-54"],
+  ["age 55 to 64", "55-64"],
+  ["age 65 and over", "65+"],
+];
+const SOCIAL_INCOME_LABELS: [string, string][] = [
+  ["under $10,000", "< $10k"],
+  ["$10,000 - $19,999", "$10-20k"],
+  ["$20,000 - $29,999", "$20-30k"],
+  ["$30,000 - $39,999", "$30-40k"],
+  ["$40,000 - $49,999", "$40-50k"],
+  ["$50,000 - $74,999", "$50-75k"],
+  ["$75,000 - $99,999", "$75-100k"],
+  ["over $100,000", "$100k+"],
+];
+
+function asPercentRecord(raw: unknown): Record<string, number> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw as Record<string, unknown>).filter(
+    (e): e is [string, number] =>
+      typeof e[1] === "number" && Number.isFinite(e[1]),
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+/** Map a 0-100 labeled distribution to ordered non-zero bars (0-1 scale). */
+function labeledBars(
+  data: Record<string, number> | null,
+  labels: [string, string][],
+): { range: string; percentage: number }[] | null {
+  if (!data) return null;
+  const bars = labels
+    .map(([key, label]) => ({
+      range: label,
+      percentage: (data[key] ?? 0) / 100,
+    }))
+    .filter((bar) => bar.percentage > 0);
+  return bars.length > 0 ? bars : null;
+}
+
+function pickSocialRow(
+  rows: SerializedAudienceDemographics[],
+): SerializedAudienceDemographics | null {
+  // Rows arrive ordered by reach desc — first one with any usable data wins.
+  for (const row of rows) {
+    if (
+      asPercentRecord(row.genders) ||
+      asPercentRecord(row.ages) ||
+      asPercentRecord(row.countries)
+    ) {
+      return row;
+    }
+  }
+  return null;
+}
+
+/**
+ * Renders the DemographicsPro social-audience estimate: same visual language
+ * as the first-party view, but always attributed as an estimate of the
+ * creator's SOCIAL audience (DP never profiles Twitch/Kick) with its as-of
+ * date — reports refresh opportunistically and can be old.
+ */
+function SocialAudienceContent({
+  rows,
+}: {
+  rows: SerializedAudienceDemographics[];
+}) {
+  const row = pickSocialRow(rows);
+  if (!row) return <EmptyWidgetSentinel />;
+
+  const genders = asPercentRecord(row.genders);
+  const genderSplit = genders
+    ? Object.entries(genders)
+        .map(([key, value]) => ({
+          key: key.toLowerCase(),
+          name: normalizeLabel(key),
+          value: value / 100,
+        }))
+        .filter((g) => g.value > 0)
+    : null;
+  const ageRanges = labeledBars(asPercentRecord(row.ages), SOCIAL_AGE_LABELS);
+  const countries = parseCountryData(row.countries);
+  const income = labeledBars(asPercentRecord(row.income), SOCIAL_INCOME_LABELS);
+
+  const platformName = PLATFORM_CONFIG[row.platform]?.name ?? row.platform;
+  const asOf = row.dpUpdatedAt
+    ? new Date(row.dpUpdatedAt).toLocaleDateString("en-US", {
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
+        {(genderSplit || ageRanges) && (
+          <div>
+            {genderSplit && <AudienceSummary genderSplit={genderSplit} />}
+            {ageRanges && <AgeBars ageRanges={ageRanges} />}
+          </div>
+        )}
+
+        {(countries || income) && (
+          <div className="space-y-5">
+            {countries && <CountryRows countries={countries} />}
+            {income && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-[#949BA4]">
+                  Household income
+                </p>
+                <AgeBars ageRanges={income} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="text-right text-[10px] text-[#949BA4]">
+        Estimated {platformName} audience · via DemographicsPro
+        {asOf ? ` · updated ${asOf}` : ""}
+      </p>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------
 // Main widget
 // ----------------------------------------------------------------
 
@@ -282,9 +421,33 @@ export function DemographicsWidget({
 }: DemographicsWidgetProps) {
   // Check if any connected account has OAuth
   const hasOAuth = profile.platformAccounts.some((a) => a.isOAuthConnected);
+  const social = profile.audienceDemographics ?? [];
+  const socialFallback =
+    pickSocialRow(social) !== null ? (
+      <SocialAudienceContent rows={social} />
+    ) : null;
 
-  if (!isClaimed) {
+  // First-party analytics always win when available; the social-audience
+  // estimate fills in behind them.
+  if (isClaimed && isOwner && hasOAuth) {
+    return <DemographicsDataView profile={profile} fallback={socialFallback} />;
+  }
+
+  if (!isOwner && isClaimed && profile.publicDemographicsEnabled) {
     return (
+      <DemographicsDataContent
+        analytics={profile.demographicAnalytics ?? []}
+        isLoading={false}
+        fallback={socialFallback}
+      />
+    );
+  }
+
+  if (socialFallback) return socialFallback;
+
+  // No data from either source — legacy gated empty states.
+  if (!isClaimed) {
+    return isOwner ? (
       <EmptyState
         variant="locked"
         title="Claim Required"
@@ -293,19 +456,13 @@ export function DemographicsWidget({
         actionHref="/dashboard/claim"
         compact
       />
+    ) : (
+      // Public catalog profile without an estimate: hide the card entirely.
+      <EmptyWidgetSentinel />
     );
   }
 
   if (!isOwner) {
-    if (profile.publicDemographicsEnabled) {
-      return (
-        <DemographicsDataContent
-          analytics={profile.demographicAnalytics ?? []}
-          isLoading={false}
-        />
-      );
-    }
-
     return (
       <EmptyState
         variant="no_data"
@@ -316,23 +473,25 @@ export function DemographicsWidget({
     );
   }
 
-  if (!hasOAuth) {
-    return (
-      <EmptyState
-        variant="no_data"
-        title="Connect a platform"
-        message="Connect YouTube or Instagram to see demographics."
-        actionLabel="Connect"
-        actionHref="/dashboard/connections"
-        compact
-      />
-    );
-  }
-
-  return <DemographicsDataView profile={profile} />;
+  return (
+    <EmptyState
+      variant="no_data"
+      title="Connect a platform"
+      message="Connect YouTube or Instagram to see demographics."
+      actionLabel="Connect"
+      actionHref="/dashboard/connections"
+      compact
+    />
+  );
 }
 
-function DemographicsDataView({ profile }: { profile: SerializedProfile }) {
+function DemographicsDataView({
+  profile,
+  fallback,
+}: {
+  profile: SerializedProfile;
+  fallback: React.ReactNode;
+}) {
   const { data: analytics, isLoading } = trpc.creator.getAnalytics.useQuery({
     periodDays: 30,
   });
@@ -341,6 +500,7 @@ function DemographicsDataView({ profile }: { profile: SerializedProfile }) {
     <DemographicsDataContent
       analytics={analytics ?? []}
       isLoading={isLoading}
+      fallback={fallback}
     />
   );
 }
@@ -348,9 +508,11 @@ function DemographicsDataView({ profile }: { profile: SerializedProfile }) {
 function DemographicsDataContent({
   analytics,
   isLoading,
+  fallback = null,
 }: {
   analytics: SerializedDemographicAnalytics[];
   isLoading: boolean;
+  fallback?: React.ReactNode;
 }) {
   const { genderData, ageData, countryData, sourcePlatform } = useMemo(() => {
     if (analytics.length === 0)
@@ -393,6 +555,9 @@ function DemographicsDataContent({
   }
 
   if (!genderData && !ageData && !countryData) {
+    // No first-party data yet — show the social-audience estimate if we
+    // have one rather than an empty prompt.
+    if (fallback) return <>{fallback}</>;
     return (
       <EmptyState
         variant="no_data"

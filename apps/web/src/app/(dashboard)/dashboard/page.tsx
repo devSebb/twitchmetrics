@@ -69,6 +69,21 @@ export default async function DashboardPage() {
           orderBy: { createdAt: "desc" },
           take: 12,
         },
+        // Social-audience estimates — the demographics widget's fallback when
+        // no OAuth platform has synced first-party analytics yet.
+        // serializeBigInt JSON-round-trips these (reach → string, Date → ISO).
+        audienceDemographics: {
+          select: {
+            platform: true,
+            ages: true,
+            genders: true,
+            countries: true,
+            income: true,
+            reach: true,
+            dpUpdatedAt: true,
+          },
+          orderBy: { reach: { sort: "desc", nulls: "last" } },
+        },
       },
     }),
     prisma.user.findUnique({

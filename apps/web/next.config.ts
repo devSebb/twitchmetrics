@@ -81,8 +81,11 @@ const nextConfig: NextConfig = {
       // Twitch CDN
       { protocol: "https", hostname: "static-cdn.jtvnw.net" },
       { protocol: "https", hostname: "*.jtvnw.net" },
-      // YouTube CDN
+      // YouTube CDN — avatars come from both the googleusercontent and the
+      // older ggpht hosts; the Stream Hatchet catalog is entirely yt3.ggpht.com.
       { protocol: "https", hostname: "yt3.googleusercontent.com" },
+      { protocol: "https", hostname: "*.googleusercontent.com" },
+      { protocol: "https", hostname: "*.ggpht.com" },
       { protocol: "https", hostname: "i.ytimg.com" },
       // Instagram CDN
       { protocol: "https", hostname: "*.cdninstagram.com" },

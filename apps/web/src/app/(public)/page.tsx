@@ -19,6 +19,11 @@ import {
 import { getTrendingCreators } from "@/server/services/trending";
 import type { Platform } from "@twitchmetrics/database";
 
+/** Hero carousel shows the fastest-growing creators; the Trending Creators
+ * card lower down continues the same ranking from where the carousel stops. */
+const CAROUSEL_SIZE = 10;
+const TRENDING_CARD_SIZE = 9;
+
 async function getLandingData() {
   const [topCreatorsRaw, trendingRaw, topGamesRaw] = await Promise.all([
     // Top 10 creators by followers (for showcase + top channels)
@@ -32,8 +37,11 @@ async function getLandingData() {
         },
       },
     }),
-    // Trending creators via scoring service (page-level ISR caches this)
-    getTrendingCreators(9),
+    // Trending creators via scoring service (page-level ISR caches this).
+    // Fetched deep enough to feed both the hero carousel (top 10) and the
+    // Trending Creators card further down (the next 9), so the two modules
+    // never show the same creators twice.
+    getTrendingCreators(CAROUSEL_SIZE + TRENDING_CARD_SIZE),
     // Top games by current viewers
     db.game.findMany({
       orderBy: { currentViewers: "desc" },
@@ -67,20 +75,26 @@ async function getLandingData() {
     })(),
   }));
 
-  // Map trending service results to the shape TrendingSection expects
-  const trendingCreators = trendingRaw.slice(0, 9).map((t) => ({
+  // Map trending service results to the shape the creator cards expect
+  const trending = trendingRaw.map((t) => ({
     displayName: t.displayName,
     slug: t.slug,
     avatarUrl: t.avatarUrl,
     totalFollowers: t.totalFollowers,
     primaryPlatform: t.primaryPlatform as Platform,
-    platformAccounts: [] as { platform: Platform; platformUsername: string }[],
+    platformAccounts: t.platformAccounts.map((a) => ({
+      platform: a.platform as Platform,
+      platformUsername: a.platformUsername,
+    })),
     growthRollup: {
       delta7d: t.delta7d,
       pct7d: t.followerPct7d,
       trendDirection: t.trendDirection,
     },
   }));
+
+  const carouselCreators = trending.slice(0, CAROUSEL_SIZE);
+  const trendingCreators = trending.slice(CAROUSEL_SIZE);
 
   // Shape top games
   const topGames = topGamesRaw.map((g) => ({
@@ -91,7 +105,7 @@ async function getLandingData() {
     currentChannels: g.currentChannels,
   }));
 
-  return { topCreators, trendingCreators, topGames };
+  return { topCreators, carouselCreators, trendingCreators, topGames };
 }
 
 export const revalidate = 600; // ISR: revalidate every 10 minutes
@@ -136,13 +150,14 @@ function JsonLd() {
 }
 
 export default async function LandingPage() {
-  const { topCreators, trendingCreators, topGames } = await getLandingData();
+  const { topCreators, carouselCreators, trendingCreators, topGames } =
+    await getLandingData();
 
   return (
     <>
       <JsonLd />
       <HeroSection />
-      <CreatorShowcase creators={topCreators} />
+      <CreatorShowcase creators={carouselCreators} />
       <ValueProps />
       <HowItWorks />
       <AudienceSplit />

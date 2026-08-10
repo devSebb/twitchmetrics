@@ -1,26 +1,12 @@
 import { NextResponse } from "next/server";
-import { Prisma, Platform } from "@twitchmetrics/database";
-import { db } from "@/server/db";
-import { buildMeta, parsePagination } from "@/app/api/_lib/pagination";
-import { serializeBigInt } from "@/app/api/_lib/serialize";
+import { Platform } from "@twitchmetrics/database";
+import { parsePagination } from "@/app/api/_lib/pagination";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
-import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
+import { resolveGameFilter } from "@/server/services/creator-ranking";
 import {
-  getStreamingStatsBatch,
-  emptyStreamingStats,
-} from "@/server/services/creator-streaming-stats";
-import {
-  DISCOVERABLE_CREATOR_SQL,
-  DISCOVERABLE_CREATOR_WHERE,
-} from "@/server/services/creator-visibility";
-import { isKnownGrowthRollup } from "@/server/services/creator-growth";
-import {
-  getViewershipRankedIds,
-  hasViewershipData,
-  isViewershipSort,
-  resolveGameFilter,
-  type GameFilter,
-} from "@/server/services/creator-ranking";
+  listPublicCreators,
+  type CreatorListSort,
+} from "@/server/services/creator-list";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -31,8 +17,13 @@ const VALID_PLATFORMS = new Set<Platform>([
   "kick",
 ]);
 
-type CreatorIdRow = { id: string };
-type TotalRow = { total: bigint };
+const VALID_SORTS = new Set<CreatorListSort>([
+  "followers",
+  "viewership",
+  "peak",
+  "trending",
+  "recent",
+]);
 
 function parsePlatform(value: string | null): Platform | null {
   if (!value) return null;
@@ -40,64 +31,18 @@ function parsePlatform(value: string | null): Platform | null {
   return value as Platform;
 }
 
-// Platform filtering joins PlatformAccount (unique on creatorProfileId +
-// platform, so no row fanout) so ranking can use that platform's own count
-// instead of the cross-platform total.
-function buildPlatformJoin(platform: Platform | null): Prisma.Sql {
-  if (!platform) return Prisma.empty;
-  return Prisma.sql`
-    JOIN "PlatformAccount" pa
-      ON pa."creatorProfileId" = cp.id
-     AND pa.platform = ${platform}::"Platform"
-  `;
+function parseSort(value: string | null): CreatorListSort {
+  if (!value) return "followers";
+  return VALID_SORTS.has(value as CreatorListSort)
+    ? (value as CreatorListSort)
+    : "followers";
 }
 
-function buildWhereClause(query: string | null, game: GameFilter | null) {
-  const conditions: Prisma.Sql[] = [DISCOVERABLE_CREATOR_SQL];
-
-  if (query) {
-    conditions.push(
-      Prisma.sql`(cp."searchText" % ${query} OR cp."searchText" ILIKE '%' || ${query} || '%')`,
-    );
-  }
-
-  if (game) {
-    conditions.push(Prisma.sql`cp."primaryGameSlug" = ${game.slug}`);
-  }
-
-  return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
-}
-
-function getOrderClause(
-  sort: string | null,
-  platform: Platform | null,
-): Prisma.Sql {
-  // YouTube stores audience size in subscriberCount, others in followerCount.
-  const platformFollowersSql = Prisma.sql`COALESCE(pa."followerCount", pa."subscriberCount")`;
-  switch (sort) {
-    case "trending":
-      return Prisma.sql`
-        ORDER BY COALESCE(
-          (
-            SELECT cgr."delta7d"
-            FROM "CreatorGrowthRollup" cgr
-            WHERE cgr."creatorProfileId" = cp.id
-              AND cgr.platform = ${platform ? Prisma.sql`${platform}::"Platform"` : Prisma.sql`cp."primaryPlatform"`}
-            LIMIT 1
-          ),
-          0
-        ) DESC, ${platform ? Prisma.sql`${platformFollowersSql} DESC NULLS LAST` : Prisma.sql`cp."totalFollowers" DESC`}
-      `;
-    case "recent":
-      return Prisma.sql`ORDER BY cp."createdAt" DESC`;
-    case "followers":
-    default:
-      return platform
-        ? Prisma.sql`ORDER BY ${platformFollowersSql} DESC NULLS LAST, cp."totalFollowers" DESC`
-        : Prisma.sql`ORDER BY cp."totalFollowers" DESC`;
-  }
-}
-
+/**
+ * Thin wrapper over services/creator-list — the query, the ranking and the
+ * Redis caching all live there so this route and the /creators server render
+ * cannot drift apart again (they had: see the note in creator-list.ts).
+ */
 export async function GET(request: Request) {
   const rateLimited = await rateLimitOrResponse(request, "creators", {
     limit: 120,
@@ -106,173 +51,20 @@ export async function GET(request: Request) {
   if (rateLimited) return rateLimited;
 
   const { searchParams } = new URL(request.url);
-  const { page, limit, skip } = parsePagination(searchParams);
-  const query = searchParams.get("q")?.trim() || null;
-  const platform = parsePlatform(searchParams.get("platform"));
-  const sort = searchParams.get("sort");
-  const view = searchParams.get("view") === "list" ? "list" : "grid";
-  const gameParam = searchParams.get("game");
-
-  // Cache by normalized query params (view splits list/grid into separate keys
-  // since list responses carry extra streaming-stat fields).
-  const cacheKey = `creators:list:v6:p${page}:l${limit}:s${sort ?? "followers"}:q${query ?? ""}:pl${platform ?? ""}:g${gameParam ?? ""}:v${view}`;
-  const cached = await cacheGet(cacheKey);
-  if (cached) {
-    return NextResponse.json(cached);
-  }
+  const { page, limit } = parsePagination(searchParams);
 
   // Unknown game slugs are ignored (filter dropped), matching /creators.
-  const game = await resolveGameFilter(gameParam);
+  const game = await resolveGameFilter(searchParams.get("game"));
 
-  const joinClause = buildPlatformJoin(platform);
-  const whereClause = buildWhereClause(query, game);
-
-  // Viewership/peak rank from Stream Hatchet daily rollups (see
-  // services/creator-ranking); platforms without stream data fall back to
-  // the followers ordering. The free-text query param is not supported for
-  // these sorts (the ranked candidate set ignores it), so it also falls back.
-  const useViewershipRanking =
-    isViewershipSort(sort) && hasViewershipData(platform) && !query;
-
-  const [idRows, totalRows] = await Promise.all([
-    useViewershipRanking
-      ? getViewershipRankedIds({
-          sort,
-          platform: platform ?? undefined,
-          gameName: game?.name ?? null,
-          take: limit,
-          skip,
-        }).then((ids) => ids.map((id) => ({ id })))
-      : db.$queryRaw<CreatorIdRow[]>(Prisma.sql`
-          SELECT cp.id
-          FROM "CreatorProfile" cp
-          ${joinClause}
-          ${whereClause}
-          ${getOrderClause(sort && isViewershipSort(sort) ? "followers" : sort, platform)}
-          LIMIT ${limit}
-          OFFSET ${skip}
-        `),
-    db.$queryRaw<TotalRow[]>(Prisma.sql`
-      SELECT COUNT(*)::bigint AS total
-      FROM "CreatorProfile" cp
-      ${joinClause}
-      ${whereClause}
-    `),
-  ]);
-
-  const ids = idRows.map((row) => row.id);
-  const total = Number(totalRows[0]?.total ?? 0n);
-
-  if (!ids.length) {
-    return NextResponse.json({
-      data: [],
-      meta: buildMeta(total, page, limit),
-    });
-  }
-
-  const creators = await db.creatorProfile.findMany({
-    where: { ...DISCOVERABLE_CREATOR_WHERE, id: { in: ids } },
-    select: {
-      id: true,
-      displayName: true,
-      slug: true,
-      avatarUrl: true,
-      primaryPlatform: true,
-      totalFollowers: true,
-      state: true,
-      snapshotTier: true,
-      platformAccounts: {
-        select: {
-          platform: true,
-          platformUsername: true,
-          followerCount: true,
-          subscriberCount: true,
-        },
-      },
-      growthRollups: {
-        orderBy: { computedAt: "desc" },
-        select: {
-          platform: true,
-          delta7d: true,
-          pct7d: true,
-          trendDirection: true,
-        },
-      },
-    },
+  const result = await listPublicCreators({
+    page,
+    limit,
+    sort: parseSort(searchParams.get("sort")),
+    platform: parsePlatform(searchParams.get("platform")),
+    game,
+    query: searchParams.get("q")?.trim() || null,
+    view: searchParams.get("view") === "list" ? "list" : "grid",
   });
 
-  const creatorById = new Map(creators.map((creator) => [creator.id, creator]));
-  const data = ids
-    .map((id) => creatorById.get(id))
-    .filter((creator): creator is NonNullable<typeof creator> =>
-      Boolean(creator),
-    )
-    .map((creator) => {
-      // On a platform tab, trend and follower count both come from that
-      // platform (matching the sort); no cross-platform fallback.
-      const rollupRow = platform
-        ? (creator.growthRollups.find(
-            (rollup) => rollup.platform === platform,
-          ) ?? null)
-        : (creator.growthRollups.find(
-            (rollup) => rollup.platform === creator.primaryPlatform,
-          ) ??
-          creator.growthRollups[0] ??
-          null);
-      // Null delta7d means "no comparison snapshot" — treat as no rollup so
-      // the UI renders missing data instead of a fake flat 0 trend.
-      const growthRollup =
-        rollupRow && isKnownGrowthRollup(rollupRow) ? rollupRow : null;
-
-      const platformAccount = platform
-        ? creator.platformAccounts.find(
-            (account) => account.platform === platform,
-          )
-        : undefined;
-      const displayFollowers = platformAccount
-        ? (platformAccount.followerCount ??
-          platformAccount.subscriberCount ??
-          0n)
-        : creator.totalFollowers;
-
-      return {
-        id: creator.id,
-        displayName: creator.displayName,
-        slug: creator.slug,
-        avatarUrl: creator.avatarUrl,
-        primaryPlatform: creator.primaryPlatform,
-        totalFollowers: creator.totalFollowers.toString(),
-        displayFollowers: displayFollowers.toString(),
-        state: creator.state,
-        snapshotTier: creator.snapshotTier,
-        platformAccounts: creator.platformAccounts.map((account) => ({
-          platform: account.platform,
-          platformUsername: account.platformUsername,
-          followerCount: account.followerCount?.toString() ?? "0",
-        })),
-        growthRollup: growthRollup
-          ? {
-              delta7d: growthRollup.delta7d.toString(),
-              pct7d: growthRollup.pct7d,
-              trendDirection: growthRollup.trendDirection,
-            }
-          : null,
-      };
-    });
-
-  if (view === "list") {
-    const statsById = await getStreamingStatsBatch(ids);
-    for (const row of data) {
-      const stats = statsById.get(row.id) ?? emptyStreamingStats();
-      Object.assign(row, stats);
-    }
-  }
-
-  const response = serializeBigInt({
-    data,
-    meta: buildMeta(total, page, limit),
-  });
-
-  await cacheSet(cacheKey, response, CACHE_TTL.CREATOR_LIST);
-  return NextResponse.json(response);
+  return NextResponse.json(result);
 }

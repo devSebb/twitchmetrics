@@ -241,10 +241,34 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       })
     : [];
 
+  // Third-party social-audience estimates are public data (same category as
+  // follower counts) — fetched for every profile, no visibility flag. The
+  // widget prefers first-party analytics when both exist.
+  const audienceDemographics = (
+    await db.audienceDemographics.findMany({
+      where: { creatorProfileId: creator.id },
+      orderBy: { reach: { sort: "desc", nulls: "last" } },
+      select: {
+        platform: true,
+        ages: true,
+        genders: true,
+        countries: true,
+        income: true,
+        reach: true,
+        dpUpdatedAt: true,
+      },
+    })
+  ).map((row) => ({
+    ...row,
+    reach: row.reach != null ? String(row.reach) : null,
+    dpUpdatedAt: row.dpUpdatedAt ? row.dpUpdatedAt.toISOString() : null,
+  }));
+
   // Data for DashboardGrid (same shape as dashboard page)
   const serialized = {
     ...(serializeBigInt(creator) as Record<string, unknown>),
     demographicAnalytics: serializeBigInt(demographicAnalytics),
+    audienceDemographics,
   } as unknown as SerializedProfile;
 
   // Person JSON-LD for rich results

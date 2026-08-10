@@ -44,6 +44,9 @@
  *   pnpm worker:sh-refresh-followers                             # dry run: follower freshness sweep
  *   pnpm worker:sh-refresh-followers -- --write                  # apply refreshed counts
  *
+ *   pnpm worker:sh-demographics                                  # dry run: audience demographics
+ *   pnpm worker:sh-demographics -- --write                       # upsert AudienceDemographics rows
+ *
  * --refresh-followers is the RECURRING freshness mode (run weekly): joins the
  * latest daily export's reach against the twitch/youtube/kick accounts the API
  * tier crons never touch (SH-catalog, unclaimed, no OAuth), updates changed
@@ -53,9 +56,19 @@
  * social_profiles extract (contacts is skipped). Re-running --social-links
  * against a fresh snapshot is the matching refresh for IG/TikTok/X links.
  *
+ * --demographics is the RECURRING audience-demographics mode (run monthly):
+ * reads the public.contact_demographics table (DemographicsPro reports of a
+ * creator's SOCIAL audience — DP never profiles Twitch/Kick), keeps only the
+ * trustworthy rows (provider demographics_pro + success + full report, latest
+ * row per profile), joins social_profile_id -> contact -> our canonical
+ * creator, zero-fills the bucket vocabularies (absent key = zero, per the SH
+ * consumer guide), and upserts one AudienceDemographics row per
+ * (creator, network). Full-replacement source + keyed upsert = the first run
+ * IS the backfill and every re-run is the refresh.
+ *
  * Flags: --write --sample --snapshot <name> --limit <n> --work-dir <path>
  *        --aws-profile <name> --bio-max-len <n> --skip-extract --social-links
- *        --refresh-followers
+ *        --refresh-followers --demographics
  *
  * NOTE: --social-links needs a FRESH extract (all 6 platforms). Don't combine it
  * with --skip-extract against a parquet extracted before social platforms existed.
@@ -123,6 +136,9 @@ type Config = {
   // Recurring freshness mode: refresh twitch/youtube/kick followerCounts from
   // the export's reach for accounts the API tier crons never touch.
   refreshFollowers: boolean;
+  // Audience-demographics mode: upsert AudienceDemographics rows from the
+  // contact_demographics table (DemographicsPro social-audience estimates).
+  demographics: boolean;
 };
 
 function argValue(name: string): string | undefined {
@@ -154,6 +170,7 @@ function parseConfig(): Config {
     skipExtract: args.includes("--skip-extract"),
     socialLinks: args.includes("--social-links"),
     refreshFollowers: args.includes("--refresh-followers"),
+    demographics: args.includes("--demographics"),
   };
 }
 
@@ -243,6 +260,7 @@ function extractSocialProfiles(config: Config, snapshot: string): void {
   const sql = `${S3_SETUP(config.awsProfile)}
     COPY (
       SELECT
+        TRY_CAST(id AS BIGINT)              AS id,
         TRY_CAST(contact_id AS BIGINT)      AS contact_id,
         type,
         ${platformCase}                      AS platform,
@@ -1324,14 +1342,393 @@ async function refreshFollowersFromExport(
   });
 }
 
+// ─── Demographics mode ───────────────────────────────────────────────────────
+//
+// public.contact_demographics holds DemographicsPro reports: bucket→percent
+// (0-100) JSON distributions of a creator's audience on ONE social network.
+// DP never profiles Twitch/Kick — rows exist for IG/X/TikTok/YouTube/Facebook
+// only (FB is skipped: not in our Platform enum). Per the SH consumer guide:
+// only provider='demographics_pro' + status='success' + light_report=FALSE
+// rows are usable (StatSocial rows use incompatible bucket vocabularies),
+// ~1% of profiles have near-identical duplicate rows (keep latest created_at),
+// and absent JSON keys mean ZERO, not missing — so we zero-fill each present
+// column to the full bucket vocabulary before storing.
+
+const DEMOGRAPHICS_PLATFORMS: Platform[] = [
+  "instagram",
+  "tiktok",
+  "x",
+  "youtube",
+];
+const DEMOGRAPHICS_SOURCE = "demographics_pro";
+
+// Bucket vocabularies — complete and stable since Jan 2019 per the SH guide.
+const AGE_BUCKETS = [
+  "age 17 and under",
+  "age 18 to 20",
+  "age 21 to 24",
+  "age 25 to 29",
+  "age 30 to 34",
+  "age 35 to 44",
+  "age 45 to 54",
+  "age 55 to 64",
+  "age 65 and over",
+];
+const GENDER_BUCKETS = ["male", "female"];
+const INCOME_BUCKETS = [
+  "under $10,000",
+  "$10,000 - $19,999",
+  "$20,000 - $29,999",
+  "$30,000 - $39,999",
+  "$40,000 - $49,999",
+  "$50,000 - $74,999",
+  "$75,000 - $99,999",
+  "over $100,000",
+];
+const ETHNICITY_BUCKETS = [
+  "asian",
+  "hispanic",
+  "white/caucasian",
+  "african american",
+];
+
+/**
+ * Parse one bucket→percent JSON string, zero-filling `vocabulary` (absent key
+ * = zero audience share, per the guide). Open vocabularies (countries) pass
+ * [] and keep only the observed keys. Returns null for empty/absent columns —
+ * an empty COLUMN genuinely means "no data", unlike a missing KEY.
+ */
+function parseDistribution(
+  raw: string | null,
+  vocabulary: string[],
+): Record<string, number> | null {
+  if (!raw || !raw.trim()) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    return null;
+  const entries = Object.entries(parsed as Record<string, unknown>).filter(
+    (e): e is [string, number] =>
+      typeof e[1] === "number" && Number.isFinite(e[1]),
+  );
+  if (entries.length === 0) return null;
+  const out: Record<string, number> = {};
+  for (const key of vocabulary) out[key] = 0;
+  for (const [key, value] of entries) {
+    out[key] = Math.round(Math.max(0, value) * 1000) / 1000;
+  }
+  return out;
+}
+
+/** DP timestamps are "YYYY-MM-DD HH:MM:SS.ffffff" strings (UTC) — normalize. */
+function parseDpTimestamp(raw: string | null): Date | null {
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+  if (!m) return null;
+  const d = new Date(`${m[1]}T${m[2]}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Phase D1 — extract the usable contact_demographics rows to a local parquet:
+ * mandatory filter + latest-row-per-profile dedupe applied at the source.
+ */
+function extractDemographics(config: Config, snapshot: string): void {
+  const glob = tableGlob(snapshot, "contact_demographics", config.sample);
+  const sql = `${S3_SETUP(config.awsProfile)}
+    COPY (
+      SELECT social_profile_id, report_id, dp_updated_at,
+             ages, genders, countries, income, ethnicities
+      FROM (
+        SELECT
+          TRY_CAST(social_profile_id AS BIGINT) AS social_profile_id,
+          CAST(report_id AS VARCHAR)            AS report_id,
+          CAST(updated_at AS VARCHAR)           AS dp_updated_at,
+          CAST(ages AS VARCHAR)                 AS ages,
+          CAST(genders AS VARCHAR)              AS genders,
+          CAST(countries AS VARCHAR)            AS countries,
+          CAST(income AS VARCHAR)               AS income,
+          CAST(ethnicities AS VARCHAR)          AS ethnicities,
+          row_number() OVER (
+            PARTITION BY social_profile_id ORDER BY created_at DESC
+          ) AS rn
+        FROM read_parquet('${glob}')
+        WHERE provider = '${DEMOGRAPHICS_SOURCE}'
+          AND status = 'success'
+          AND light_report = FALSE
+          AND social_profile_id IS NOT NULL
+      ) WHERE rn = 1
+    ) TO '${config.workDir}/demographics.parquet' (FORMAT parquet);`;
+  duckdb(sql, config.awsProfile);
+  const rows = duckdbScalar(
+    `SELECT count(*) FROM read_parquet('${config.workDir}/demographics.parquet');`,
+    config.awsProfile,
+  );
+  log("info", "Extracted contact_demographics (filtered + deduped)", {
+    rows: Number(rows),
+    sample: config.sample,
+  });
+}
+
+type DemoPlanRow = {
+  creator_profile_id: string;
+  platform: string;
+  reach: number | null;
+  report_id: string | null;
+  dp_updated_at: string | null;
+  ages: string | null;
+  genders: string | null;
+  countries: string | null;
+  income: string | null;
+  ethnicities: string | null;
+};
+
+/**
+ * Phase D2 — DuckDB join: demographics row -> its social profile -> contact ->
+ * our canonical creator. Contacts matching >1 distinct creator (a merge was
+ * skipped, e.g. two claimed profiles) are dropped rather than guessed at, and
+ * one demographics row is kept per (creator, network): highest reach wins.
+ */
+function buildDemographicsPlan(config: Config): string {
+  const path = `${config.workDir}/demographics-plan.json`;
+  const platformList = DEMOGRAPHICS_PLATFORMS.map((p) => `'${p}'`).join(",");
+  const sql = `
+    CREATE TEMP TABLE acc AS
+      SELECT platform, CAST(user_id AS VARCHAR) AS user_id, creator_profile_id
+      FROM read_csv('${config.workDir}/accounts.csv', header=true, all_varchar=true);
+    CREATE TEMP TABLE sp AS
+      SELECT * FROM read_parquet('${config.workDir}/sp.parquet');
+
+    -- contact -> our (single, unambiguous) canonical creator
+    CREATE TEMP TABLE contact_creator AS
+      SELECT sp.contact_id, MIN(acc.creator_profile_id) AS creator_profile_id
+      FROM sp JOIN acc ON acc.platform = sp.platform AND acc.user_id = sp.user_id
+      WHERE sp.contact_id IS NOT NULL
+      GROUP BY sp.contact_id
+      HAVING COUNT(DISTINCT acc.creator_profile_id) = 1;
+
+    COPY (
+      SELECT creator_profile_id, platform, reach, report_id, dp_updated_at,
+             ages, genders, countries, income, ethnicities
+      FROM (
+        SELECT cc.creator_profile_id, sp.platform, sp.reach,
+               cd.report_id, cd.dp_updated_at,
+               cd.ages, cd.genders, cd.countries, cd.income, cd.ethnicities,
+               row_number() OVER (
+                 PARTITION BY cc.creator_profile_id, sp.platform
+                 ORDER BY sp.reach DESC NULLS LAST, cd.dp_updated_at DESC
+               ) AS rn
+        FROM read_parquet('${config.workDir}/demographics.parquet') cd
+        JOIN sp ON sp.id = cd.social_profile_id
+        JOIN contact_creator cc ON cc.contact_id = sp.contact_id
+        WHERE sp.platform IN (${platformList})
+      ) WHERE rn = 1
+    ) TO '${path}' (FORMAT json);`; // newline-delimited
+  duckdb(sql, config.awsProfile);
+  return path;
+}
+
+/** Phase D3 — parse, zero-fill, and upsert one row per (creator, network). */
+async function applyDemographics(
+  config: Config,
+  snapshot: string,
+): Promise<void> {
+  const planPath = buildDemographicsPlan(config);
+
+  // DbNull (not undefined) for absent distributions, so a refreshed report
+  // that dropped a column CLEARS the stale value on update instead of
+  // silently keeping it.
+  type JsonCol = Prisma.InputJsonValue | typeof Prisma.DbNull;
+  type Upsert = {
+    creatorProfileId: string;
+    platform: Platform;
+    ages: JsonCol;
+    genders: JsonCol;
+    countries: JsonCol;
+    income: JsonCol;
+    ethnicities: JsonCol;
+    reach: bigint | null;
+    reportId: string | null;
+    dpUpdatedAt: Date | null;
+  };
+  const rows: Upsert[] = [];
+  let emptyRows = 0;
+  const platformSet = new Set<string>(DEMOGRAPHICS_PLATFORMS);
+  const rl = createInterface({
+    input: createReadStream(planPath, "utf8"),
+    crlfDelay: Infinity,
+  });
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    const r = JSON.parse(line) as DemoPlanRow;
+    if (!platformSet.has(r.platform)) continue;
+    const ages = parseDistribution(r.ages, AGE_BUCKETS);
+    const genders = parseDistribution(r.genders, GENDER_BUCKETS);
+    const countries = parseDistribution(r.countries, []);
+    const income = parseDistribution(r.income, INCOME_BUCKETS);
+    const ethnicities = parseDistribution(r.ethnicities, ETHNICITY_BUCKETS);
+    // A report with no usable distribution at all tells the UI nothing.
+    if (!ages && !genders && !countries && !income && !ethnicities) {
+      emptyRows++;
+      continue;
+    }
+    rows.push({
+      creatorProfileId: r.creator_profile_id,
+      platform: r.platform as Platform,
+      ages: ages ?? Prisma.DbNull,
+      genders: genders ?? Prisma.DbNull,
+      countries: countries ?? Prisma.DbNull,
+      income: income ?? Prisma.DbNull,
+      ethnicities: ethnicities ?? Prisma.DbNull,
+      reach: reachToBigInt(r.reach),
+      reportId: sanitizeText(r.report_id, 100),
+      dpUpdatedAt: parseDpTimestamp(r.dp_updated_at),
+    });
+  }
+  const limited = config.limit ? rows.slice(0, config.limit) : rows;
+
+  // Classify create vs update (chunked reads) so the dry run is informative.
+  const existingKeys = new Set<string>();
+  const creatorIds = [...new Set(limited.map((r) => r.creatorProfileId))];
+  for (let i = 0; i < creatorIds.length; i += READ_CHUNK) {
+    const existing = await withRetry(() =>
+      prisma.audienceDemographics.findMany({
+        where: {
+          creatorProfileId: { in: creatorIds.slice(i, i + READ_CHUNK) },
+        },
+        select: { creatorProfileId: true, platform: true },
+      }),
+    );
+    for (const e of existing)
+      existingKeys.add(`${e.creatorProfileId}:${e.platform}`);
+  }
+  const creates = limited.filter(
+    (r) => !existingKeys.has(`${r.creatorProfileId}:${r.platform}`),
+  );
+  const updates = limited.filter((r) =>
+    existingKeys.has(`${r.creatorProfileId}:${r.platform}`),
+  );
+
+  log("info", "Demographics plan built", {
+    snapshot,
+    planRows: rows.length,
+    emptyRows,
+    applying: limited.length,
+    creators: creatorIds.length,
+    wouldCreate: creates.length,
+    wouldUpdate: updates.length,
+    examples: limited.slice(0, 3).map((r) => ({
+      platform: r.platform,
+      reach: r.reach?.toString() ?? null,
+      dpUpdatedAt: r.dpUpdatedAt?.toISOString() ?? null,
+      genders: r.genders,
+    })),
+  });
+
+  if (!config.write) return;
+
+  let created = 0;
+  let updated = 0;
+  let errors = 0;
+  // createMany for the bulk of the backfill (fast), per-row updates after.
+  // A creator deleted between plan and apply would fail the whole createMany
+  // batch on its FK, so fall back to per-row upserts for a failing batch.
+  const CREATE_BATCH = 500;
+  for (let i = 0; i < creates.length; i += CREATE_BATCH) {
+    const chunk = creates.slice(i, i + CREATE_BATCH);
+    try {
+      const res = await withRetry(() =>
+        prisma.audienceDemographics.createMany({
+          data: chunk,
+          skipDuplicates: true,
+        }),
+      );
+      created += res.count;
+    } catch {
+      await runLimited(chunk, WRITE_CONCURRENCY, async (r) => {
+        try {
+          await withRetry(() =>
+            prisma.audienceDemographics.upsert({
+              where: {
+                creatorProfileId_platform: {
+                  creatorProfileId: r.creatorProfileId,
+                  platform: r.platform,
+                },
+              },
+              create: r,
+              update: r,
+            }),
+          );
+          created++;
+        } catch (err) {
+          errors++;
+          if (errors <= 10)
+            log("error", "Demographics create failed", {
+              creatorProfileId: r.creatorProfileId,
+              platform: r.platform,
+              error: err instanceof Error ? err.message : String(err),
+            });
+        }
+      });
+    }
+    if ((i / CREATE_BATCH) % 20 === 0 || i + CREATE_BATCH >= creates.length) {
+      log("info", "Demographics create progress", {
+        processed: Math.min(i + CREATE_BATCH, creates.length),
+        total: creates.length,
+        created,
+      });
+    }
+  }
+  await runLimited(updates, WRITE_CONCURRENCY, async (r) => {
+    try {
+      await withRetry(() =>
+        prisma.audienceDemographics.update({
+          where: {
+            creatorProfileId_platform: {
+              creatorProfileId: r.creatorProfileId,
+              platform: r.platform,
+            },
+          },
+          data: r,
+        }),
+      );
+      updated++;
+    } catch (err) {
+      errors++;
+      if (errors <= 10)
+        log("error", "Demographics update failed", {
+          creatorProfileId: r.creatorProfileId,
+          platform: r.platform,
+          error: err instanceof Error ? err.message : String(err),
+        });
+    }
+  });
+
+  log("info", "Demographics apply complete", {
+    write: config.write,
+    created,
+    updated,
+    errors,
+  });
+}
+
 async function main() {
   const config = parseConfig();
   if (!existsSync(config.workDir))
     mkdirSync(config.workDir, { recursive: true });
 
-  if (config.refreshFollowers && config.socialLinks) {
+  const modeFlags = [
+    config.socialLinks,
+    config.refreshFollowers,
+    config.demographics,
+  ].filter(Boolean).length;
+  if (modeFlags > 1) {
     throw new Error(
-      "--refresh-followers and --social-links are separate runs — pass one at a time.",
+      "--social-links, --refresh-followers and --demographics are separate runs — pass one at a time.",
     );
   }
 
@@ -1342,7 +1739,9 @@ async function main() {
       ? "refresh-followers"
       : config.socialLinks
         ? "social-links"
-        : "merge+enrich",
+        : config.demographics
+          ? "demographics"
+          : "merge+enrich",
     write: config.write,
     sample: config.sample,
     limit: config.limit,
@@ -1362,6 +1761,44 @@ async function main() {
       extractSocialProfiles(config, snapshot);
     }
     await refreshFollowersFromExport(config, snapshot);
+    if (!config.write) {
+      log("info", "Dry run complete — pass --write to apply.");
+    }
+    await prisma.$disconnect();
+    return;
+  }
+
+  if (config.demographics) {
+    const spPath = `${config.workDir}/sp.parquet`;
+    const cdPath = `${config.workDir}/demographics.parquet`;
+    if (config.skipExtract) {
+      if (!existsSync(spPath) || !existsSync(cdPath)) {
+        throw new Error(
+          `--skip-extract needs ${spPath} and ${cdPath} to already exist. Run once without --skip-extract first.`,
+        );
+      }
+      log("info", "Skipping S3 extract — reusing local parquets", {
+        spPath,
+        cdPath,
+      });
+    } else {
+      extractSocialProfiles(config, snapshot);
+      extractDemographics(config, snapshot);
+    }
+    // The demographics join needs sp.id — extracts made before the id column
+    // was added (pre-2026-08-10) lack it; a --skip-extract against one of
+    // those would die mid-join with a confusing binder error.
+    const hasId = duckdbScalar(
+      `SELECT count(*) FROM (DESCRIBE SELECT * FROM read_parquet('${spPath}')) WHERE column_name = 'id';`,
+      config.awsProfile,
+    );
+    if (hasId !== "1") {
+      throw new Error(
+        `${spPath} has no 'id' column (extracted before demographics support). Re-run without --skip-extract.`,
+      );
+    }
+    await exportOurAccounts(config);
+    await applyDemographics(config, snapshot);
     if (!config.write) {
       log("info", "Dry run complete — pass --write to apply.");
     }

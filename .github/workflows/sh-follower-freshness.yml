@@ -2,11 +2,14 @@
 #
 # Replaces the manual weekly worker runs: a cloud runner does exactly what a
 # local run does — aws CLI + duckdb CLI + the ingestion worker against prod
-# Neon — on a schedule. Two jobs:
+# Neon — on a schedule. Three jobs:
 #   - refresh-followers: weekly. Joins the latest daily S3 export's reach
 #     against the twitch/youtube/kick accounts the API tier crons never touch.
 #   - social-links:      monthly. Re-attaches/refreshes IG/TikTok/X link-only
 #     accounts (handle + follower count) from the same export.
+#   - demographics:      monthly. Upserts AudienceDemographics rows (audience
+#     age/gender/country/income estimates per social network) from the
+#     contact_demographics table of the same export.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   DATABASE_URL              — Neon pooled connection string (same as .env.local)
@@ -23,6 +26,7 @@ on:
   schedule:
     - cron: "30 8 * * 1" # Mondays 08:30 UTC — follower refresh
     - cron: "0 12 1 * *" # 1st of month 12:00 UTC — IG/TikTok/X social links
+    - cron: "0 12 2 * *" # 2nd of month 12:00 UTC — audience demographics
   workflow_dispatch:
     inputs:
       mode:
@@ -33,6 +37,7 @@ on:
         options:
           - refresh-followers
           - social-links
+          - demographics
 
 concurrency:
   group: sh-follower-freshness
@@ -101,4 +106,36 @@ jobs:
         run: >-
           npx tsx workers/streamhatchet-ingest-social-profiles.ts
           --social-links --write
+          --work-dir ${{ runner.temp }}/sh-social
+
+  demographics:
+    if: >-
+      github.event.schedule == '0 12 2 * *' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'demographics')
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install DuckDB CLI
+        run: |
+          curl -fsSL https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
+          sudo unzip -o /tmp/duckdb.zip -d /usr/local/bin
+          duckdb --version
+      - name: Run demographics refresh (write)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SH_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SH_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: >-
+          npx tsx workers/streamhatchet-ingest-social-profiles.ts
+          --demographics --write
           --work-dir ${{ runner.temp }}/sh-social

@@ -75,10 +75,14 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
   demographics: {
     id: "demographics",
     label: "Audience Demographics",
-    description: "Gender, age, and country breakdown from connected platforms",
+    // Public: unclaimed catalog creators get third-party social-audience
+    // estimates (AudienceDemographics); owners with OAuth get first-party
+    // platform analytics on top.
+    description:
+      "Gender, age, and country breakdown from connected platforms or social-audience estimates",
     defaultEnabled: true,
     priority: "P0",
-    access: "connected",
+    access: "public",
     colSpan: 2,
     icon: UsersThree,
   },
