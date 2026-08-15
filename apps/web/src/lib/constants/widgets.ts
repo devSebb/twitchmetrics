@@ -83,7 +83,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "public",
-    colSpan: 2,
+    colSpan: 3,
     icon: UsersThree,
   },
   popular_games: {

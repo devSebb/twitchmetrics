@@ -215,19 +215,20 @@ export function DashboardGrid({
           <StatsRow profile={profile} />,
         )}
 
+        {/* Row 2: Audience Demographics — full width (tabs + 3-column layout) */}
+        {renderGated(
+          "demographics",
+          enabledSet,
+          isClaimed,
+          <DemographicsWidget
+            profile={profile}
+            isClaimed={isClaimed}
+            isOwner={isOwner}
+          />,
+        )}
+
         {/* Top widget cluster: dense packing prevents holes when cards are hidden */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-flow-dense lg:grid-cols-3">
-          {renderGated(
-            "demographics",
-            enabledSet,
-            isClaimed,
-            <DemographicsWidget
-              profile={profile}
-              isClaimed={isClaimed}
-              isOwner={isOwner}
-            />,
-            "lg:col-span-2",
-          )}
+        <div className="grid grid-cols-1 gap-4 empty:hidden md:grid-cols-2 lg:grid-flow-dense lg:grid-cols-3">
           {renderGated(
             "brand_partners",
             enabledSet,

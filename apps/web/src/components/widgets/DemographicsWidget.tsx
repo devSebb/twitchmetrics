@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import type { Platform } from "@twitchmetrics/database";
 import { EmptyState } from "@/components/widgets/EmptyState";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
+import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { trpc } from "@/lib/trpc";
 import type {
@@ -335,18 +337,30 @@ function pickSocialRow(
   return null;
 }
 
+function hasSocialData(row: SerializedAudienceDemographics): boolean {
+  return Boolean(
+    asPercentRecord(row.genders) ||
+    asPercentRecord(row.ages) ||
+    asPercentRecord(row.countries),
+  );
+}
+
 /**
  * Renders the DemographicsPro social-audience estimate: same visual language
  * as the first-party view, but always attributed as an estimate of the
  * creator's SOCIAL audience (DP never profiles Twitch/Kick) with its as-of
- * date — reports refresh opportunistically and can be old.
+ * date — reports refresh opportunistically and can be old. When more than
+ * one network has a report, tabs switch between them (highest reach first —
+ * the server's ordering).
  */
 function SocialAudienceContent({
   rows,
 }: {
   rows: SerializedAudienceDemographics[];
 }) {
-  const row = pickSocialRow(rows);
+  const usable = useMemo(() => rows.filter(hasSocialData), [rows]);
+  const [selected, setSelected] = useState<Platform | null>(null);
+  const row = usable.find((r) => r.platform === selected) ?? usable[0];
   if (!row) return <EmptyWidgetSentinel />;
 
   const genders = asPercentRecord(row.genders);
@@ -373,7 +387,34 @@ function SocialAudienceContent({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
+      {usable.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1">
+          {usable.map((r) => (
+            <button
+              key={r.platform}
+              onClick={() => setSelected(r.platform)}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                r.platform === row.platform
+                  ? "bg-[#383A40] text-[#F2F3F5]"
+                  : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+              }`}
+            >
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{
+                  backgroundColor:
+                    CHART_PLATFORM_COLORS[r.platform] ??
+                    PLATFORM_CONFIG[r.platform].color,
+                }}
+              />
+              {PLATFORM_CONFIG[r.platform]?.name ?? r.platform}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Full-width row: gender+ages | countries | income */}
+      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
         {(genderSplit || ageRanges) && (
           <div>
             {genderSplit && <AudienceSummary genderSplit={genderSplit} />}
@@ -381,17 +422,21 @@ function SocialAudienceContent({
           </div>
         )}
 
-        {(countries || income) && (
-          <div className="space-y-5">
-            {countries && <CountryRows countries={countries} />}
-            {income && (
-              <div>
-                <p className="mb-2 text-xs font-semibold text-[#949BA4]">
-                  Household income
-                </p>
-                <AgeBars ageRanges={income} />
-              </div>
-            )}
+        {countries && (
+          <div>
+            <p className="mb-4 text-xs font-semibold text-[#949BA4]">
+              Top countries
+            </p>
+            <CountryRows countries={countries} />
+          </div>
+        )}
+
+        {income && (
+          <div>
+            <p className="mb-2 text-xs font-semibold text-[#949BA4]">
+              Household income
+            </p>
+            <AgeBars ageRanges={income} />
           </div>
         )}
       </div>
