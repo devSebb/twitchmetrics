@@ -236,7 +236,10 @@ export function DashboardGrid({
             enabledSet,
             isClaimed,
             <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
-            "min-w-0 lg:basis-1/3 lg:grow",
+            // No grow: when demographics is missing (most catalog profiles)
+            // this card stays a third wide instead of stretching into a
+            // full-width band.
+            "min-w-0 lg:basis-1/3 lg:grow-0",
           )}
         </div>
 

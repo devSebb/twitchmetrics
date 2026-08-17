@@ -13,6 +13,15 @@
  * A profile's own tracked history (MetricSnapshot / growth / clips / analytics)
  * stays put; absorbed profiles are unclaimed SH stubs that have none.
  *
+ * Same-platform collisions: (creatorProfileId, platform) is unique, so when the
+ * canonical already has an account on the absorbed profile's platform (a second
+ * Twitch channel, a VOD channel, …) that PlatformAccount cannot move and stays
+ * on the stub. Its StreamHatchet facts/rollups DO still move to the canonical —
+ * otherwise that channel's whole stream history becomes unreachable (nothing
+ * reads through `mergedFrom`). The stub-owned account is resolved to the
+ * canonical by `canonicalProfileId()` wherever identity matters (S3 import,
+ * catalog backfill).
+ *
  * Claim-lock: a claimed/owned profile is never folded into another (it can only
  * be the canonical survivor). Auto-merge callers must respect this.
  */
@@ -64,6 +73,9 @@ type ProfileForMerge = {
     id: string;
     platform: Platform;
     platformUserId: string;
+    followerCount: bigint | null;
+    subscriberCount: bigint | null;
+    discoverySource: string | null;
   }[];
 };
 
@@ -76,7 +88,14 @@ const PROFILE_SELECT = {
   listed: true,
   mergedIntoId: true,
   platformAccounts: {
-    select: { id: true, platform: true, platformUserId: true },
+    select: {
+      id: true,
+      platform: true,
+      platformUserId: true,
+      followerCount: true,
+      subscriberCount: true,
+      discoverySource: true,
+    },
   },
 } as const;
 
@@ -96,8 +115,29 @@ function shPlatformsFor(platform: Platform): string[] {
 }
 
 /**
+ * Best available audience-size evidence for a profile: the larger of its
+ * aggregate `totalFollowers` and its biggest tracked (non link-only) account.
+ *
+ * `totalFollowers` alone is not enough: StreamHatchet-born profiles carried 0
+ * until the first follower refresh, so a 51-follower API-born VOD channel used
+ * to beat a 5.9M-follower SH-born main channel and become the public identity
+ * (the "IShowSpeed page titled Kassan247" bug). Looking at the accounts
+ * themselves makes the pick robust to a stale aggregate.
+ */
+export function followerEvidence(p: ProfileForMerge): bigint {
+  let best = p.totalFollowers;
+  for (const account of p.platformAccounts) {
+    if (account.discoverySource) continue;
+    const count = account.followerCount ?? account.subscriberCount ?? 0n;
+    if (count > best) best = count;
+  }
+  return best;
+}
+
+/**
  * Pick which of two profiles survives as canonical: claimed beats unclaimed,
- * then higher follower count, then more recent activity, then stable id order.
+ * then stronger follower evidence, then more recent activity, then stable id
+ * order.
  */
 export function pickCanonical(
   a: ProfileForMerge,
@@ -108,8 +148,10 @@ export function pickCanonical(
   if (aLocked !== bLocked) {
     return aLocked ? { canonical: a, other: b } : { canonical: b, other: a };
   }
-  if (a.totalFollowers !== b.totalFollowers) {
-    return a.totalFollowers > b.totalFollowers
+  const aEvidence = followerEvidence(a);
+  const bEvidence = followerEvidence(b);
+  if (aEvidence !== bEvidence) {
+    return aEvidence > bEvidence
       ? { canonical: a, other: b }
       : { canonical: b, other: a };
   }
@@ -121,6 +163,46 @@ export function pickCanonical(
       : { canonical: b, other: a };
   }
   return a.id < b.id ? { canonical: a, other: b } : { canonical: b, other: a };
+}
+
+/**
+ * Re-point every StreamHatchet fact/rollup row of one platform channel to a
+ * profile. Shared by merge, unmerge and the stranding repair worker so the
+ * "what counts as SH history" definition lives in one place.
+ */
+export async function moveShHistoryForAccount(
+  tx: Prisma.TransactionClient,
+  account: { platform: Platform; platformUserId: string },
+  toProfileId: string,
+): Promise<{ sessions: number; rollups: number; gameRollups: number }> {
+  const shPlatforms = shPlatformsFor(account.platform);
+  if (shPlatforms.length === 0) {
+    return { sessions: 0, rollups: 0, gameRollups: 0 };
+  }
+  const factWhere = {
+    source: SOURCE,
+    platform: { in: shPlatforms },
+    platformUserId: account.platformUserId,
+  };
+  const [sessions, rollups, gameRollups] = await Promise.all([
+    tx.streamSessionFact.updateMany({
+      where: factWhere,
+      data: { creatorProfileId: toProfileId },
+    }),
+    tx.channelDailyRollup.updateMany({
+      where: factWhere,
+      data: { creatorProfileId: toProfileId },
+    }),
+    tx.channelGameDailyRollup.updateMany({
+      where: factWhere,
+      data: { creatorProfileId: toProfileId },
+    }),
+  ]);
+  return {
+    sessions: sessions.count,
+    rollups: rollups.count,
+    gameRollups: gameRollups.count,
+  };
 }
 
 export type MergeParams = {
@@ -223,32 +305,19 @@ export async function mergeProfiles(params: MergeParams): Promise<MergeResult> {
         where: { id: account.id },
         data: { creatorProfileId: canonical.id },
       });
+      const moved = await moveShHistoryForAccount(tx, account, canonical.id);
+      movedStreamSessions += moved.sessions;
+      movedChannelRollups += moved.rollups;
+      movedChannelGameRollups += moved.gameRollups;
+    }
 
-      const shPlatforms = shPlatformsFor(account.platform);
-      if (shPlatforms.length > 0) {
-        const factWhere = {
-          source: SOURCE,
-          platform: { in: shPlatforms },
-          platformUserId: account.platformUserId,
-        };
-        const [sessions, rollups, gameRollups] = await Promise.all([
-          tx.streamSessionFact.updateMany({
-            where: factWhere,
-            data: { creatorProfileId: canonical.id },
-          }),
-          tx.channelDailyRollup.updateMany({
-            where: factWhere,
-            data: { creatorProfileId: canonical.id },
-          }),
-          tx.channelGameDailyRollup.updateMany({
-            where: factWhere,
-            data: { creatorProfileId: canonical.id },
-          }),
-        ]);
-        movedStreamSessions += sessions.count;
-        movedChannelRollups += rollups.count;
-        movedChannelGameRollups += gameRollups.count;
-      }
+    // Same-platform collision: the account stays on the stub, but its stream
+    // history still belongs to the canonical creator (see header comment).
+    for (const account of notMoved) {
+      const moved = await moveShHistoryForAccount(tx, account, canonical.id);
+      movedStreamSessions += moved.sessions;
+      movedChannelRollups += moved.rollups;
+      movedChannelGameRollups += moved.gameRollups;
     }
 
     await tx.creatorProfile.update({
@@ -359,14 +428,22 @@ export async function unmergeProfiles(identityLinkId: string): Promise<void> {
 
   const reversal = (link.reversal ?? {}) as {
     movedAccountIds?: string[];
+    notMovedAccountIds?: string[];
     otherPriorListed?: boolean;
   };
   const movedAccountIds = reversal.movedAccountIds ?? [];
+  const notMovedAccountIds = reversal.notMovedAccountIds ?? [];
 
-  const movedAccounts = await prisma.platformAccount.findMany({
-    where: { id: { in: movedAccountIds } },
-    select: { id: true, platform: true, platformUserId: true },
-  });
+  const [movedAccounts, notMovedAccounts] = await Promise.all([
+    prisma.platformAccount.findMany({
+      where: { id: { in: movedAccountIds } },
+      select: { id: true, platform: true, platformUserId: true },
+    }),
+    prisma.platformAccount.findMany({
+      where: { id: { in: notMovedAccountIds } },
+      select: { id: true, platform: true, platformUserId: true },
+    }),
+  ]);
 
   await prisma.$transaction(async (tx) => {
     for (const account of movedAccounts) {
@@ -374,29 +451,12 @@ export async function unmergeProfiles(identityLinkId: string): Promise<void> {
         where: { id: account.id },
         data: { creatorProfileId: link.otherProfileId },
       });
-
-      const shPlatforms = shPlatformsFor(account.platform);
-      if (shPlatforms.length > 0) {
-        const factWhere = {
-          source: SOURCE,
-          platform: { in: shPlatforms },
-          platformUserId: account.platformUserId,
-        };
-        await Promise.all([
-          tx.streamSessionFact.updateMany({
-            where: factWhere,
-            data: { creatorProfileId: link.otherProfileId },
-          }),
-          tx.channelDailyRollup.updateMany({
-            where: factWhere,
-            data: { creatorProfileId: link.otherProfileId },
-          }),
-          tx.channelGameDailyRollup.updateMany({
-            where: factWhere,
-            data: { creatorProfileId: link.otherProfileId },
-          }),
-        ]);
-      }
+      await moveShHistoryForAccount(tx, account, link.otherProfileId);
+    }
+    // Accounts that never left the stub still had their SH history folded into
+    // the canonical — give it back too.
+    for (const account of notMovedAccounts) {
+      await moveShHistoryForAccount(tx, account, link.otherProfileId);
     }
 
     await tx.creatorProfile.update({

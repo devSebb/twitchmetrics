@@ -120,6 +120,11 @@ async function snapshotProfileBatch(
       totalFollowers: true,
       snapshotTier: true,
       platformAccounts: {
+        // Link-only accounts from the StreamHatchet social graph (IG/TikTok/X
+        // handles + reach) have no adapter session and must never be polled;
+        // X in particular has a public adapter that fails on every one of
+        // them, which used to show up as ~2.8k "failed" per tier1 run.
+        where: { discoverySource: null },
         select: {
           id: true,
           platform: true,

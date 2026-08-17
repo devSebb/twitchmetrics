@@ -10,6 +10,14 @@
  *   pnpm worker:streamhatchet -- --platform kick --date 2026-05-13 --write
  *   pnpm worker:streamhatchet -- --platform kick --days 30 --write
  *   pnpm worker:streamhatchet -- --platform twitch --date 2026-05-13 --matched-only --write
+ *   pnpm worker:streamhatchet -- --platform yt --start-date 2026-04-10 --end-date 2026-08-15 --fill-missing --write
+ *
+ * --force        delete the object's facts and re-import everything, rebuild rollups.
+ * --fill-missing re-parse an already-imported object WITHOUT deleting: only rows the
+ *                unique key does not yet hold get inserted (createMany skipDuplicates),
+ *                then that day's rollups are rebuilt. Used to backfill the yt rows the
+ *                old (video-id-less) unique key silently dropped — ~8%/day of concurrent
+ *                streams — without rewriting the ~92% that were fine.
  */
 
 import { PrismaClient, Prisma, type Platform } from "@prisma/client";
@@ -83,6 +91,7 @@ type ImportConfig = {
   dates: Date[];
   write: boolean;
   force: boolean;
+  fillMissing: boolean;
   matchedOnly: boolean;
   rowLimit: number | undefined;
 };
@@ -174,6 +183,7 @@ function parseConfig(): ImportConfig {
     dates,
     write: args.includes("--write"),
     force: args.includes("--force"),
+    fillMissing: args.includes("--fill-missing"),
     matchedOnly: args.includes("--matched-only"),
     rowLimit:
       rowLimit && Number.isFinite(rowLimit) && rowLimit > 0
@@ -264,6 +274,9 @@ async function loadExistingProfileMatches(
         platformUserId: true,
         platformUsername: true,
         creatorProfileId: true,
+        // Stub-owned accounts (same-platform merge collision) resolve to the
+        // canonical creator so their facts never land on a redirect stub.
+        creatorProfile: { select: { mergedIntoId: true } },
       },
     }),
   );
@@ -274,7 +287,8 @@ async function loadExistingProfileMatches(
   for (const account of accounts) {
     const match = {
       accountId: account.id,
-      creatorProfileId: account.creatorProfileId,
+      creatorProfileId:
+        account.creatorProfile.mergedIntoId ?? account.creatorProfileId,
     };
     byPlatformUserId.set(account.platformUserId, match);
     byUsername.set(account.platformUsername.toLowerCase(), match);
@@ -681,7 +695,8 @@ async function importOneDate(config: ImportConfig, date: Date) {
       existingMode: metadataImportMode(existingObject.metadata),
       currentMode: mode,
     }) &&
-    !config.force
+    !config.force &&
+    !config.fillMissing
   ) {
     log("info", "Object already imported; skipping", {
       key,
@@ -825,14 +840,22 @@ async function importOneDate(config: ImportConfig, date: Date) {
     matchedOnly: config.matchedOnly,
   });
 
+  // In fill-missing mode the rows already present count as imported too;
+  // `written` is only the delta this pass added.
+  const priorImported =
+    config.fillMissing && !config.force
+      ? Number(existingObject?.importedRows ?? 0)
+      : 0;
+  const importedRows = priorImported + written;
+
   await withRetry(() =>
     prisma.streamHatchetSourceObject.update({
       where: { id: sourceObject.id },
       data: {
         status: "completed",
         rowCount: s3RowCount ?? parseStats.rowsScanned,
-        importedRows: written,
-        skippedRows: parseStats.rowsAccepted - written,
+        importedRows,
+        skippedRows: Math.max(0, parseStats.rowsAccepted - importedRows),
         failedRows: parseStats.rowsRejected,
         lastImportedAt: new Date(),
         metadata: {
@@ -878,6 +901,7 @@ async function main() {
     profile: config.profile,
     write: config.write,
     force: config.force,
+    fillMissing: config.fillMissing,
     matchedOnly: config.matchedOnly,
     rowLimit: config.rowLimit ?? null,
   });

@@ -10,6 +10,12 @@
 #   - demographics:      monthly. Upserts AudienceDemographics rows (audience
 #     age/gender/country/income estimates per social network) from the
 #     contact_demographics table of the same export.
+#   - catalog-catchup:   weekly. Mints CreatorProfile+PlatformAccount for every
+#     StreamHatchet channel that appeared in the S3 sessions since the last run
+#     (the July one-shot catalog build otherwise froze the catalog: 206k new
+#     channels had no profile by 2026-08-16, Drake on Kick included), links
+#     their facts/rollups, then promotes profiles that now clear the listing
+#     gate (>= 2 active days / 30d). DB-only — no AWS needed.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   DATABASE_URL              — Neon pooled connection string (same as .env.local)
@@ -27,6 +33,7 @@ on:
     - cron: "30 8 * * 1" # Mondays 08:30 UTC — follower refresh
     - cron: "0 12 1 * *" # 1st of month 12:00 UTC — IG/TikTok/X social links
     - cron: "0 12 2 * *" # 2nd of month 12:00 UTC — audience demographics
+    - cron: "0 6 * * 0" # Sundays 06:00 UTC — SH catalog catch-up + listing
   workflow_dispatch:
     inputs:
       mode:
@@ -38,6 +45,7 @@ on:
           - refresh-followers
           - social-links
           - demographics
+          - catalog-catchup
 
 concurrency:
   group: sh-follower-freshness
@@ -139,3 +147,34 @@ jobs:
           npx tsx workers/streamhatchet-ingest-social-profiles.ts
           --demographics --write
           --work-dir ${{ runner.temp }}/sh-social
+
+  catalog-catchup:
+    if: >-
+      github.event.schedule == '0 6 * * 0' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'catalog-catchup')
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      # yt candidate discovery folds ~400k channels into an in-memory map.
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # One platform per invocation (the worker takes a single --platform).
+      # ytg is deliberately excluded (deferred partition, frozen since May).
+      - name: Catalog catch-up — kick
+        run: npx tsx workers/streamhatchet-build-catalog.ts --platform kick --write --backfill-max-retries 4
+      - name: Catalog catch-up — twitch
+        run: npx tsx workers/streamhatchet-build-catalog.ts --platform twitch --write --backfill-max-retries 4
+      - name: Catalog catch-up — yt
+        run: npx tsx workers/streamhatchet-build-catalog.ts --platform yt --write --backfill-max-retries 4
+      - name: Promote profiles that now clear the listing gate
+        run: npx tsx workers/reconcile-creator-listing.ts --write --limit 0

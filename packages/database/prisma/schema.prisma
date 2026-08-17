@@ -856,7 +856,22 @@ model StreamSessionFact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([source, platform, platformUserId, streamBeginsAt, streamEndsAt])
+  // ---------------------------------------------------------------------
+  // RAW UNIQUE INDEX THAT PRISMA CANNOT DECLARE — DO NOT LET A GENERATED
+  // MIGRATION DROP IT (see the same warning on PlatformAccount).
+  //
+  //   StreamSessionFact_source_platform_user_video_window_key
+  //     UNIQUE (source, platform, "platformUserId",
+  //             (COALESCE("platformVideoId", '')), "streamBeginsAt", "streamEndsAt")
+  //
+  // Replaces the old (source, platform, platformUserId, streamBeginsAt,
+  // streamEndsAt) unique. YouTube channels run several concurrent live
+  // streams (distinct video_id, identical begin/end — 24/7 news, radio,
+  // multi-stream VTubers) and the old key silently dropped ~8% of yt rows a
+  // day via createMany(skipDuplicates). COALESCE keeps it NULL-safe for
+  // kick (no video id) so a retried import still de-duplicates.
+  // Created in 20260817000000_stream_session_video_id_unique.
+  // ---------------------------------------------------------------------
   @@index([sourceObjectId])
   @@index([creatorProfileId, platform, partitionDate])
   @@index([platform, partitionDate])

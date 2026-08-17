@@ -378,6 +378,9 @@ type LiveProfile = {
     id: string;
     platform: Platform;
     platformUserId: string;
+    followerCount: bigint | null;
+    subscriberCount: bigint | null;
+    discoverySource: string | null;
   }[];
 };
 
@@ -666,7 +669,14 @@ async function applyPlan(plan: PlanGroup[], config: Config): Promise<void> {
         listed: true,
         mergedIntoId: true,
         platformAccounts: {
-          select: { id: true, platform: true, platformUserId: true },
+          select: {
+            id: true,
+            platform: true,
+            platformUserId: true,
+            followerCount: true,
+            subscriberCount: true,
+            discoverySource: true,
+          },
         },
       },
     });

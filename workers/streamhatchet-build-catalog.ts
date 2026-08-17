@@ -562,8 +562,9 @@ async function backfillOwnership(config: Config): Promise<{
         const runWindow = () =>
           prisma.$executeRawUnsafe(
             `UPDATE "${name}" t
-             SET "creatorProfileId" = pa."creatorProfileId"
+             SET "creatorProfileId" = COALESCE(cp."mergedIntoId", pa."creatorProfileId")
              FROM "PlatformAccount" pa
+             JOIN "CreatorProfile" cp ON cp.id = pa."creatorProfileId"
              WHERE t."creatorProfileId" IS NULL
                AND t.source = $1
                AND t.platform = $2

@@ -7,6 +7,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
+import { canonicalProfileId } from "../identity/canonical-profile";
 
 export type StreamHatchetDailySessionPlatform =
   | "kick"
@@ -233,17 +234,19 @@ async function resolveBatchProfileMatches(
       platformUserId: true,
       platformUsername: true,
       creatorProfileId: true,
+      // An account can sit on a merged redirect stub (same-platform collision
+      // at merge time). Its facts belong to the canonical creator, never the
+      // stub — otherwise the channel's history is unreachable.
+      creatorProfile: { select: { id: true, mergedIntoId: true } },
     },
   });
 
   const byUserId = new Map<string, string>();
   const byUsername = new Map<string, string>();
   for (const account of accounts) {
-    byUserId.set(account.platformUserId, account.creatorProfileId);
-    byUsername.set(
-      account.platformUsername.toLowerCase(),
-      account.creatorProfileId,
-    );
+    const ownerId = canonicalProfileId(account.creatorProfile);
+    byUserId.set(account.platformUserId, ownerId);
+    byUsername.set(account.platformUsername.toLowerCase(), ownerId);
   }
 
   for (const session of sessions) {
