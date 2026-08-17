@@ -930,7 +930,28 @@ async function main() {
 
   try {
     for (const date of config.dates) {
-      const result = await importOneDate(config, date);
+      // A date is retried as a unit on ANY failure (S3 download resets, Neon
+      // drops mid-batch): the import is idempotent (ETag ledger + unique key +
+      // rollup rebuild), so replaying a date is always safe. Long backoff so a
+      // laptop sleep / network blip doesn't kill a multi-hour backfill.
+      let result: Awaited<ReturnType<typeof importOneDate>> | null = null;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          result = await importOneDate(config, date);
+          break;
+        } catch (err) {
+          if (attempt >= 8) throw err;
+          const waitMs = Math.min(300_000, 15_000 * 2 ** (attempt - 1));
+          log("warn", "Date import failed; retrying", {
+            date: formatDate(date),
+            attempt,
+            waitMs,
+            error:
+              err instanceof Error ? err.message.split("\n")[0] : String(err),
+          });
+          await new Promise((r) => setTimeout(r, waitMs));
+        }
+      }
       summary.scanned += result.scanned;
       summary.written += result.written;
       summary.skipped += result.skipped;

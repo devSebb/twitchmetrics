@@ -75,6 +75,51 @@ function log(msg: string, data?: unknown) {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Postgres text cannot hold NUL; Prisma's param encoder also chokes on stray
+ *  control chars ("unexpected end of hex escape"). Strip them from API text. */
+function clean(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const out = v
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    // Lone surrogates (e.g. an emoji pair cut in half by a slice) serialize
+    // to a dangling \uD8xx escape that the query engine rejects.
+    .replace(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+      "",
+    )
+    .trim();
+  return out.length ? out : null;
+}
+
+function isRetryableDbError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /closed the connection|Connection terminated|ECONNRESET|timed out|Timed out|Can't reach database|connection pool/i.test(
+      msg,
+    ) ||
+    (err instanceof Prisma.PrismaClientKnownRequestError &&
+      ["P1001", "P1002", "P1008", "P1017", "P2024", "P2034"].includes(err.code))
+  );
+}
+
+/** Neon drops idle-ish connections every ~15 min; absorb that instead of dying. */
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 60): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (e) {
+      attempt++;
+      if (!isRetryableDbError(e) || attempt > maxRetries) throw e;
+      const wait = Math.min(30_000, 1_000 * 2 ** attempt);
+      log(`retryable DB error, retry ${attempt}/${maxRetries} in ${wait}ms`, {
+        error: e instanceof Error ? e.message.split("\n").pop() : String(e),
+      });
+      await sleep(wait);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tokens (client credentials; adapters live under apps/web with `@/` imports)
 // ---------------------------------------------------------------------------
@@ -84,16 +129,23 @@ async function twitchToken(): Promise<string> {
   const secret = process.env.TWITCH_CLIENT_SECRET;
   if (!id || !secret)
     throw new Error("TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET missing");
-  const res = await fetch("https://id.twitch.tv/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: id,
-      client_secret: secret,
-      grant_type: "client_credentials",
-    }),
+  // Same shape as apps/web/src/server/adapters/twitch.ts getAppAccessToken:
+  // params in the query string of a bodiless POST.
+  const params = new URLSearchParams({
+    client_id: id,
+    client_secret: secret,
+    grant_type: "client_credentials",
   });
-  if (!res.ok) throw new Error(`twitch token ${res.status}`);
+  const res = await fetch(`https://id.twitch.tv/oauth2/token?${params}`, {
+    method: "POST",
+  });
+  if (!res.ok)
+    throw new Error(
+      `twitch token ${res.status} ${await res.text().catch(() => "")}`.slice(
+        0,
+        200,
+      ),
+    );
   const json = (await res.json()) as { access_token: string };
   return json.access_token;
 }
@@ -121,8 +173,20 @@ async function fetchJsonWithBackoff<T>(
   url: string,
   headers: Record<string, string>,
 ): Promise<T | null> {
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const res = await fetch(url, { headers });
+  for (let attempt = 0; attempt < 30; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+    } catch (e) {
+      // ECONNRESET / DNS blip / 30s stall — retry like a 5xx.
+      const wait = Math.min(60_000, 1_000 * 2 ** attempt);
+      log(`api network error, retrying in ${wait}ms`, {
+        error: e instanceof Error ? e.message : String(e),
+        url: url.slice(0, 80),
+      });
+      await sleep(wait);
+      continue;
+    }
     if (res.status === 429 || res.status >= 500) {
       const wait = Math.min(60_000, 1_000 * 2 ** attempt);
       log(`api ${res.status}, backing off ${wait}ms`, {
@@ -158,7 +222,8 @@ type Target = {
 
 async function loadTargets(platform: "twitch" | "kick"): Promise<Target[]> {
   const limitSql = LIMIT ? Prisma.sql`LIMIT ${LIMIT}` : Prisma.empty;
-  return prisma.$queryRaw<Target[]>`
+  return withRetry(
+    () => prisma.$queryRaw<Target[]>`
     SELECT pa.id AS account_id, cp.id AS profile_id, pa."platformUserId" AS platform_user_id,
            pa."platformUsername" AS username, (pa.platform = cp."primaryPlatform") AS "primary",
            cp."avatarUrl" AS profile_avatar, cp.bio AS profile_bio, cp."bannerUrl" AS profile_banner
@@ -171,7 +236,8 @@ async function loadTargets(platform: "twitch" | "kick"): Promise<Target[]> {
       AND cp."catalogSource" = 'streamhatchet'
     ORDER BY cp.listed DESC, cp."totalFollowers" DESC
     ${limitSql}
-  `;
+  `,
+  );
 }
 
 type TwitchUser = {
@@ -183,42 +249,70 @@ type TwitchUser = {
 };
 type KickChannel = {
   slug?: string;
-  profile_picture?: string | null;
+  broadcaster_user_id?: number | string;
   banner_picture?: string | null;
   channel_description?: string | null;
 };
+type KickUser = {
+  user_id?: number | string;
+  name?: string | null;
+  profile_picture?: string | null;
+};
 
-async function applyAvatar(
-  t: Target,
-  data: {
-    avatar: string | null;
-    displayName?: string | null;
-    bio?: string | null;
-    banner?: string | null;
-  },
-) {
-  if (!WRITE) return;
-  const accountData: Prisma.PlatformAccountUpdateInput = {};
-  if (data.avatar) accountData.platformAvatarUrl = data.avatar;
-  if (data.displayName) accountData.platformDisplayName = data.displayName;
-  if (Object.keys(accountData).length) {
-    await prisma.platformAccount.update({
-      where: { id: t.account_id },
-      data: accountData,
-    });
+type AvatarUpdate = {
+  target: Target;
+  avatar: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  banner?: string | null;
+};
+
+/**
+ * Apply one API batch as two set-based UPDATEs (VALUES join) instead of
+ * hundreds of single-row round trips — ~500k accounts would otherwise take
+ * hours on Neon latency alone. Profile fields only fill EMPTY values and only
+ * from the profile's primary-platform account.
+ */
+async function applyAvatarBatch(updates: AvatarUpdate[]) {
+  if (!WRITE || updates.length === 0) return;
+  const accountRows = updates.filter((u) => u.avatar || u.displayName);
+  if (accountRows.length) {
+    await withRetry(
+      () => prisma.$executeRaw`
+      UPDATE "PlatformAccount" pa
+      SET "platformAvatarUrl" = COALESCE(v.avatar, pa."platformAvatarUrl"),
+          "platformDisplayName" = COALESCE(v.display_name, pa."platformDisplayName")
+      FROM (VALUES ${Prisma.join(
+        accountRows.map(
+          (u) =>
+            Prisma.sql`(${u.target.account_id}::uuid, ${u.avatar ?? null}::text, ${u.displayName ?? null}::text)`,
+        ),
+      )}) AS v(id, avatar, display_name)
+      WHERE pa.id = v.id`,
+    );
   }
-  const profileData: Prisma.CreatorProfileUpdateInput = {};
-  if (t.primary && data.avatar && !t.profile_avatar)
-    profileData.avatarUrl = data.avatar;
-  if (t.primary && data.bio && !t.profile_bio)
-    profileData.bio = data.bio.slice(0, 500);
-  if (t.primary && data.banner && !t.profile_banner)
-    profileData.bannerUrl = data.banner;
-  if (Object.keys(profileData).length) {
-    await prisma.creatorProfile.update({
-      where: { id: t.profile_id },
-      data: profileData,
-    });
+  const profileRows = updates.filter(
+    (u) =>
+      u.target.primary &&
+      ((u.avatar && !u.target.profile_avatar) ||
+        (u.bio && !u.target.profile_bio) ||
+        (u.banner && !u.target.profile_banner)),
+  );
+  if (profileRows.length) {
+    await withRetry(
+      () => prisma.$executeRaw`
+      UPDATE "CreatorProfile" cp
+      SET "avatarUrl" = COALESCE(cp."avatarUrl", v.avatar),
+          bio = COALESCE(NULLIF(cp.bio, ''), v.bio),
+          "bannerUrl" = COALESCE(cp."bannerUrl", v.banner)
+      FROM (VALUES ${Prisma.join(
+        profileRows.map(
+          (u) =>
+            Prisma.sql`(${u.target.profile_id}::uuid, ${u.avatar ?? null}::text, ${u.bio ? clean(u.bio.slice(0, 500)) : null}::text, ${u.banner ?? null}::text)`,
+        ),
+      )}) AS v(id, avatar, bio, banner)
+      WHERE cp.id = v.id`,
+    );
   }
 }
 
@@ -236,27 +330,42 @@ async function twitchAvatars() {
     calls = 0;
   for (let i = 0; i < targets.length; i += 100) {
     const batch = targets.slice(i, i + 100);
-    const byId = new Map(batch.map((t) => [t.platform_user_id, t]));
-    const query = batch
-      .map((t) => `id=${encodeURIComponent(t.platform_user_id)}`)
-      .join("&");
-    const res = await fetchJsonWithBackoff<{ data: TwitchUser[] }>(
-      `https://api.twitch.tv/helix/users?${query}`,
-      headers,
-    );
-    calls++;
+    // Twitch user ids are numeric; anything else in the catalog is junk that
+    // makes Helix reject the whole batch (400 "Bad Identifiers").
+    const valid = batch.filter((t) => /^\d+$/.test(t.platform_user_id));
+    const byId = new Map(valid.map((t) => [t.platform_user_id, t]));
+    let res: { data: TwitchUser[] } | null = null;
+    if (valid.length) {
+      const query = valid.map((t) => `id=${t.platform_user_id}`).join("&");
+      try {
+        res = await fetchJsonWithBackoff<{ data: TwitchUser[] }>(
+          `https://api.twitch.tv/helix/users?${query}`,
+          headers,
+        );
+      } catch (e) {
+        // A 4xx on one batch (bad identifiers etc.) must not kill a 500k pass.
+        log(`twitch batch skipped`, {
+          at: i,
+          error: e instanceof Error ? e.message.slice(0, 160) : String(e),
+        });
+      }
+      calls++;
+    }
     const seen = new Set<string>();
+    const updates: AvatarUpdate[] = [];
     for (const u of res?.data ?? []) {
       const t = byId.get(u.id);
       if (!t) continue;
       seen.add(u.id);
       found++;
-      await applyAvatar(t, {
-        avatar: u.profile_image_url || null,
-        displayName: u.display_name || null,
-        bio: u.description || null,
+      updates.push({
+        target: t,
+        avatar: clean(u.profile_image_url),
+        displayName: clean(u.display_name),
+        bio: clean(u.description),
       });
     }
+    await applyAvatarBatch(updates);
     missing += batch.length - seen.size; // banned/deleted/renamed-away users
     if (calls % 50 === 0)
       log(`twitch progress`, {
@@ -298,18 +407,56 @@ async function kickAvatars() {
     );
     calls++;
     const seen = new Set<string>();
+    const updates: AvatarUpdate[] = [];
+    // /channels carries banner + description but NO avatar; avatars come from
+    // /users?id=<broadcaster_user_id> (profile_picture), so do the two-hop.
+    const channelBySlug = new Map<string, KickChannel>();
     for (const c of res?.data ?? []) {
       const slug = (c.slug ?? "").toLowerCase();
+      if (bySlug.has(slug)) channelBySlug.set(slug, c);
+    }
+    const userIds = [...channelBySlug.values()]
+      .map((c) => c.broadcaster_user_id)
+      .filter((v): v is number | string => v != null)
+      .map(String);
+    const avatarByUserId = new Map<
+      string,
+      { avatar: string | null; name: string | null }
+    >();
+    if (userIds.length) {
+      const uurl = new URL("https://api.kick.com/public/v1/users");
+      for (const id of userIds) uurl.searchParams.append("id", id);
+      const ures = await fetchJsonWithBackoff<{ data?: KickUser[] }>(
+        uurl.toString(),
+        headers,
+      );
+      calls++;
+      for (const u of ures?.data ?? []) {
+        if (u.user_id == null) continue;
+        avatarByUserId.set(String(u.user_id), {
+          avatar: u.profile_picture ?? null,
+          name: u.name ?? null,
+        });
+      }
+    }
+    for (const [slug, c] of channelBySlug) {
       const t = bySlug.get(slug);
       if (!t) continue;
       seen.add(slug);
-      if (c.profile_picture) found++;
-      await applyAvatar(t, {
-        avatar: c.profile_picture ?? null,
-        bio: c.channel_description ?? null,
-        banner: c.banner_picture ?? null,
+      const user =
+        c.broadcaster_user_id != null
+          ? avatarByUserId.get(String(c.broadcaster_user_id))
+          : undefined;
+      if (user?.avatar) found++;
+      updates.push({
+        target: t,
+        avatar: clean(user?.avatar),
+        displayName: clean(user?.name),
+        bio: clean(c.channel_description),
+        banner: clean(c.banner_picture),
       });
     }
+    await applyAvatarBatch(updates);
     missing += batch.length - seen.size;
     if (calls % 50 === 0)
       log(`kick progress`, {
