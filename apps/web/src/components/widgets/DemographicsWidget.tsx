@@ -286,17 +286,6 @@ const SOCIAL_AGE_LABELS: [string, string][] = [
   ["age 55 to 64", "55-64"],
   ["age 65 and over", "65+"],
 ];
-const SOCIAL_INCOME_LABELS: [string, string][] = [
-  ["under $10,000", "< $10k"],
-  ["$10,000 - $19,999", "$10-20k"],
-  ["$20,000 - $29,999", "$20-30k"],
-  ["$30,000 - $39,999", "$30-40k"],
-  ["$40,000 - $49,999", "$40-50k"],
-  ["$50,000 - $74,999", "$50-75k"],
-  ["$75,000 - $99,999", "$75-100k"],
-  ["over $100,000", "$100k+"],
-];
-
 function asPercentRecord(raw: unknown): Record<string, number> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const entries = Object.entries(raw as Record<string, unknown>).filter(
@@ -375,7 +364,7 @@ function SocialAudienceContent({
     : null;
   const ageRanges = labeledBars(asPercentRecord(row.ages), SOCIAL_AGE_LABELS);
   const countries = parseCountryData(row.countries);
-  const income = labeledBars(asPercentRecord(row.income), SOCIAL_INCOME_LABELS);
+  // Household income is intentionally not rendered.
 
   const platformName = PLATFORM_CONFIG[row.platform]?.name ?? row.platform;
   const asOf = row.dpUpdatedAt
@@ -387,56 +376,65 @@ function SocialAudienceContent({
 
   return (
     <div className="space-y-4">
-      {usable.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1">
-          {usable.map((r) => (
-            <button
-              key={r.platform}
-              onClick={() => setSelected(r.platform)}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                r.platform === row.platform
-                  ? "bg-[#383A40] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
-              }`}
-            >
-              <span
-                className="inline-block h-2 w-2 rounded-full"
-                style={{
-                  backgroundColor:
-                    CHART_PLATFORM_COLORS[r.platform] ??
-                    PLATFORM_CONFIG[r.platform].color,
-                }}
-              />
-              {PLATFORM_CONFIG[r.platform]?.name ?? r.platform}
-            </button>
-          ))}
+      {/* Header row mirrors the column grid below: tabs sit in the age
+          column, the gender split is centered over the countries column. */}
+      {(usable.length > 1 || genderSplit) && (
+        <div className="grid items-center gap-x-8 gap-y-3 md:grid-cols-2">
+          {usable.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-1">
+              {usable.map((r) => (
+                <button
+                  key={r.platform}
+                  onClick={() => setSelected(r.platform)}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    r.platform === row.platform
+                      ? "bg-[#383A40] text-[#F2F3F5]"
+                      : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                  }`}
+                >
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{
+                      backgroundColor:
+                        CHART_PLATFORM_COLORS[r.platform] ??
+                        PLATFORM_CONFIG[r.platform].color,
+                    }}
+                  />
+                  {PLATFORM_CONFIG[r.platform]?.name ?? r.platform}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span />
+          )}
+
+          {genderSplit && (
+            <div className="flex justify-center">
+              <AudienceSummary genderSplit={genderSplit} />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Full-width row: gender+ages | countries | income */}
-      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-        {(genderSplit || ageRanges) && (
+      {/* Full-width row: ages | countries — labels aligned */}
+      <div className="grid gap-8 md:grid-cols-2">
+        {ageRanges && (
           <div>
-            {genderSplit && <AudienceSummary genderSplit={genderSplit} />}
-            {ageRanges && <AgeBars ageRanges={ageRanges} />}
+            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
+              Age range
+            </p>
+            <AgeBars ageRanges={ageRanges} />
           </div>
         )}
 
         {countries && (
           <div>
-            <p className="mb-4 text-xs font-semibold text-[#949BA4]">
+            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
               Top countries
             </p>
-            <CountryRows countries={countries} />
-          </div>
-        )}
-
-        {income && (
-          <div>
-            <p className="mb-2 text-xs font-semibold text-[#949BA4]">
-              Household income
-            </p>
-            <AgeBars ageRanges={income} />
+            <div className="mt-4">
+              <CountryRows countries={countries} />
+            </div>
           </div>
         )}
       </div>
@@ -615,15 +613,38 @@ function DemographicsDataContent({
 
   return (
     <div className="space-y-4">
+      {/* Gender split sits above the columns (no platform tabs in this view)
+          so the "Age range" and "Top countries" labels stay aligned — on the
+          same grid tracks, centered over the countries column. */}
+      {genderData && (
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
+          <span className="hidden md:block" />
+          <div className="flex justify-center">
+            <AudienceSummary genderSplit={genderData} />
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
-        {(genderData || ageData) && (
+        {ageData && (
           <div>
-            {genderData && <AudienceSummary genderSplit={genderData} />}
-            {ageData && <AgeBars ageRanges={ageData} />}
+            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
+              Age range
+            </p>
+            <AgeBars ageRanges={ageData} />
           </div>
         )}
 
-        {countryData && <CountryRows countries={countryData} />}
+        {countryData && (
+          <div>
+            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
+              Top countries
+            </p>
+            <div className="mt-4">
+              <CountryRows countries={countryData} />
+            </div>
+          </div>
+        )}
       </div>
 
       {sourcePlatform && (

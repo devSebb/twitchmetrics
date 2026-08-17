@@ -387,9 +387,10 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
 
   return (
     <div>
-      {/* Logo grid */}
+      {/* Logo grid — 3-up max: the dashboard card sits in a 1/3-width column
+          beside Audience Demographics, so 4 logos across would be cramped. */}
       {partnerships.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {partnerships.slice(0, 12).map((p) => (
             <div
               key={p.id}

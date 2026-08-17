@@ -215,25 +215,28 @@ export function DashboardGrid({
           <StatsRow profile={profile} />,
         )}
 
-        {/* Row 2: Audience Demographics — full width (tabs + 3-column layout) */}
-        {renderGated(
-          "demographics",
-          enabledSet,
-          isClaimed,
-          <DemographicsWidget
-            profile={profile}
-            isClaimed={isClaimed}
-            isOwner={isOwner}
-          />,
-        )}
-
-        {/* Top widget cluster: dense packing prevents holes when cards are hidden */}
-        <div className="grid grid-cols-1 gap-4 empty:hidden md:grid-cols-2 lg:grid-flow-dense lg:grid-cols-3">
+        {/* Row 2: Audience Demographics (2/3) | Brand Partners (1/3).
+            Flex basis + grow (not fixed grid tracks) so whichever card is
+            hidden — disabled, or self-hidden when empty — lets the other
+            expand to full width instead of leaving a dead column. */}
+        <div className="flex flex-col gap-4 empty:hidden lg:flex-row">
+          {renderGated(
+            "demographics",
+            enabledSet,
+            isClaimed,
+            <DemographicsWidget
+              profile={profile}
+              isClaimed={isClaimed}
+              isOwner={isOwner}
+            />,
+            "min-w-0 lg:basis-2/3 lg:grow",
+          )}
           {renderGated(
             "brand_partners",
             enabledSet,
             isClaimed,
             <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
+            "min-w-0 lg:basis-1/3 lg:grow",
           )}
         </div>
 
