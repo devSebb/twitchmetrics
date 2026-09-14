@@ -10,7 +10,7 @@ These Terms and Conditions of Use (the "Terms") govern access to and use of Stre
 
 Stream Hatchet may operate the Platform directly or through companies within its corporate group, technical service providers and other third parties required to provide the Service, in each case in accordance with these Terms and the applicable Privacy Policy.
 
-For support queries, incidents or account-related complaints, the user may contact support@twitchmetrics.com.
+For support queries, incidents or account-related complaints, the user may contact support@twitchmetrics.net.
 
 # 2. Purpose of the Service
 

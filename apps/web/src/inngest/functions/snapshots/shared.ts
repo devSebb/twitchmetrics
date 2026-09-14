@@ -256,8 +256,8 @@ export async function snapshotPlatformAccount(
     },
   });
 
-  // Refresh CreatorProfile metadata from Twitch API data so that the
-  // social-link-discovery cron picks up newly added YouTube / social links,
+  // Refresh CreatorProfile metadata from Twitch API data so that social-link
+  // discovery (manual `creators/discover-links` runs) sees newly added links,
   // and so that displayName stays in sync with Twitch (handles renames).
   // The Twitch adapter stashes these in extendedMetrics to avoid extra API calls.
   if (account.platform === "twitch") {

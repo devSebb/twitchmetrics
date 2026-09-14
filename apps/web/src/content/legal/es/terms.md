@@ -10,7 +10,7 @@ Estos Términos y Condiciones de Uso (los "Términos") regulan el acceso y uso d
 
 Stream Hatchet podrá operar la Plataforma directamente o a través de sociedades de su grupo, proveedores técnicos y terceros necesarios para la prestación del Servicio, siempre conforme a estos Términos y a la Política de Privacidad aplicable.
 
-Para consultas de soporte, incidencias o reclamaciones relacionadas con la cuenta, el usuario podrá contactar en support@twitchmetrics.com.
+Para consultas de soporte, incidencias o reclamaciones relacionadas con la cuenta, el usuario podrá contactar en support@twitchmetrics.net.
 
 # 2. Objeto del Servicio
 

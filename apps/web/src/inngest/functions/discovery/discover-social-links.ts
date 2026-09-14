@@ -10,11 +10,12 @@ const BATCH_SIZE = 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Daily social link discovery — scans creator bios for cross-platform links
+ * Social link discovery — scans creator bios for cross-platform links
  * and creates PlatformAccount records for any discovered accounts.
  *
- * Runs daily at 7 AM UTC (1 hour after discover-creators).
- * Can also be triggered manually via the `creators/discover-links` event.
+ * Manual one-off only: the daily cron was retired (the SH social-profiles feed
+ * supersedes it). Run it from the Inngest dashboard by sending the
+ * `creators/discover-links` event. It must stay registered for that to work.
  *
  * Processes up to 1,000 creators per run, prioritising those never scanned.
  * Most creators only require local bio parsing; API verification is limited to
@@ -22,7 +23,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
  */
 export const discoverSocialLinks = inngest.createFunction(
   { id: "discover-social-links", concurrency: { limit: 1 } },
-  [{ cron: "0 7 * * *" }, { event: "creators/discover-links" }],
+  { event: "creators/discover-links" },
   async ({ step }) => {
     return executeIngestionRun(
       {

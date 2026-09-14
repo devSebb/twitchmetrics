@@ -12,6 +12,7 @@
     },
     "lint": {},
     "typecheck": {},
+    "test": {},
     "db:generate": {
       "cache": false
     }
@@ -39,6 +40,9 @@
     "TWITTER_BEARER_TOKEN",
     "KICK_CLIENT_ID",
     "KICK_CLIENT_SECRET",
+    "KICK_WEBHOOK_SECRET",
+    "NEXT_PUBLIC_SITE_URL",
+    "SITE_PASSWORD",
     "UPSTASH_REDIS_REST_URL",
     "UPSTASH_REDIS_REST_TOKEN",
     "INNGEST_EVENT_KEY",
