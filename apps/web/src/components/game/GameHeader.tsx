@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { Platform } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
+import { GAME_KPI_LABELS } from "@/lib/constants/metric-labels";
 import { PlatformIcon, SyncStatus } from "@/components/shared";
 import { GameCoverImage } from "@/components/games/GameCoverImage";
 
@@ -169,15 +170,21 @@ export function GameHeader({ game }: GameHeaderProps) {
         </div>
 
         {/* Row 1 cols 2–3 */}
-        <KpiCard label="Avg Viewers" value={game.avgViewers7d} />
-        <KpiCard label="Peak Viewers" value={game.peakViewers24h} />
+        <KpiCard
+          label={GAME_KPI_LABELS.avgViewers7d}
+          value={game.avgViewers7d}
+        />
+        <KpiCard
+          label={GAME_KPI_LABELS.peakViewers24h}
+          value={game.peakViewers24h}
+        />
 
         {/* Pro CTA — col 4, spans rows 1–2 */}
         <ProCtaCard className="sm:col-start-4 sm:row-start-1 sm:row-span-2 sm:h-full" />
 
         {/* Row 2 cols 1–3 (auto-fill around CTA) */}
         <KpiCard
-          label="Latest Viewers"
+          label={GAME_KPI_LABELS.liveViewers}
           value={
             game.platformMetrics.latestViewers.total > 0
               ? game.platformMetrics.latestViewers.total
@@ -186,7 +193,7 @@ export function GameHeader({ game }: GameHeaderProps) {
           platformRows={game.platformMetrics.latestViewers.rows}
         />
         <KpiCard
-          label="Latest Channels"
+          label={GAME_KPI_LABELS.liveChannels}
           value={
             game.platformMetrics.latestChannels.total > 0
               ? game.platformMetrics.latestChannels.total
@@ -194,7 +201,10 @@ export function GameHeader({ game }: GameHeaderProps) {
           }
           platformRows={game.platformMetrics.latestChannels.rows}
         />
-        <KpiCard label="Avg Live Channels" value={game.avgLiveChannels} />
+        <KpiCard
+          label={GAME_KPI_LABELS.avgLiveChannels}
+          value={game.avgLiveChannels}
+        />
       </div>
     </div>
   );

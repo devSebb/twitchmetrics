@@ -5,6 +5,12 @@ import type { Platform } from "@twitchmetrics/database";
 import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber, formatDuration, formatDate } from "@/lib/utils/format";
+import {
+  CREATOR_PEAK_VIEWERS_TOOLTIP,
+  CREATOR_STAT_PERIODS,
+  creatorStatLabel,
+  type CreatorStatPeriod,
+} from "@/lib/constants/metric-labels";
 import { trpc } from "@/lib/trpc";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
@@ -27,14 +33,7 @@ function PlatformDot({ platform }: { platform: Platform }) {
 // Period selector
 // ----------------------------------------------------------------
 
-const PERIODS = [
-  { value: "30d" as const, label: "30D" },
-  { value: "3m" as const, label: "3M" },
-  { value: "6m" as const, label: "6M" },
-  { value: "1y" as const, label: "1Y" },
-];
-
-type PeriodValue = (typeof PERIODS)[number]["value"];
+type PeriodValue = CreatorStatPeriod;
 
 function PeriodSelector({
   value,
@@ -45,7 +44,7 @@ function PeriodSelector({
 }) {
   return (
     <div className="flex gap-1">
-      {PERIODS.map((p) => (
+      {CREATOR_STAT_PERIODS.map((p) => (
         <button
           key={p.value}
           onClick={() => onChange(p.value)}
@@ -70,14 +69,16 @@ function StreamingStatCard({
   label,
   value,
   platforms,
+  tooltip,
 }: {
   label: string;
   value: string;
   platforms?: Platform[];
+  tooltip?: string;
 }) {
   return (
     <div className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-lg border border-[#3F4147] bg-[#2B2D31] px-4 py-3">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5" title={tooltip ?? label}>
         <span className="truncate text-xs text-[#949BA4]">{label}</span>
         {platforms?.map((p) => (
           <PlatformDot key={p} platform={p} />
@@ -99,8 +100,6 @@ type StatsRowProps = {
 export function StatsRow({ profile }: StatsRowProps) {
   const [period, setPeriod] = useState<PeriodValue>("30d");
 
-  const platforms = profile.platformAccounts.map((a) => a.platform);
-
   const { data: streamingStats } = trpc.snapshot.getStreamingStats.useQuery(
     {
       creatorProfileId: profile.id,
@@ -109,45 +108,50 @@ export function StatsRow({ profile }: StatsRowProps) {
     { staleTime: 300_000 },
   );
 
-  const twitchOnly: Platform[] = platforms.includes("twitch" as Platform)
-    ? ["twitch" as Platform]
-    : [];
-
-  const streamingStatDefs = [
+  // Each tile's dots name only the platforms that fed that metric.
+  const streamingStatDefs: {
+    label: string;
+    value: string;
+    platforms?: Platform[] | undefined;
+    tooltip?: string;
+  }[] = [
     {
-      label: "Airtime",
+      label: creatorStatLabel("airtime", period),
       value:
         streamingStats?.airTimeSeconds != null
           ? formatDuration(streamingStats.airTimeSeconds)
           : "—",
-      platforms: twitchOnly,
+      platforms: streamingStats?.airtimePlatforms,
     },
     {
-      label: "Avg Airtime",
+      label: creatorStatLabel("avgAirtime", period),
       value:
         streamingStats?.avgAirTimeSeconds != null
           ? formatDuration(streamingStats.avgAirTimeSeconds)
           : "—",
-      platforms: twitchOnly,
+      platforms: streamingStats?.airtimePlatforms,
     },
     {
-      label: "Peak Viewers",
+      label: creatorStatLabel("peakViewers", period),
       value:
         streamingStats?.peakViewers != null
           ? formatNumber(streamingStats.peakViewers)
           : "—",
-      platforms: streamingStats?.platforms,
+      platforms: streamingStats?.peakPlatform
+        ? [streamingStats.peakPlatform]
+        : [],
+      tooltip: CREATOR_PEAK_VIEWERS_TOOLTIP,
     },
     {
-      label: "Avg Viewers",
+      label: creatorStatLabel("avgViewers", period),
       value:
         streamingStats?.avgViewers != null
           ? formatNumber(streamingStats.avgViewers)
           : "—",
-      platforms: streamingStats?.platforms,
+      platforms: streamingStats?.viewerPlatforms,
     },
     {
-      label: "New Followers",
+      label: creatorStatLabel("newFollowers", period),
       value:
         streamingStats != null
           ? streamingStats.followersGain > 0
@@ -181,6 +185,7 @@ export function StatsRow({ profile }: StatsRowProps) {
             label={def.label}
             value={def.value}
             {...(def.platforms ? { platforms: def.platforms } : {})}
+            {...(def.tooltip ? { tooltip: def.tooltip } : {})}
           />
         ))}
       </div>

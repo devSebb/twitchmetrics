@@ -53,8 +53,13 @@ export function viewerMetricsFromExtended(
 
 export type SnapshotViewerStats = {
   peak: number | null;
+  /** Platform of the snapshot that holds `peak`. */
+  peakPlatform: Platform | null;
   avgSamples: number[];
+  /** Platforms with at least one peak reading. */
   platforms: Platform[];
+  /** Platforms that contributed a positive avg sample. */
+  avgPlatforms: Platform[];
 };
 
 /** Fold a period's MetricSnapshot rows into peak + avg samples. */
@@ -62,23 +67,35 @@ export function extractSnapshotViewerStats(
   snapshots: { platform: Platform; extendedMetrics: unknown }[],
 ): SnapshotViewerStats {
   let peak: number | null = null;
+  let peakPlatform: Platform | null = null;
   const avgSamples: number[] = [];
   const platforms = new Set<Platform>();
+  const avgPlatforms = new Set<Platform>();
 
   for (const snapshot of snapshots) {
     const metrics = viewerMetricsFromExtended(
       snapshot.extendedMetrics as Record<string, unknown> | null,
     );
     if (metrics.peak !== null) {
-      if (peak === null || metrics.peak > peak) peak = metrics.peak;
+      if (peak === null || metrics.peak > peak) {
+        peak = metrics.peak;
+        peakPlatform = snapshot.platform;
+      }
       platforms.add(snapshot.platform);
     }
     if (metrics.avg !== null && metrics.avg > 0) {
       avgSamples.push(metrics.avg);
+      avgPlatforms.add(snapshot.platform);
     }
   }
 
-  return { peak, avgSamples, platforms: [...platforms] };
+  return {
+    peak,
+    peakPlatform,
+    avgSamples,
+    platforms: [...platforms],
+    avgPlatforms: [...avgPlatforms],
+  };
 }
 
 export type ShRollupTotals = {
@@ -86,21 +103,35 @@ export type ShRollupTotals = {
   minutesWatched: number;
   streamCount: number;
   peak: number | null;
+  /** Platform of the rollup row that holds `peak` (null when unknown). */
+  peakPlatform: Platform | null;
+  /** Platforms with airtime in the period. */
+  airtimePlatforms: Platform[];
+  /** Platforms with watch time in the period (they feed the SH average). */
+  watchPlatforms: Platform[];
 };
 
-/** Sum a period's ChannelDailyRollup rows into combined SH totals. */
+/**
+ * Sum a period's ChannelDailyRollup rows into combined SH totals. Rows carry
+ * `internalPlatform` (the SH code already mapped) when the caller needs the
+ * per-metric platform lists; without it those lists stay empty.
+ */
 export function aggregateShRollups(
   rollups: {
     airtimeMinutes: number;
     minutesWatched: bigint;
     sessionCount: number;
     peakViewers: number | null;
+    internalPlatform?: Platform | null;
   }[],
 ): ShRollupTotals {
   let airtimeSeconds = 0;
   let minutesWatched = 0;
   let streamCount = 0;
   let peak: number | null = null;
+  let peakPlatform: Platform | null = null;
+  const airtimePlatforms = new Set<Platform>();
+  const watchPlatforms = new Set<Platform>();
 
   for (const row of rollups) {
     airtimeSeconds += row.airtimeMinutes * 60;
@@ -108,38 +139,71 @@ export function aggregateShRollups(
     streamCount += row.sessionCount;
     if (row.peakViewers !== null && (peak === null || row.peakViewers > peak)) {
       peak = row.peakViewers;
+      peakPlatform = row.internalPlatform ?? null;
+    }
+    if (row.internalPlatform) {
+      if (row.airtimeMinutes > 0) airtimePlatforms.add(row.internalPlatform);
+      if (row.minutesWatched > 0n) watchPlatforms.add(row.internalPlatform);
     }
   }
 
-  return { airtimeSeconds, minutesWatched, streamCount, peak };
+  return {
+    airtimeSeconds,
+    minutesWatched,
+    streamCount,
+    peak,
+    peakPlatform,
+    airtimePlatforms: [...airtimePlatforms],
+    watchPlatforms: [...watchPlatforms],
+  };
 }
 
 /**
  * Combine snapshot-derived and SH-derived viewer stats into the displayed
- * peak/avg pair. Peak is a true max across both sources. Average prefers the
- * SH watch-time-weighted figure and falls back to the mean of snapshot
- * samples only when SH has no airtime for the period.
+ * peak/avg pair. Peak is the best single platform-day reading across both
+ * sources (not a combined simulcast peak); `peakPlatform` names where it came
+ * from, ties going to SH. Average prefers the SH watch-time-weighted figure
+ * and falls back to the mean of snapshot samples only when SH has no airtime
+ * for the period; `viewerPlatforms` lists the platforms behind whichever
+ * average was used.
  */
 export function combineViewerStats(
-  snapshot: { peak: number | null; avgSamples: number[] },
+  snapshot: {
+    peak: number | null;
+    avgSamples: number[];
+    peakPlatform?: Platform | null;
+    avgPlatforms?: Platform[];
+  },
   sh: ShRollupTotals | null,
-): { peakViewers: number | null; avgViewers: number | null } {
-  const peakViewers =
-    snapshot.peak === null
-      ? (sh?.peak ?? null)
-      : sh?.peak == null
-        ? snapshot.peak
-        : Math.max(snapshot.peak, sh.peak);
+): {
+  peakViewers: number | null;
+  avgViewers: number | null;
+  peakPlatform: Platform | null;
+  viewerPlatforms: Platform[];
+} {
+  const shPeak = sh?.peak ?? null;
+  const snapshotWins =
+    snapshot.peak !== null && (shPeak === null || snapshot.peak > shPeak);
+  const peakViewers = snapshotWins ? snapshot.peak : shPeak;
+  const peakPlatform =
+    peakViewers === null
+      ? null
+      : snapshotWins
+        ? (snapshot.peakPlatform ?? null)
+        : (sh?.peakPlatform ?? null);
 
   let avgViewers: number | null = null;
+  let viewerPlatforms: Platform[] = [];
   if (sh && sh.airtimeSeconds > 0) {
     avgViewers = Math.round(sh.minutesWatched / (sh.airtimeSeconds / 60));
+    viewerPlatforms = sh.watchPlatforms;
   } else if (snapshot.avgSamples.length > 0) {
     avgViewers = Math.round(
       snapshot.avgSamples.reduce((a, b) => a + b, 0) /
         snapshot.avgSamples.length,
     );
+    viewerPlatforms = snapshot.avgPlatforms ?? [];
   }
 
-  return { peakViewers, avgViewers };
+  return { peakViewers, avgViewers, peakPlatform, viewerPlatforms };
 }

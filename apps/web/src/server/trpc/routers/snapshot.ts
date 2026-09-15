@@ -676,11 +676,12 @@ export const snapshotRouter = router({
     .input(
       z.object({
         creatorProfileId: z.string().uuid(),
-        period: z.enum(["30d", "3m", "6m", "1y"]).default("30d"),
+        period: z.enum(["7d", "30d", "3m", "6m", "1y"]).default("30d"),
       }),
     )
     .query(async ({ ctx, input }) => {
       const periodDays: Record<string, number> = {
+        "7d": 7,
         "30d": 30,
         "3m": 90,
         "6m": 180,
@@ -811,7 +812,12 @@ export const snapshotRouter = router({
 
         if (rollups.length > 0) {
           const streamHatchetRollupPlatforms = new Set<Platform>();
-          shTotals = aggregateShRollups(rollups);
+          shTotals = aggregateShRollups(
+            rollups.map((row) => ({
+              ...row,
+              internalPlatform: internalPlatformForStreamHatchet(row.platform),
+            })),
+          );
 
           airTimeSeconds = (airTimeSeconds ?? 0) + shTotals.airtimeSeconds;
           streamCount += shTotals.streamCount;
@@ -857,10 +863,19 @@ export const snapshotRouter = router({
 
       // SH watch-time-weighted average wins over the mean of per-poll
       // samples; the two sources are never mixed into one mean.
-      const { peakViewers, avgViewers } = combineViewerStats(
-        snapshotViewer,
-        shTotals,
+      const { peakViewers, avgViewers, peakPlatform, viewerPlatforms } =
+        combineViewerStats(snapshotViewer, shTotals);
+
+      // Platforms that actually fed the airtime figure (tile dots): SH rollup
+      // platforms with airtime, plus Twitch when Videos API time was added.
+      const twitchApiAirtimeUsed =
+        !suppressTwitchApiAirtime &&
+        twitchApiAirTimeSeconds !== null &&
+        twitchApiStreamCount > 0;
+      const airtimePlatforms = new Set<Platform>(
+        shTotals?.airtimePlatforms ?? [],
       );
+      if (twitchApiAirtimeUsed) airtimePlatforms.add("twitch");
 
       return {
         airTimeSeconds,
@@ -872,6 +887,9 @@ export const snapshotRouter = router({
         periodStart: since.toISOString(),
         periodEnd: now.toISOString(),
         platforms: [...allPlatforms] as Platform[],
+        airtimePlatforms: [...airtimePlatforms],
+        viewerPlatforms,
+        peakPlatform,
       };
     }),
 
