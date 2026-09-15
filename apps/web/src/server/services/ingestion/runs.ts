@@ -11,6 +11,13 @@ export type IngestionRunContext = {
 };
 
 export type IngestionRunSummary = {
+  /**
+   * `degraded` = the job ran but did not do its work (rate-limited, timed
+   * out, or skipped too much); see resolveRunStatus. Defaults to `completed`.
+   */
+  status?: "completed" | "degraded";
+  /** Stored on completed/degraded runs too, e.g. why a run was degraded. */
+  errorSummary?: string;
   recordsScanned?: number;
   recordsWritten?: number;
   recordsSkipped?: number;
@@ -20,9 +27,30 @@ export type IngestionRunSummary = {
   metadata?: Prisma.InputJsonValue;
 };
 
+/** Share of a multi-game run's games that may be skipped before it is degraded. */
+export const DEGRADED_SKIP_RATIO = 0.25;
+
+/**
+ * Status for a run that finished without throwing: `degraded` when the whole
+ * upstream fetch was rate-limited / timed out, or when more than
+ * DEGRADED_SKIP_RATIO of the games it planned were skipped.
+ */
+export function resolveRunStatus(input: {
+  wholeFetchFailed?: boolean;
+  gamesTotal?: number;
+  gamesSkipped?: number;
+}): "completed" | "degraded" {
+  if (input.wholeFetchFailed) return "degraded";
+  const total = input.gamesTotal ?? 0;
+  const skipped = input.gamesSkipped ?? 0;
+  return total > 0 && skipped / total > DEGRADED_SKIP_RATIO
+    ? "degraded"
+    : "completed";
+}
+
 async function updateRun(
   runId: string,
-  status: "completed" | "failed",
+  status: "completed" | "degraded" | "failed",
   summary: IngestionRunSummary = {},
   errorSummary?: string,
 ) {
@@ -60,7 +88,12 @@ export async function completeIngestionRun(
   runId: string,
   summary: IngestionRunSummary = {},
 ) {
-  return updateRun(runId, "completed", summary);
+  return updateRun(
+    runId,
+    summary.status ?? "completed",
+    summary,
+    summary.errorSummary,
+  );
 }
 
 export async function failIngestionRun(

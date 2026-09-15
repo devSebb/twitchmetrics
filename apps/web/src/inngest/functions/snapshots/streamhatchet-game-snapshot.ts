@@ -2,7 +2,10 @@ import { Prisma, prisma } from "@twitchmetrics/database";
 import { inngest } from "../../client";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
-import { executeIngestionRun } from "@/server/services/ingestion/runs";
+import {
+  executeIngestionRun,
+  resolveRunStatus,
+} from "@/server/services/ingestion/runs";
 import {
   fetchStreamHatchetGameDiscovery,
   fetchStreamHatchetLiveChannels,
@@ -754,6 +757,8 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
         let skipped = 0;
         let failed = 0;
         let rateLimited = false;
+        let gamesNotAttempted = 0;
+        let retryAfterSeconds: number | null = null;
 
         for (const [index, game] of games.entries()) {
           if (index > 0) {
@@ -768,6 +773,9 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
           if (!fetchResult.ok) {
             if (fetchResult.code === "rate_limited") {
               rateLimited = true;
+              // This game and every later one in the batch never ran.
+              gamesNotAttempted = games.length - index;
+              retryAfterSeconds = fetchResult.retryAfterSeconds ?? null;
               log.warn(
                 {
                   game: game.name,
@@ -805,15 +813,33 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
 
         await step.run("invalidate-games", () => invalidateGames(touchedGames));
 
+        // Timed-out games stay per-game skips (recordsSkipped); the run is
+        // degraded only when too many of the batch's games did not run.
+        const gamesSkipped = skipped + gamesNotAttempted;
+        const status = resolveRunStatus({
+          gamesTotal: games.length,
+          gamesSkipped,
+        });
+
         return {
           result: { scanned, written, skipped, failed, rateLimited },
           summary: {
+            status,
+            ...(status === "degraded"
+              ? {
+                  errorSummary: `${gamesSkipped}/${games.length} games skipped${
+                    rateLimited ? " (StreamHatchet rate limited)" : ""
+                  }`,
+                }
+              : {}),
             recordsScanned: scanned,
             recordsWritten: written,
             recordsSkipped: skipped,
             recordsFailed: failed,
             metadata: {
               rateLimited,
+              retryAfterSeconds,
+              gamesNotAttempted,
               batchIndex: targetBatch.batchIndex,
               batchCount: targetBatch.batchCount,
               offset: targetBatch.offset,
@@ -850,6 +876,8 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         const games = (await step.run("load-games", loadGames)) as GameMatch[];
         let rows: StreamHatchetLiveGame[] = [];
         let rateLimited = false;
+        let timedOut = false;
+        let retryAfterSeconds: number | null = null;
 
         const fetchResult = (await step.run(
           "fetch-live-games",
@@ -859,11 +887,13 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         if (!fetchResult.ok) {
           if (fetchResult.code === "rate_limited") {
             rateLimited = true;
+            retryAfterSeconds = fetchResult.retryAfterSeconds ?? null;
             log.warn(
               { retryAfterSeconds: fetchResult.retryAfterSeconds },
               "StreamHatchet live games rate limited; skipping run",
             );
           } else if (fetchResult.code === "timeout") {
+            timedOut = true;
             log.warn("StreamHatchet live games timed out; skipping run");
           } else {
             throw new Error(fetchResult.message);
@@ -880,6 +910,12 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
                 persistLiveGameRows(rows, games, snapshotAt),
               );
 
+        // The single fetch is the whole run: rate-limited or timed out means
+        // nothing was written, which must not read as `completed`.
+        const status = resolveRunStatus({
+          wholeFetchFailed: rateLimited || timedOut,
+        });
+
         return {
           result: {
             scanned: rows.length,
@@ -889,11 +925,19 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
             rateLimited,
           },
           summary: {
+            status,
+            ...(status === "degraded"
+              ? {
+                  errorSummary: rateLimited
+                    ? "StreamHatchet live games rate limited"
+                    : "StreamHatchet live games timed out",
+                }
+              : {}),
             recordsScanned: rows.length,
             recordsWritten: written,
             recordsSkipped: skipped,
             recordsFailed: 0,
-            metadata: { rateLimited },
+            metadata: { rateLimited, timedOut, retryAfterSeconds },
           },
         };
       },
