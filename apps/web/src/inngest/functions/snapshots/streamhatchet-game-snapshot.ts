@@ -477,6 +477,7 @@ async function persistLiveChannels(
         language: channel.language ?? null,
         startedAt,
         category: "most_watched",
+        // Viewers at snapshot time, not an average (see GameTopChannel).
         avgViewers: roundMetric(channel.current_viewers),
         airtime,
         viewerHours: streamViewerHours(channel, airtime),

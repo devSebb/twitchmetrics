@@ -423,6 +423,7 @@ async function persistKickCategorySnapshot(
         language: stream.language ?? null,
         startedAt: stream.started_at ? new Date(stream.started_at) : null,
         category: "most_watched",
+        // Viewers at snapshot time, not an average (see GameTopChannel).
         avgViewers:
           typeof stream.viewer_count === "number" ? stream.viewer_count : 0,
         airtime,

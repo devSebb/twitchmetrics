@@ -679,8 +679,14 @@ model GameTopChannel {
   language       String?
   startedAt      DateTime?
   category       String
+  /// Viewers at snapshot time (the stream's current viewer count), NOT an
+  /// average — the column name predates that. Every writer (Twitch
+  /// game-snapshot, StreamHatchet live-channels, Kick category metrics) stores
+  /// the instantaneous count.
   avgViewers     Int       @default(0)
+  /// Seconds live at snapshot time.
   airtime        Int       @default(0)
+  /// Estimate: viewersNow × hoursLive. Not observed watch time; not displayed.
   viewerHours    BigInt    @default(0)
   updatedAt      DateTime  @default(now()) @updatedAt
 
@@ -741,7 +747,9 @@ model GameViewerSnapshot {
   totalViewers    Int @default(0)
   totalChannels   Int @default(0)
 
-  @@index([gameId, snapshotAt])
+  // snapshotAt is the game-snapshot cron slot (floored to 30 min), so a
+  // retried run cannot insert a second row for the same slot.
+  @@unique([gameId, snapshotAt])
   @@index([snapshotAt])
 }
 

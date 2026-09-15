@@ -1,4 +1,4 @@
-import { prisma } from "@twitchmetrics/database";
+import { prisma, type Prisma } from "@twitchmetrics/database";
 import { inngest } from "../../client";
 import { fetchClipsByGame, twitchAdapter } from "@/server/adapters/twitch";
 import { createLogger } from "@/lib/logger";
@@ -9,6 +9,14 @@ import { executeIngestionRun } from "@/server/services/ingestion/runs";
 const log = createLogger("game-snapshot");
 
 const SNAPSHOT_BATCH_SIZE = 5;
+// Games per Inngest step. A full run is ~0.5 s/game, so 100 games ≈ 50–60 s —
+// well inside the 300 s maxDuration a single step request gets.
+const GAMES_PER_STEP = 100;
+// Matches the */30 cron: every snapshot of a run is stamped with its slot.
+const SLOT_MS = 30 * 60 * 1000;
+// One game's DB writes (snapshot, metrics, languages, top channels) commit
+// together, so a killed step can no longer leave a game stripped of rows.
+const GAME_TX_OPTIONS = { timeout: 15_000, maxWait: 5_000 };
 // Pagination ceiling for /streams per game. Each page is 100 streams, so 50
 // pages = top 5,000 streams. Most games terminate well before the ceiling
 // (the loop breaks when Twitch returns no cursor). Only the biggest categories
@@ -44,12 +52,13 @@ function resolveLanguageLabel(language: string): string {
 }
 
 async function refreshBroadcastLanguages(
+  db: Prisma.TransactionClient,
   gameId: string,
   streams: Awaited<
     ReturnType<NonNullable<typeof twitchAdapter.fetchGameLiveStats>>
   >["streams"],
 ) {
-  await prisma.gameBroadcastLanguage.deleteMany({ where: { gameId } });
+  await db.gameBroadcastLanguage.deleteMany({ where: { gameId } });
 
   if (streams.length === 0) {
     return;
@@ -73,18 +82,19 @@ async function refreshBroadcastLanguages(
     }));
 
   if (rows.length > 0) {
-    await prisma.gameBroadcastLanguage.createMany({ data: rows });
+    await db.gameBroadcastLanguage.createMany({ data: rows });
   }
 }
 
 async function refreshTopChannels(
+  db: Prisma.TransactionClient,
   game: TrackedGame,
   streams: Awaited<
     ReturnType<NonNullable<typeof twitchAdapter.fetchGameLiveStats>>
   >["streams"],
   snapshotAt: Date,
 ) {
-  await prisma.gameTopChannel.deleteMany({
+  await db.gameTopChannel.deleteMany({
     where: { gameId: game.id, platform: "twitch", source: "twitch_api" },
   });
 
@@ -153,13 +163,15 @@ async function refreshTopChannels(
         language: stream.language || null,
         startedAt: new Date(stream.startedAt),
         category,
+        // avgViewers holds viewers at snapshot time; viewerHours is an
+        // estimate (viewersNow × hoursLive). See GameTopChannel in schema.
         avgViewers: stream.viewerCount,
         airtime: liveDurationSeconds,
         viewerHours,
       };
     });
 
-  await prisma.gameTopChannel.createMany({ data: rows });
+  await db.gameTopChannel.createMany({ data: rows });
 }
 
 async function refreshClips(gameId: string, twitchGameId: string) {
@@ -204,7 +216,9 @@ async function snapshotTrackedGame(
       ReturnType<NonNullable<typeof twitchAdapter.fetchTopGamesCatalog>>
     >[number]
   >,
+  slotAt: Date,
 ) {
+  // Network first: nothing below holds a transaction open during API calls.
   const liveStats = await twitchAdapter.fetchGameLiveStats!(
     game.twitchGameId!,
     {
@@ -212,57 +226,65 @@ async function snapshotTrackedGame(
     },
   );
 
-  await prisma.gameViewerSnapshot.create({
-    data: {
-      gameId: game.id,
-      snapshotAt: liveStats.snapshotAt,
-      twitchViewers: liveStats.viewerCount,
-      twitchChannels: liveStats.channelCount,
-      totalViewers: liveStats.viewerCount,
-      totalChannels: liveStats.channelCount,
-    },
-  });
-
-  const since7d = new Date(
-    liveStats.snapshotAt.getTime() - 7 * 24 * 60 * 60 * 1000,
-  );
-  const recentSnapshots = await prisma.gameViewerSnapshot.findMany({
-    where: {
-      gameId: game.id,
-      snapshotAt: { gte: since7d },
-    },
-    orderBy: { snapshotAt: "asc" },
-    select: {
-      snapshotAt: true,
-      totalViewers: true,
-      totalChannels: true,
-    },
-  });
-
-  const metrics = deriveGameMetrics(recentSnapshots, liveStats.snapshotAt);
   const catalogEntry = catalogById.get(game.twitchGameId!);
   const nextCoverImageUrl = catalogEntry?.boxArtUrl ?? game.coverImageUrl;
 
-  await prisma.game.update({
-    where: { id: game.id },
-    data: {
-      currentViewers: metrics.currentViewers,
-      currentChannels: metrics.currentChannels,
-      peakViewers24h: metrics.peakViewers24h,
-      avgViewers7d: metrics.avgViewers7d,
-      avgLiveChannels: metrics.avgLiveChannels,
-      hoursWatched7d: metrics.hoursWatched7d,
-      ...(catalogEntry?.igdbId && !game.igdbId
-        ? { igdbId: catalogEntry.igdbId }
-        : {}),
-      ...(nextCoverImageUrl && nextCoverImageUrl !== game.coverImageUrl
-        ? { coverImageUrl: nextCoverImageUrl }
-        : {}),
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    // Stamped with the run's slot: a retried step hits the
+    // (gameId, snapshotAt) unique key and inserts nothing.
+    await tx.gameViewerSnapshot.createMany({
+      data: [
+        {
+          gameId: game.id,
+          snapshotAt: slotAt,
+          twitchViewers: liveStats.viewerCount,
+          twitchChannels: liveStats.channelCount,
+          totalViewers: liveStats.viewerCount,
+          totalChannels: liveStats.channelCount,
+        },
+      ],
+      skipDuplicates: true,
+    });
 
-  await refreshBroadcastLanguages(game.id, liveStats.streams);
-  await refreshTopChannels(game, liveStats.streams, liveStats.snapshotAt);
+    const since7d = new Date(slotAt.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const recentSnapshots = await tx.gameViewerSnapshot.findMany({
+      where: {
+        gameId: game.id,
+        snapshotAt: { gte: since7d },
+      },
+      orderBy: { snapshotAt: "asc" },
+      select: {
+        snapshotAt: true,
+        totalViewers: true,
+        totalChannels: true,
+      },
+    });
+
+    const metrics = deriveGameMetrics(recentSnapshots, slotAt);
+
+    await tx.game.update({
+      where: { id: game.id },
+      data: {
+        currentViewers: metrics.currentViewers,
+        currentChannels: metrics.currentChannels,
+        peakViewers24h: metrics.peakViewers24h,
+        avgViewers7d: metrics.avgViewers7d,
+        avgLiveChannels: metrics.avgLiveChannels,
+        hoursWatched7d: metrics.hoursWatched7d,
+        ...(catalogEntry?.igdbId && !game.igdbId
+          ? { igdbId: catalogEntry.igdbId }
+          : {}),
+        ...(nextCoverImageUrl && nextCoverImageUrl !== game.coverImageUrl
+          ? { coverImageUrl: nextCoverImageUrl }
+          : {}),
+      },
+    });
+
+    await refreshBroadcastLanguages(tx, game.id, liveStats.streams);
+    await refreshTopChannels(tx, game, liveStats.streams, liveStats.snapshotAt);
+  }, GAME_TX_OPTIONS);
+
+  // Clips call the Twitch API, so they stay outside the transaction.
   await refreshClips(game.id, game.twitchGameId!);
 
   try {
@@ -299,68 +321,102 @@ export const gameSnapshot = inngest.createFunction(
           },
         );
 
-        const trackedGames = await step.run("load-tracked-games", async () => {
-          return prisma.game.findMany({
-            where: { twitchGameId: { not: null } },
-            select: {
-              id: true,
-              slug: true,
-              twitchGameId: true,
-              coverImageUrl: true,
-              igdbId: true,
-            },
-          });
-        });
+        // Memoized, so every page and every retry of this run shares one slot.
+        const slotIso = await step.run("resolve-slot", async () =>
+          new Date(Math.floor(Date.now() / SLOT_MS) * SLOT_MS).toISOString(),
+        );
+        const slotAt = new Date(slotIso);
+
+        // Ids only: full rows for every page would all ride in step output.
+        const trackedGameIds = await step.run(
+          "load-tracked-games",
+          async () => {
+            const games = await prisma.game.findMany({
+              where: { twitchGameId: { not: null } },
+              select: { id: true },
+              orderBy: { id: "asc" },
+            });
+            return games.map((game) => game.id);
+          },
+        );
 
         const catalogById = new Map(
           topCatalog.map((entry) => [entry.platformGameId, entry] as const),
         );
 
-        const snapshotResults = await step.run(
-          "snapshot-tracked-games",
-          async () => {
-            let processed = 0;
-            let failed = 0;
-            let truncated = 0;
+        const snapshotResults = {
+          totalTracked: trackedGameIds.length,
+          processed: 0,
+          failed: 0,
+          truncated: 0,
+        };
 
-            for (const batch of chunk(trackedGames, SNAPSHOT_BATCH_SIZE)) {
-              const results = await Promise.all(
-                batch.map(async (game) => {
-                  try {
-                    const result = await snapshotTrackedGame(game, catalogById);
-                    return { ok: true as const, result };
-                  } catch (error) {
-                    log.warn(
-                      {
-                        gameId: game.id,
-                        slug: game.slug,
-                        error: (error as Error).message,
-                      },
-                      "Game snapshot failed",
-                    );
-                    return { ok: false as const };
+        // One step per page keeps each request far below maxDuration; a
+        // killed page retries alone and its snapshots dedupe on the slot key.
+        for (const [pageIndex, pageIds] of chunk(
+          trackedGameIds,
+          GAMES_PER_STEP,
+        ).entries()) {
+          const pageResult = await step.run(
+            `snapshot-page-${pageIndex}`,
+            async () => {
+              const games = await prisma.game.findMany({
+                where: { id: { in: pageIds }, twitchGameId: { not: null } },
+                select: {
+                  id: true,
+                  slug: true,
+                  twitchGameId: true,
+                  coverImageUrl: true,
+                  igdbId: true,
+                },
+              });
+
+              let processed = 0;
+              let failed = 0;
+              let truncated = 0;
+
+              for (const batch of chunk(games, SNAPSHOT_BATCH_SIZE)) {
+                const results = await Promise.all(
+                  batch.map(async (game) => {
+                    try {
+                      const result = await snapshotTrackedGame(
+                        game,
+                        catalogById,
+                        slotAt,
+                      );
+                      return { ok: true as const, result };
+                    } catch (error) {
+                      log.warn(
+                        {
+                          gameId: game.id,
+                          slug: game.slug,
+                          error: (error as Error).message,
+                        },
+                        "Game snapshot failed",
+                      );
+                      return { ok: false as const };
+                    }
+                  }),
+                );
+
+                for (const result of results) {
+                  if (result.ok) {
+                    processed++;
+                    if (result.result.truncated) truncated++;
+                  } else {
+                    failed++;
                   }
-                }),
-              );
-
-              for (const result of results) {
-                if (result.ok) {
-                  processed++;
-                  if (result.result.truncated) truncated++;
-                } else {
-                  failed++;
                 }
               }
-            }
 
-            return {
-              totalTracked: trackedGames.length,
-              processed,
-              failed,
-              truncated,
-            };
-          },
-        );
+              return { processed, failed, truncated };
+            },
+          );
+
+          snapshotResults.processed += pageResult.processed;
+          snapshotResults.failed += pageResult.failed;
+          snapshotResults.truncated += pageResult.truncated;
+        }
 
         log.info(snapshotResults, "Game snapshot completed");
         return {
@@ -372,6 +428,8 @@ export const gameSnapshot = inngest.createFunction(
             partialCount: snapshotResults.truncated,
             metadata: {
               totalTracked: snapshotResults.totalTracked,
+              slotAt: slotIso,
+              pages: Math.ceil(trackedGameIds.length / GAMES_PER_STEP),
             },
           },
         };
