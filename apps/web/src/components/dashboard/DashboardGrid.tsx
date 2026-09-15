@@ -83,6 +83,8 @@ export type SerializedAudienceDemographics = {
   income: unknown;
   reach: string | null;
   dpUpdatedAt: string | null;
+  /** Set server-side by selectDisplayableDemographics; `stale` renders a warning. */
+  freshness?: "fresh" | "stale";
 };
 
 export type SerializedProfile = {

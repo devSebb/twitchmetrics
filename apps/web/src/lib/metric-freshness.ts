@@ -70,3 +70,68 @@ export function getMetricFreshness(
           : "fresh",
   };
 }
+
+// ----------------------------------------------------------------
+// Third-party audience demographics (DemographicsPro reports)
+// ----------------------------------------------------------------
+
+/** Reports older than this render with an "may be outdated" warning. */
+export const DEMOGRAPHICS_STALE_AFTER_MONTHS = 18;
+/** Reports older than this are not shown at all. */
+export const DEMOGRAPHICS_HIDE_AFTER_MONTHS = 36;
+
+export type DemographicsFreshness = "fresh" | "stale" | "hidden";
+
+/** Whole calendar months (UTC) from `from` to `now`; negative for future dates. */
+function wholeMonthsBetween(from: Date, now: Date): number {
+  let months =
+    (now.getUTCFullYear() - from.getUTCFullYear()) * 12 +
+    (now.getUTCMonth() - from.getUTCMonth());
+  const nowInMonth =
+    now.getTime() - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const fromInMonth =
+    from.getTime() - Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1);
+  if (nowInMonth < fromInMonth) months -= 1;
+  return months;
+}
+
+/**
+ * Freshness of a demographics report by its as-of date. A missing or invalid
+ * date cannot be vouched for, so it is `stale` (shown with the warning).
+ */
+export function demographicsFreshness(
+  reportDate: Date | string | null | undefined,
+  now: Date = new Date(),
+): DemographicsFreshness {
+  if (!reportDate) return "stale";
+  const date = toDate(reportDate);
+  if (!date) return "stale";
+  const months = wholeMonthsBetween(date, now);
+  if (months >= DEMOGRAPHICS_HIDE_AFTER_MONTHS) return "hidden";
+  if (months >= DEMOGRAPHICS_STALE_AFTER_MONTHS) return "stale";
+  return "fresh";
+}
+
+/**
+ * Server-side prep for the demographics widget: newest report first (so the
+ * default tab is the freshest network), reports past the hide threshold
+ * dropped, the rest tagged. Computed at render on the server so the client
+ * never evaluates "now" (no hydration mismatch at a threshold boundary).
+ */
+export function selectDisplayableDemographics<
+  T extends { dpUpdatedAt: Date | string | null },
+>(
+  rows: T[],
+  now: Date = new Date(),
+): (T & { freshness: Exclude<DemographicsFreshness, "hidden"> })[] {
+  const time = (row: T) => {
+    const date = row.dpUpdatedAt ? toDate(row.dpUpdatedAt) : null;
+    return date ? date.getTime() : Number.NEGATIVE_INFINITY;
+  };
+  return [...rows]
+    .sort((left, right) => time(right) - time(left))
+    .flatMap((row) => {
+      const freshness = demographicsFreshness(row.dpUpdatedAt, now);
+      return freshness === "hidden" ? [] : [{ ...row, freshness }];
+    });
+}

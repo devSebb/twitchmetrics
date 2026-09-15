@@ -1517,7 +1517,7 @@ function buildDemographicsPlan(config: Config): string {
                cd.ages, cd.genders, cd.countries, cd.income, cd.ethnicities,
                row_number() OVER (
                  PARTITION BY cc.creator_profile_id, sp.platform
-                 ORDER BY sp.reach DESC NULLS LAST, cd.dp_updated_at DESC
+                 ORDER BY cd.dp_updated_at DESC NULLS LAST, sp.reach DESC NULLS LAST
                ) AS rn
         FROM read_parquet('${config.workDir}/demographics.parquet') cd
         JOIN sp ON sp.id = cd.social_profile_id

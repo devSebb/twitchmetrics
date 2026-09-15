@@ -313,7 +313,8 @@ function labeledBars(
 function pickSocialRow(
   rows: SerializedAudienceDemographics[],
 ): SerializedAudienceDemographics | null {
-  // Rows arrive ordered by reach desc — first one with any usable data wins.
+  // Rows arrive newest report first (too-old reports already dropped
+  // server-side) — first one with any usable data wins.
   for (const row of rows) {
     if (
       asPercentRecord(row.genders) ||
@@ -339,8 +340,9 @@ function hasSocialData(row: SerializedAudienceDemographics): boolean {
  * as the first-party view, but always attributed as an estimate of the
  * creator's SOCIAL audience (DP never profiles Twitch/Kick) with its as-of
  * date — reports refresh opportunistically and can be old. When more than
- * one network has a report, tabs switch between them (highest reach first —
- * the server's ordering).
+ * one network has a report, tabs switch between them (newest report first —
+ * the server's ordering). Reports the server tagged `stale` get an amber
+ * "may be outdated" footer.
  */
 function SocialAudienceContent({
   rows,
@@ -439,10 +441,18 @@ function SocialAudienceContent({
         )}
       </div>
 
-      <p className="text-right text-[10px] text-[#949BA4]">
-        Estimated {platformName} audience · via DemographicsPro
-        {asOf ? ` · updated ${asOf}` : ""}
-      </p>
+      {row.freshness === "stale" ? (
+        <p className="text-right text-[10px] text-amber-400">
+          Estimated {platformName} audience · via DemographicsPro ·{" "}
+          {asOf ? `report from ${asOf}` : "report date unknown"} — may be
+          outdated
+        </p>
+      ) : (
+        <p className="text-right text-[10px] text-[#949BA4]">
+          Estimated {platformName} audience · via DemographicsPro
+          {asOf ? ` · updated ${asOf}` : ""}
+        </p>
+      )}
     </div>
   );
 }

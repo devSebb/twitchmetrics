@@ -4,7 +4,10 @@ import { prisma } from "@twitchmetrics/database";
 import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { resolveAvatar } from "@/lib/avatar";
-import { getLatestTimestamp } from "@/lib/metric-freshness";
+import {
+  getLatestTimestamp,
+  selectDisplayableDemographics,
+} from "@/lib/metric-freshness";
 import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 import {
   OwnerDashboardView,
@@ -82,7 +85,7 @@ export default async function DashboardPage() {
             reach: true,
             dpUpdatedAt: true,
           },
-          orderBy: { reach: { sort: "desc", nulls: "last" } },
+          orderBy: { dpUpdatedAt: { sort: "desc", nulls: "last" } },
         },
       },
     }),
@@ -165,6 +168,10 @@ export default async function DashboardPage() {
   // Cast to SerializedProfile since the runtime shape matches after serialization.
   const serialized = {
     ...(serializeBigInt(profile) as Record<string, unknown>),
+    // Newest report first, too-old reports dropped, stale ones tagged.
+    audienceDemographics: selectDisplayableDemographics(
+      serializeBigInt(profile.audienceDemographics),
+    ),
     ownerEmail: user?.email ?? null,
     ownerImage: user?.image ?? null,
   } as unknown as SerializedProfile;
