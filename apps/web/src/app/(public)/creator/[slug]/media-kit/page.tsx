@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
-import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { MediaKitLayout } from "@/components/media-kit/MediaKitLayout";
 import { creatorRobots } from "@/server/services/creator-visibility";
 
@@ -149,7 +149,9 @@ export default async function MediaKitPage({ params }: PageProps) {
     image: profile.avatarUrl ?? undefined,
     url: `${SITE_URL}/creator/${profile.slug}`,
     sameAs: profile.platformAccounts
-      .map((a) => getSafePlatformProfileUrl(a.platform, a.platformUrl))
+      .map((a) =>
+        getPlatformProfileUrl(a.platform, a.platformUrl, a.platformUsername),
+      )
       .filter((url): url is string => url !== null),
     interactionStatistic: {
       "@type": "InteractionCounter",

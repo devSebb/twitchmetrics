@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 import { resolveCreatorSlug } from "@/server/services/creator-visibility";
+import { creatorSnapshotsCacheKey } from "@/server/services/creator-cache";
 
 const VALID_PLATFORMS = new Set<Platform>([
   "twitch",
@@ -107,7 +108,12 @@ export async function GET(
 
   // Check cache only after canonical resolution so a newly merged slug can
   // never continue serving stale snapshot data.
-  const cacheKey = `creator:v2:${resolution.canonicalSlug}:snapshots:${platform}:${metric}:${period}`;
+  const cacheKey = creatorSnapshotsCacheKey(
+    resolution.canonicalSlug,
+    platform,
+    metric,
+    period,
+  );
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);

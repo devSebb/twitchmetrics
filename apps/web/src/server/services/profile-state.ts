@@ -3,7 +3,7 @@ import {
   type ProfileState,
   type SnapshotTier,
 } from "@twitchmetrics/database";
-import { getTierForCreator } from "@/lib/constants/tiers";
+import { getTierForCreator } from "@twitchmetrics/core/tiers";
 
 type StateTransition = {
   from: ProfileState;

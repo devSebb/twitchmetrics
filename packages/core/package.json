@@ -1,0 +1,23 @@
+{
+  "name": "@twitchmetrics/core",
+  "private": true,
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./tiers": "./src/tiers.ts",
+    "./creator-aggregates": "./src/creator-aggregates.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@twitchmetrics/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@twitchmetrics/config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
+  }
+}

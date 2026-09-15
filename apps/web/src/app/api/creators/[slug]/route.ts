@@ -4,7 +4,8 @@ import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
 import { resolveCreatorSlug } from "@/server/services/creator-visibility";
-import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
+import { creatorDetailCacheKey } from "@/server/services/creator-cache";
 
 export async function GET(
   request: Request,
@@ -35,7 +36,7 @@ export async function GET(
     );
   }
 
-  const cacheKey = `creator:v3:${resolution.canonicalSlug}`;
+  const cacheKey = creatorDetailCacheKey(resolution.canonicalSlug);
 
   // Check cache first
   const cached = await cacheGet(cacheKey);
@@ -133,14 +134,16 @@ export async function GET(
   }
 
   // Public payload only ever carries render-safe profile URLs, regardless of
-  // what historical ingest wrote at rest.
+  // what historical ingest wrote at rest; a missing/unsafe URL falls back to
+  // one built from the username (most twitch_api-born accounts store none).
   const serialized = serializeBigInt({
     ...creator,
     platformAccounts: creator.platformAccounts.map((account) => ({
       ...account,
-      platformUrl: getSafePlatformProfileUrl(
+      platformUrl: getPlatformProfileUrl(
         account.platform,
         account.platformUrl,
+        account.platformUsername,
       ),
     })),
   });

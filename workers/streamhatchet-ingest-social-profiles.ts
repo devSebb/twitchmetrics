@@ -89,6 +89,7 @@ import {
   mergeProfiles,
   pickCanonical,
 } from "../apps/web/src/server/services/identity/merge";
+import { recomputeCreatorAggregatesMany } from "@twitchmetrics/core/creator-aggregates";
 import { canonicalProfileId } from "../apps/web/src/server/services/identity/canonical-profile";
 import { normalizePlatformUrlForStorage } from "../apps/web/src/lib/platform-profile-url";
 
@@ -1323,26 +1324,12 @@ async function refreshFollowersFromExport(
   }
   log("info", "Freshness stamped on unchanged matches", { touched });
 
-  // 4. Profile aggregates for changed creators — set-based, same exclusion
-  // rule as recomputeCreatorAggregates (link-only accounts never count).
+  // 4. Profile aggregates for changed creators (shared set-based recompute;
+  // link-only accounts never count).
   const profileIds = [...new Set(changed.map((r) => r.creatorProfileId))];
   for (let i = 0; i < profileIds.length; i += UPDATE_BATCH) {
     const ids = profileIds.slice(i, i + UPDATE_BATCH);
-    await withRetry(() =>
-      prisma.$executeRaw(Prisma.sql`
-        UPDATE "CreatorProfile" AS p
-        SET "totalFollowers" = agg.total
-        FROM (
-          SELECT "creatorProfileId" AS id,
-                 COALESCE(SUM("followerCount"), 0) AS total
-          FROM "PlatformAccount"
-          WHERE "creatorProfileId" = ANY(${ids}::uuid[])
-            AND "discoverySource" IS NULL
-          GROUP BY "creatorProfileId"
-        ) AS agg
-        WHERE p."id" = agg.id
-      `),
-    );
+    await withRetry(() => recomputeCreatorAggregatesMany(ids));
   }
   log("info", "Refresh complete", {
     updatedRows,

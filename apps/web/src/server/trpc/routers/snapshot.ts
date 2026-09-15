@@ -3,7 +3,7 @@ import { Platform, Prisma } from "@twitchmetrics/database";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../root";
 import { adminProcedure } from "../middleware";
-import { getTierForCreator } from "@/lib/constants/tiers";
+import { getTierForCreator } from "@twitchmetrics/core/tiers";
 import { getPopularGames } from "@/server/services/popular-games";
 import {
   aggregateShRollups,

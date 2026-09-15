@@ -15,6 +15,7 @@
  */
 
 import { PrismaClient, type Prisma } from "@prisma/client";
+import { recomputeCreatorAggregates } from "@twitchmetrics/core/creator-aggregates";
 
 // ============================================================
 // CONFIGURATION
@@ -37,7 +38,9 @@ const PAUSE_BETWEEN_BATCHES_MS = 5000;
 const prisma = new PrismaClient();
 
 // ============================================================
-// TIER INTERVALS (from src/lib/constants/tiers.ts — inlined for worker)
+// TIER INTERVALS — legacy local-worker cadence. Deliberately NOT read from
+// @twitchmetrics/core/tiers: tier3 here is 7 days, TIER_CONFIG says 24 h.
+// Aggregates/tier assignment above use core; only the polling cadence differs.
 // ============================================================
 
 const TIER_INTERVALS: Record<string, number> = {
@@ -426,49 +429,8 @@ async function processProfiles(
       // Update lastSnapshotAt on the profile (unless dry run)
       if (!DRY_RUN) {
         try {
-          // Re-aggregate totals from platform accounts (exclude link-only
-          // social accounts — discoverySource != null — from tier/totals).
-          const accounts = await prisma.platformAccount.findMany({
-            where: { creatorProfileId: profile.id, discoverySource: null },
-            select: {
-              followerCount: true,
-              totalViews: true,
-              lastSyncedAt: true,
-            },
-          });
-
-          const totalFollowers = accounts.reduce(
-            (sum, a) => sum + (a.followerCount ?? 0n),
-            0n,
-          );
-          const totalViews = accounts.reduce(
-            (sum, a) => sum + (a.totalViews ?? 0n),
-            0n,
-          );
-          const lastSnapshotAt = accounts.reduce<Date | null>(
-            (latest, account) =>
-              account.lastSyncedAt &&
-              (!latest || account.lastSyncedAt.getTime() > latest.getTime())
-                ? account.lastSyncedAt
-                : latest,
-            null,
-          );
-
-          // Evaluate tier (inlined from tiers.ts)
-          let newTier: "tier1" | "tier2" | "tier3" = "tier3";
-          const followerCount = Number(totalFollowers);
-          if (followerCount >= 100_000) newTier = "tier1";
-          else if (followerCount >= 10_000) newTier = "tier2";
-
-          await prisma.creatorProfile.update({
-            where: { id: profile.id },
-            data: {
-              totalFollowers,
-              totalViews,
-              lastSnapshotAt,
-              snapshotTier: newTier,
-            },
-          });
+          // Re-aggregate totals + tier from tracked platform accounts.
+          await recomputeCreatorAggregates(profile.id, prisma);
         } catch (err) {
           log("error", `Failed to update aggregates for ${profile.slug}`, {
             error: (err as Error).message,

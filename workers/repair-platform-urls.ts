@@ -5,15 +5,25 @@
  * anything that still fails the platform host allowlist is nulled — render
  * falls back to building a URL from the username where possible.
  *
+ * --fill-null mode instead fills accounts that have NO stored URL (e.g. every
+ * twitch_api-born Twitch account): twitch/kick/x get a URL built from the
+ * username via getPlatformProfileUrl; YouTube only when platformUserId is a
+ * UC… channel id (usernames there are often display names). Rows the helper
+ * cannot build a URL for are left NULL and counted.
+ *
  * Dry-run is the default. Useful options:
  *   --write
+ *   --fill-null
  *   --batch-size 1000
  *   --limit 10000       (0 means no limit)
  *   --cursor <uuid>
  *   --sleep-ms 100
  */
 import { PrismaClient } from "@prisma/client";
-import { normalizePlatformUrlForStorage } from "../apps/web/src/lib/platform-profile-url";
+import {
+  getPlatformProfileUrl,
+  normalizePlatformUrlForStorage,
+} from "../apps/web/src/lib/platform-profile-url";
 
 const prisma = new PrismaClient();
 const args = process.argv.slice(2);
@@ -36,6 +46,7 @@ function integerArg(
 }
 
 const write = args.includes("--write");
+const fillNull = args.includes("--fill-null");
 const batchSize = integerArg("--batch-size", 1_000, {
   minimum: 100,
   maximum: 5_000,
@@ -52,11 +63,143 @@ const initialCursor = argValue("--cursor");
 
 const MAX_SAMPLES = 20;
 
+const FILL_NULL_PLATFORMS = ["twitch", "kick", "x", "youtube"] as const;
+type FillNullPlatform = (typeof FILL_NULL_PLATFORMS)[number];
+const YOUTUBE_CHANNEL_ID = /^UC[\w-]{22}$/;
+
+/** Same rule as build-catalog's platformUrl(): YouTube URLs come from the channel id only. */
+function buildFillUrl(account: {
+  platform: FillNullPlatform;
+  platformUsername: string;
+  platformUserId: string;
+}): { url: string } | { skip: "no_handle" | "bad_id" } {
+  if (account.platform === "youtube") {
+    return YOUTUBE_CHANNEL_ID.test(account.platformUserId)
+      ? { url: `https://www.youtube.com/channel/${account.platformUserId}` }
+      : { skip: "bad_id" };
+  }
+  const url = getPlatformProfileUrl(
+    account.platform,
+    null,
+    account.platformUsername,
+  );
+  return url ? { url } : { skip: "no_handle" };
+}
+
 function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
-async function main() {
+async function fillNullUrls() {
+  let cursor = initialCursor;
+  let scanned = 0;
+  let filled = 0;
+  let skippedNoHandle = 0;
+  let skippedBadId = 0;
+  const byPlatform: Record<
+    string,
+    { filled: number; skipped_no_handle: number; skipped_bad_id: number }
+  > = {};
+  const samples: { platform: string; username: string; to: string }[] = [];
+
+  console.info(
+    JSON.stringify({
+      mode: write ? "write" : "dry-run",
+      task: "fill-null",
+      batchSize,
+      limit,
+      cursor: cursor ?? null,
+    }),
+  );
+
+  while (limit === 0 || scanned < limit) {
+    const take = limit === 0 ? batchSize : Math.min(batchSize, limit - scanned);
+    const accounts = await prisma.platformAccount.findMany({
+      where: { platformUrl: null, platform: { in: [...FILL_NULL_PLATFORMS] } },
+      orderBy: { id: "asc" },
+      take,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        platform: true,
+        platformUsername: true,
+        platformUserId: true,
+      },
+    });
+    if (accounts.length === 0) break;
+
+    for (const account of accounts) {
+      const bucket = (byPlatform[account.platform] ??= {
+        filled: 0,
+        skipped_no_handle: 0,
+        skipped_bad_id: 0,
+      });
+      const result = buildFillUrl({
+        ...account,
+        platform: account.platform as FillNullPlatform,
+      });
+
+      if ("skip" in result) {
+        if (result.skip === "bad_id") {
+          skippedBadId++;
+          bucket.skipped_bad_id++;
+        } else {
+          skippedNoHandle++;
+          bucket.skipped_no_handle++;
+        }
+        continue;
+      }
+
+      filled++;
+      bucket.filled++;
+      if (samples.length < MAX_SAMPLES) {
+        samples.push({
+          platform: account.platform,
+          username: account.platformUsername.slice(0, 100),
+          to: result.url,
+        });
+      }
+
+      if (write) {
+        // Guarded on NULL so a concurrent ingest write wins.
+        await prisma.platformAccount.updateMany({
+          where: { id: account.id, platformUrl: null },
+          data: { platformUrl: result.url },
+        });
+      }
+    }
+
+    scanned += accounts.length;
+    cursor = accounts.at(-1)!.id;
+    console.info(
+      JSON.stringify({
+        scanned,
+        filled,
+        skippedNoHandle,
+        skippedBadId,
+        nextCursor: cursor,
+      }),
+    );
+
+    if (accounts.length < take) break;
+    if (sleepMs > 0) await sleep(sleepMs);
+  }
+
+  console.info(
+    JSON.stringify({
+      complete: limit === 0,
+      scanned,
+      filled,
+      skippedNoHandle,
+      skippedBadId,
+      byPlatform,
+      samples,
+      nextCursor: cursor ?? null,
+    }),
+  );
+}
+
+async function repairStoredUrls() {
   let cursor = initialCursor;
   let scanned = 0;
   let kept = 0;
@@ -149,7 +292,7 @@ async function main() {
   );
 }
 
-main()
+(fillNull ? fillNullUrls() : repairStoredUrls())
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

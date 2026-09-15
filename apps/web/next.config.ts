@@ -3,7 +3,11 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@twitchmetrics/database", "@twitchmetrics/ui"],
+  transpilePackages: [
+    "@twitchmetrics/core",
+    "@twitchmetrics/database",
+    "@twitchmetrics/ui",
+  ],
   async redirects() {
     return [
       {

@@ -27,6 +27,7 @@
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
     "@twitchmetrics/config": "workspace:*",
+    "@twitchmetrics/core": "workspace:*",
     "@twitchmetrics/database": "workspace:*",
     "@twitchmetrics/ui": "workspace:*",
     "@upstash/ratelimit": "^2.0.0",

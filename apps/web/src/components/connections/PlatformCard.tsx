@@ -3,7 +3,7 @@
 import type { Platform } from "@/lib/constants/platforms";
 import type { PlatformConfigEntry } from "@/lib/constants/platforms";
 import { cn } from "@/lib/utils";
-import { getSafePlatformProfileUrl } from "@/lib/platform-profile-url";
+import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 
 type PlatformConnection = {
   isConnected: boolean;
@@ -46,9 +46,10 @@ export function PlatformCard({
   onConnect,
   onDisconnect,
 }: PlatformCardProps) {
-  const profileUrl = getSafePlatformProfileUrl(
+  const profileUrl = getPlatformProfileUrl(
     platform,
     connection?.profileUrl,
+    connection?.username,
   );
   const isConnected = Boolean(connection?.isConnected);
   const showBetaBadge =

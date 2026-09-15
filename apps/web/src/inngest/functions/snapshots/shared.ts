@@ -7,7 +7,8 @@ import { decryptToken } from "@/lib/encryption";
 import { createLogger } from "@/lib/logger";
 import { getAdapter } from "@/server/adapters";
 import { cacheInvalidate } from "@/server/services/cache";
-import { recomputeCreatorAggregates } from "@/server/services/creator-aggregates";
+import { invalidateCreatorCache } from "@/server/services/creator-cache";
+import { recomputeCreatorAggregates } from "@twitchmetrics/core/creator-aggregates";
 import { recomputeCreatorGrowthRollups } from "@/server/services/creator-growth";
 import { supportsCreatorSnapshots } from "@/server/services/ingestion/constants";
 import { refreshCreatorClips } from "@/server/services/clip-sync";
@@ -176,8 +177,7 @@ async function snapshotProfileBatch(
     try {
       const slug = await getCreatorSlug(profile.id);
       if (slug) {
-        await cacheInvalidate(`creator:${slug}`);
-        await cacheInvalidate(`creator:${slug}:*`);
+        await invalidateCreatorCache(slug);
       }
     } catch (err) {
       log.warn(

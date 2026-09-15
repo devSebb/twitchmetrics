@@ -32,6 +32,7 @@
  * Usage: pnpm worker:repair-merge-stranding [-- --write]
  */
 import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
+import { recomputeCreatorAggregatesMany } from "@twitchmetrics/core/creator-aggregates";
 import { moveShHistoryForAccount } from "../apps/web/src/server/services/identity/merge";
 
 /** Same rule as legacy-redirects.slugifyName (that module drags in `@/` imports). */
@@ -124,33 +125,6 @@ function buildSearchText(
     ...accounts.map((a) => a.platformDisplayName).filter((v) => v != null),
   ];
   return [...new Set(parts)].join(" ").toLowerCase();
-}
-
-/** Recompute totalFollowers/totalViews from tracked accounts (mirrors creator-aggregates). */
-async function recomputeAggregates(
-  tx: Prisma.TransactionClient,
-  profileId: string,
-) {
-  const accounts = await tx.platformAccount.findMany({
-    where: { creatorProfileId: profileId, discoverySource: null },
-    select: { followerCount: true, totalViews: true, lastSyncedAt: true },
-  });
-  const totalFollowers = accounts.reduce(
-    (s, a) => s + (a.followerCount ?? 0n),
-    0n,
-  );
-  const totalViews = accounts.reduce((s, a) => s + (a.totalViews ?? 0n), 0n);
-  const lastSnapshotAt = accounts.reduce<Date | null>(
-    (latest, a) =>
-      a.lastSyncedAt && (!latest || a.lastSyncedAt > latest)
-        ? a.lastSyncedAt
-        : latest,
-    null,
-  );
-  await tx.creatorProfile.update({
-    where: { id: profileId },
-    data: { totalFollowers, totalViews, lastSnapshotAt },
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -377,8 +351,9 @@ async function runSwaps() {
           data: profileData,
         });
 
-        await recomputeAggregates(tx, r.canonical_id);
-        await recomputeAggregates(tx, r.stub_id);
+        await recomputeCreatorAggregatesMany([r.canonical_id, r.stub_id], {
+          db: tx,
+        });
 
         // Keep the merge's reversal bookkeeping coherent: B is now the
         // account that "did not move" (lives on the stub), A is canonical's.

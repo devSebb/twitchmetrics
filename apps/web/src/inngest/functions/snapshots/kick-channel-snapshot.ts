@@ -2,6 +2,7 @@ import { Prisma, prisma } from "@twitchmetrics/database";
 import { inngest } from "../../client";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
+import { invalidateCreatorCache } from "@/server/services/creator-cache";
 import {
   fetchKickChannelsBySlugs,
   fetchKickChannelsByUserIds,
@@ -137,8 +138,7 @@ async function snapshotKickBatch(accounts: KickAccount[]) {
       ]);
 
       try {
-        await cacheInvalidate(`creator:${account.creatorProfile.slug}`);
-        await cacheInvalidate(`creator:${account.creatorProfile.slug}:*`);
+        await invalidateCreatorCache(account.creatorProfile.slug);
       } catch {
         // Non-blocking.
       }

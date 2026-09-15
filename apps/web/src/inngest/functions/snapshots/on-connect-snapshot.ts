@@ -2,7 +2,8 @@ import { prisma, type Platform } from "@twitchmetrics/database";
 import { inngest } from "@/inngest/client";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
-import { recomputeCreatorAggregates } from "@/server/services/creator-aggregates";
+import { invalidateCreatorCache } from "@/server/services/creator-cache";
+import { recomputeCreatorAggregates } from "@twitchmetrics/core/creator-aggregates";
 import { recomputeCreatorGrowthRollups } from "@/server/services/creator-growth";
 import { snapshotPlatformAccount } from "./shared";
 
@@ -121,8 +122,7 @@ export const onConnectSnapshot = inngest.createFunction(
         select: { slug: true },
       });
       if (profile?.slug) {
-        await cacheInvalidate(`creator:${profile.slug}`);
-        await cacheInvalidate(`creator:${profile.slug}:*`);
+        await invalidateCreatorCache(profile.slug);
       }
       await cacheInvalidate("trending:landing*");
     });
