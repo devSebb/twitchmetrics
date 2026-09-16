@@ -432,6 +432,12 @@ model PlatformAccount {
   // skip rows where this is non-null (they have no tokens/adapter session).
   discoverySource String?
 
+  /// Consecutive "channel does not exist" results from the platform API
+  /// (deleted/banned). The tier snapshot loop skips an account at 3 and
+  /// resets to 0 on any successful snapshot or OAuth reconnect.
+  notFoundCount  Int       @default(0)
+  lastNotFoundAt DateTime?
+
   followerCount   BigInt?
   followingCount  BigInt?
   totalViews      BigInt?
