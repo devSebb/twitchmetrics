@@ -873,6 +873,11 @@ function reachToBigInt(reach: number | null): bigint | null {
  * (highest-reach) social profile per platform and upsert it onto the canonical
  * creator as a link-only account (handle + follower count, discoverySource set).
  * Never touches a real OAuth/tracked account. Idempotent (refreshes on re-run).
+ *
+ * Follower history: after the writes, every link account this export wrote
+ * gets a MetricSnapshot at the export date when its count changed or it has
+ * no social follower history yet (seeds the series). Link-only accounts never
+ * count toward totalFollowers, so no aggregate recompute is needed here.
  */
 async function attachSocialLinks(
   plan: PlanGroup[],
@@ -928,6 +933,8 @@ async function attachSocialLinks(
   let skippedExisting = 0;
   let errors = 0;
   let processed = 0;
+  let snapshotsPlanned = 0;
+  let snapshotsCreated = 0;
 
   for (let i = 0; i < targets.length; i += READ_CHUNK) {
     const chunk = targets.slice(i, i + READ_CHUNK);
@@ -939,6 +946,7 @@ async function attachSocialLinks(
         creatorProfileId: string;
         platform: Platform;
         discoverySource: string | null;
+        followerCount: bigint | null;
       }[] = await withRetry(() =>
         prisma.platformAccount.findMany({
           where: {
@@ -949,16 +957,25 @@ async function attachSocialLinks(
             creatorProfileId: true,
             platform: true,
             discoverySource: true,
+            followerCount: true,
           },
         }),
       );
       const key = (cid: string, p: string) => `${cid}:${p}`;
       const existingSource = new Map<string, string | null>();
-      for (const e of existing)
+      // Pre-write counts of our own link accounts, to detect changes below.
+      const previousCount = new Map<string, bigint | null>();
+      for (const e of existing) {
         existingSource.set(
           key(e.creatorProfileId, e.platform),
           e.discoverySource,
         );
+        if (e.discoverySource === DISCOVERY_SOURCE)
+          previousCount.set(
+            key(e.creatorProfileId, e.platform),
+            e.followerCount,
+          );
+      }
 
       const toCreate: SocialAccountCreate[] = [];
       const toUpdate: { canonicalId: string; link: SocialLink }[] = [];
@@ -992,6 +1009,16 @@ async function attachSocialLinks(
       if (!config.write) {
         created += toCreate.length;
         updated += toUpdate.length;
+        // Estimate only: ignores the "no history yet" seeding rule.
+        snapshotsPlanned +=
+          toCreate.filter((c) => c.followerCount !== null).length +
+          toUpdate.filter((u) => {
+            const next = reachToBigInt(u.link.reach);
+            return (
+              next !== null &&
+              previousCount.get(key(u.canonicalId, u.link.platform)) !== next
+            );
+          }).length;
       } else {
         if (toCreate.length > 0) {
           // skipDuplicates absorbs the global @@unique([platform, platformUserId])
@@ -1040,6 +1067,59 @@ async function attachSocialLinks(
             }
           });
         }
+
+        // Re-read what this export actually wrote (createMany may have
+        // skipped rows owned by another creator) and accrue history.
+        const written = await withRetry(() =>
+          prisma.platformAccount.findMany({
+            where: {
+              creatorProfileId: { in: canonIds },
+              platform: { in: SOCIAL_LINK_PLATFORMS },
+              discoverySource: DISCOVERY_SOURCE,
+              lastSyncedAt: syncedAt,
+              followerCount: { not: null },
+            },
+            select: {
+              creatorProfileId: true,
+              platform: true,
+              followerCount: true,
+            },
+          }),
+        );
+        if (written.length > 0) {
+          const withHistory = await withRetry(() =>
+            prisma.metricSnapshot.findMany({
+              where: {
+                creatorProfileId: {
+                  in: [...new Set(written.map((w) => w.creatorProfileId))],
+                },
+                platform: { in: SOCIAL_LINK_PLATFORMS },
+                followerCount: { not: null },
+              },
+              distinct: ["creatorProfileId", "platform"],
+              select: { creatorProfileId: true, platform: true },
+            }),
+          );
+          const hasHistory = new Set(
+            withHistory.map((h) => key(h.creatorProfileId, h.platform)),
+          );
+          const toAccrue = written.filter((w) => {
+            const k = key(w.creatorProfileId, w.platform);
+            return (
+              previousCount.get(k) !== w.followerCount || !hasHistory.has(k)
+            );
+          });
+          snapshotsPlanned += toAccrue.length;
+          snapshotsCreated += await accrueFollowerSnapshots(
+            toAccrue.map((w) => ({
+              creatorProfileId: w.creatorProfileId,
+              platform: w.platform,
+              followerCount: w.followerCount!,
+            })),
+            syncedAt,
+            SOCIAL_LINKS_SNAPSHOT_SOURCE,
+          );
+        }
       }
     } catch (err) {
       errors += chunk.length;
@@ -1056,6 +1136,8 @@ async function attachSocialLinks(
       updated,
       skippedExisting,
       errors,
+      snapshotsPlanned,
+      snapshotsCreated,
     });
   }
 
@@ -1066,6 +1148,8 @@ async function attachSocialLinks(
     updated,
     skippedExisting,
     errors,
+    snapshotsPlanned,
+    snapshotsCreated,
   });
 }
 
@@ -1082,6 +1166,7 @@ async function attachSocialLinks(
 
 const REFRESH_PLATFORMS: Platform[] = ["twitch", "youtube", "kick"];
 const REFRESH_SNAPSHOT_SOURCE = "streamhatchet_social_profiles";
+const SOCIAL_LINKS_SNAPSHOT_SOURCE = "streamhatchet_social_links";
 const UPDATE_BATCH = 1000;
 const TOUCH_BATCH = 5000;
 
@@ -1220,6 +1305,56 @@ async function buildRefreshPlan(
   return { changed, unchangedIds };
 }
 
+/**
+ * Follower history — at most one snapshot per (creator, platform) per
+ * snapshotAt. Callers pass a deterministic snapshotAt (the export date), so
+ * the existence check makes re-runs idempotent (MetricSnapshot has no unique
+ * key). Callers decide WHICH accounts deserve a point. Returns rows created.
+ */
+async function accrueFollowerSnapshots(
+  rows: {
+    creatorProfileId: string;
+    platform: Platform;
+    followerCount: bigint;
+  }[],
+  snapshotAt: Date,
+  source: string,
+): Promise<number> {
+  let created = 0;
+  for (let i = 0; i < rows.length; i += UPDATE_BATCH) {
+    const chunk = rows.slice(i, i + UPDATE_BATCH);
+    const existing = await withRetry(() =>
+      prisma.metricSnapshot.findMany({
+        where: {
+          snapshotAt,
+          creatorProfileId: { in: chunk.map((r) => r.creatorProfileId) },
+          platform: { in: [...new Set(chunk.map((r) => r.platform))] },
+        },
+        select: { creatorProfileId: true, platform: true },
+      }),
+    );
+    const seen = new Set(
+      existing.map((s) => `${s.creatorProfileId}:${s.platform}`),
+    );
+    const data = chunk
+      .filter((r) => !seen.has(`${r.creatorProfileId}:${r.platform}`))
+      .map((r) => ({
+        creatorProfileId: r.creatorProfileId,
+        platform: r.platform,
+        snapshotAt,
+        followerCount: r.followerCount,
+        extendedMetrics: { SOURCE: source },
+      }));
+    if (data.length > 0) {
+      const res = await withRetry(() =>
+        prisma.metricSnapshot.createMany({ data }),
+      );
+      created += res.count;
+    }
+  }
+  return created;
+}
+
 /** Phase R4 — apply: changed counts, freshness stamps, snapshots, aggregates. */
 async function refreshFollowersFromExport(
   config: Config,
@@ -1271,40 +1406,17 @@ async function refreshFollowersFromExport(
     });
   }
 
-  // 2. Follower history — one snapshot per (creator, platform) per export
-  // date. Deterministic snapshotAt + existence check = idempotent re-runs.
-  let snapshotsCreated = 0;
-  for (let i = 0; i < changed.length; i += UPDATE_BATCH) {
-    const chunk = changed.slice(i, i + UPDATE_BATCH);
-    const existing = await withRetry(() =>
-      prisma.metricSnapshot.findMany({
-        where: {
-          snapshotAt,
-          creatorProfileId: { in: chunk.map((r) => r.creatorProfileId) },
-          platform: { in: REFRESH_PLATFORMS },
-        },
-        select: { creatorProfileId: true, platform: true },
-      }),
-    );
-    const seen = new Set(
-      existing.map((s) => `${s.creatorProfileId}:${s.platform}`),
-    );
-    const rows = chunk
-      .filter((r) => !seen.has(`${r.creatorProfileId}:${r.platform}`))
-      .map((r) => ({
-        creatorProfileId: r.creatorProfileId,
-        platform: r.platform,
-        snapshotAt,
-        followerCount: BigInt(r.reach),
-        extendedMetrics: { SOURCE: REFRESH_SNAPSHOT_SOURCE },
-      }));
-    if (rows.length > 0) {
-      const res = await withRetry(() =>
-        prisma.metricSnapshot.createMany({ data: rows }),
-      );
-      snapshotsCreated += res.count;
-    }
-  }
+  // 2. Follower history — one snapshot per changed (creator, platform) at the
+  // export date (the DuckDB plan already filtered to changed counts).
+  const snapshotsCreated = await accrueFollowerSnapshots(
+    changed.map((r) => ({
+      creatorProfileId: r.creatorProfileId,
+      platform: r.platform,
+      followerCount: BigInt(r.reach),
+    })),
+    snapshotAt,
+    REFRESH_SNAPSHOT_SOURCE,
+  );
   log("info", "Follower snapshots accrued", { snapshotsCreated });
 
   // 3. Unchanged matches — stamp "verified as of" without touching the value.

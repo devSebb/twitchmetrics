@@ -2,7 +2,7 @@
 #
 # Replaces the manual weekly worker runs: a cloud runner does exactly what a
 # local run does — aws CLI + duckdb CLI + the ingestion worker against prod
-# Neon — on a schedule. Three jobs:
+# Neon — on a schedule. Jobs:
 #   - refresh-followers: weekly. Joins the latest daily S3 export's reach
 #     against the twitch/youtube/kick accounts the API tier crons never touch.
 #   - social-links:      monthly. Re-attaches/refreshes IG/TikTok/X link-only
@@ -16,12 +16,23 @@
 #     channels had no profile by 2026-08-16, Drake on Kick included), links
 #     their facts/rollups, then promotes profiles that now clear the listing
 #     gate (>= 2 active days / 30d). DB-only — no AWS needed.
+#   - catalog-enrich:    weekly, right after catalog-catchup (runs even if a
+#     catalog step failed). Refreshes isActiveLast30d / lastStreamAt / primary
+#     game for SH-born profiles from our rollups (the only writer of those
+#     fields), then fills missing Twitch/Kick avatars. Separate job so the
+#     catalog build and enrichment each get their own timeout budget.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   DATABASE_URL              — Neon pooled connection string (same as .env.local)
 #   DIRECT_URL                — Neon direct connection string
 #   SH_AWS_ACCESS_KEY_ID      — streamhatchet-readonly AWS key
 #   SH_AWS_SECRET_ACCESS_KEY  — streamhatchet-readonly AWS secret
+#   TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET — Twitch app (avatar pass)
+#   KICK_CLIENT_ID / KICK_CLIENT_SECRET     — Kick app (avatar pass)
+#
+# Repository variable (Settings → Secrets and variables → Actions → Variables):
+#   HAS_PLATFORM_SECRETS=true — enables the avatar steps once the four
+#   Twitch/Kick secrets above exist (a step `if:` cannot read secrets).
 #
 # Failure notifications: GitHub emails the workflow's last committer when a
 # scheduled run fails. Manual runs: Actions tab → this workflow → Run workflow.
@@ -46,6 +57,7 @@ on:
           - social-links
           - demographics
           - catalog-catchup
+          - catalog-enrich
 
 concurrency:
   group: sh-follower-freshness
@@ -178,3 +190,45 @@ jobs:
         run: npx tsx workers/streamhatchet-build-catalog.ts --platform yt --write --backfill-max-retries 4
       - name: Promote profiles that now clear the listing gate
         run: npx tsx workers/reconcile-creator-listing.ts --write --limit 0
+
+  catalog-enrich:
+    needs: catalog-catchup
+    # !cancelled(): enrich even when a catalog step failed (activity data is
+    # still worth refreshing) or when catalog-catchup was skipped because only
+    # catalog-enrich was dispatched.
+    # An if: that starts with "!" must be wrapped in ${{ }}.
+    if: >-
+      ${{ !cancelled() && (
+      github.event.schedule == '0 6 * * 0' ||
+      (github.event_name == 'workflow_dispatch' &&
+      (inputs.mode == 'catalog-catchup' || inputs.mode == 'catalog-enrich'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Activity + primary game for SH-born profiles
+        run: npx tsx workers/enrich-sh-profiles.ts --activity --write
+      # Separate steps so a missing Kick secret cannot fail after the Twitch
+      # pass has done its work. Both only touch accounts with no avatar yet.
+      - name: Twitch avatars for new SH-born profiles
+        if: ${{ vars.HAS_PLATFORM_SECRETS == 'true' }}
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        run: npx tsx workers/enrich-sh-profiles.ts --twitch-avatars --write
+      - name: Kick avatars for new SH-born profiles
+        if: ${{ vars.HAS_PLATFORM_SECRETS == 'true' }}
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
+        run: npx tsx workers/enrich-sh-profiles.ts --kick-avatars --write

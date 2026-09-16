@@ -1,7 +1,14 @@
 /**
- * Renames StreamHatchet machine slugs (`<name>-<16 hex>`) on listed canonical
- * creator profiles to clean slugs, leaving a SlugRedirect row behind for every
- * rename so old /creator/<slug> links 308 forever.
+ * Renames StreamHatchet machine slugs on listed canonical creator profiles to
+ * clean slugs, leaving a SlugRedirect row behind for every rename so old
+ * /creator/<slug> links 308 forever.
+ *
+ * Two machine-slug generations exist, both `<name>-<sha1("<platform>:<platformUserId>")>`:
+ * 8 hex chars (July 2026 catalog build, commit 2011b5b) and 16 hex chars
+ * (from commit 89ebaaf on). A suffix is only treated as a hash when it equals
+ * that sha1 prefix for one of the profile's platform accounts — so a real
+ * username that happens to end in `-<hex>` is never touched. Unverifiable
+ * suffixes are counted as skippedHashMismatch and keep their slug.
  *
  * Clean slug = machine slug with the hash suffix stripped. Collisions against
  * existing profile slugs, existing SlugRedirect.oldSlug rows, and clean slugs
@@ -24,7 +31,9 @@
  *   --cursor <uuid>
  *   --sleep-ms 100
  *   --samples 20        (dry-run sample mappings to print)
+ *   --max-suffix 100    (give up after <base>-N; raise if "no free slug" shows up)
  */
+import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -56,10 +65,24 @@ const limit = integerArg("--limit", 0, { minimum: 0, maximum: 1_000_000 });
 const sleepMs = integerArg("--sleep-ms", 100, { minimum: 0, maximum: 10_000 });
 const sampleTarget = integerArg("--samples", 20, { minimum: 0, maximum: 200 });
 const initialCursor = argValue("--cursor");
+const MAX_SUFFIX = integerArg("--max-suffix", 100, {
+  minimum: 10,
+  maximum: 1_000,
+});
 
-const HASH_SLUG_PATTERN = "-[0-9a-f]{16}$";
-const HASH_SLUG_REGEX = /-[0-9a-f]{16}$/;
-const MAX_SUFFIX = 100;
+const HASH_SLUG_PATTERN = "-[0-9a-f]{8}$|-[0-9a-f]{16}$";
+// 16 first: for a 16-hex slug the 16-char alternative matches at the dash.
+const HASH_SLUG_REGEX = /-([0-9a-f]{16}|[0-9a-f]{8})$/;
+const MAX_MISMATCH_SAMPLES = 10;
+
+/** True when `suffix` is the sha1 prefix the catalog build derived from one of these accounts. */
+function isCatalogHashSuffix(suffix: string, accountKeys: string[]): boolean {
+  return accountKeys.some(
+    (key) =>
+      createHash("sha1").update(key).digest("hex").slice(0, suffix.length) ===
+      suffix,
+  );
+}
 
 // Bases with thousands of identically-named profiles (junk display names).
 // Probing 100 suffixes for each is ~300k queries per run and every candidate
@@ -95,15 +118,25 @@ async function countTargets(): Promise<number> {
 async function fetchBatch(
   cursor: string | undefined,
   take: number,
-): Promise<{ id: string; slug: string }[]> {
-  return prisma.$queryRaw<{ id: string; slug: string }[]>`
-    SELECT "id", "slug"
-    FROM "CreatorProfile"
-    WHERE "slug" ~ ${HASH_SLUG_PATTERN}
-      AND "listed" = true
-      AND "mergedIntoId" IS NULL
-      AND (${cursor ?? null}::uuid IS NULL OR "id" > ${cursor ?? null}::uuid)
-    ORDER BY "id" ASC
+): Promise<{ id: string; slug: string; accountKeys: string[] }[]> {
+  // accountKeys = "<platform>:<platformUserId>" for every account on the
+  // profile — the exact strings the catalog build hashed.
+  return prisma.$queryRaw<
+    { id: string; slug: string; accountKeys: string[] }[]
+  >`
+    SELECT p."id", p."slug",
+           COALESCE(
+             (SELECT array_agg(a."platform"::text || ':' || a."platformUserId")
+              FROM "PlatformAccount" a
+              WHERE a."creatorProfileId" = p."id"),
+             '{}'
+           ) AS "accountKeys"
+    FROM "CreatorProfile" p
+    WHERE p."slug" ~ ${HASH_SLUG_PATTERN}
+      AND p."listed" = true
+      AND p."mergedIntoId" IS NULL
+      AND (${cursor ?? null}::uuid IS NULL OR p."id" > ${cursor ?? null}::uuid)
+    ORDER BY p."id" ASC
     LIMIT ${take}
   `;
 }
@@ -173,8 +206,14 @@ async function main() {
   let planned = 0;
   let collisions = 0;
   let skipped = 0;
+  let skippedHashMismatch = 0;
   let renamed = 0;
   let redirectsCreated = 0;
+  const bySuffixLength: Record<
+    "8" | "16",
+    { verified: number; mismatch: number }
+  > = { "8": { verified: 0, mismatch: 0 }, "16": { verified: 0, mismatch: 0 } };
+  const mismatchSamples: string[] = [];
 
   while (limit === 0 || scanned < limit) {
     const take = limit === 0 ? batchSize : Math.min(batchSize, limit - scanned);
@@ -186,6 +225,19 @@ async function main() {
     type Pending = { id: string; oldSlug: string; base: string; n: number };
     let pending: Pending[] = [];
     for (const row of rows) {
+      const suffix = HASH_SLUG_REGEX.exec(row.slug)?.[1];
+      if (!suffix) continue;
+      const lengthBucket = bySuffixLength[suffix.length === 8 ? "8" : "16"];
+      if (!isCatalogHashSuffix(suffix, row.accountKeys)) {
+        skippedHashMismatch += 1;
+        lengthBucket.mismatch += 1;
+        if (mismatchSamples.length < MAX_MISMATCH_SAMPLES) {
+          mismatchSamples.push(row.slug);
+        }
+        continue;
+      }
+      lengthBucket.verified += 1;
+
       const base = row.slug.replace(HASH_SLUG_REGEX, "");
       if (base.length === 0) {
         skipped += 1;
@@ -286,6 +338,7 @@ async function main() {
         planned,
         collisions,
         skipped,
+        skippedHashMismatch,
         renamed,
         redirectsCreated,
         nextCursor: cursor,
@@ -302,6 +355,10 @@ async function main() {
       console.info(`  ${sample.oldSlug} -> ${sample.newSlug}`);
     }
   }
+  if (mismatchSamples.length > 0) {
+    console.info("hash-mismatch samples (kept as-is):");
+    for (const slug of mismatchSamples) console.info(`  ${slug}`);
+  }
 
   console.info(
     JSON.stringify({
@@ -314,6 +371,24 @@ async function main() {
       collisionRate:
         planned > 0 ? Number(((collisions / planned) * 100).toFixed(2)) : 0,
       skipped,
+      skippedHashMismatch,
+      hashVerifyRate: Object.fromEntries(
+        (["8", "16"] as const).map((length) => {
+          const { verified, mismatch } = bySuffixLength[length];
+          const total = verified + mismatch;
+          return [
+            `${length}hex`,
+            {
+              verified,
+              mismatch,
+              rate:
+                total > 0
+                  ? Number(((verified / total) * 100).toFixed(2))
+                  : null,
+            },
+          ];
+        }),
+      ),
       renamed,
       redirectsCreated,
       suffixHistogram: Object.fromEntries(
