@@ -5,6 +5,8 @@ import { rateLimitOrResponse } from "@/app/api/_lib/rateLimit";
 import { resolveGameFilter } from "@/server/services/creator-ranking";
 import {
   listPublicCreators,
+  ListOffsetOutOfRangeError,
+  maxListPage,
   type CreatorListSort,
 } from "@/server/services/creator-list";
 
@@ -56,15 +58,31 @@ export async function GET(request: Request) {
   // Unknown game slugs are ignored (filter dropped), matching /creators.
   const game = await resolveGameFilter(searchParams.get("game"));
 
-  const result = await listPublicCreators({
-    page,
-    limit,
-    sort: parseSort(searchParams.get("sort")),
-    platform: parsePlatform(searchParams.get("platform")),
-    game,
-    query: searchParams.get("q")?.trim() || null,
-    view: searchParams.get("view") === "list" ? "list" : "grid",
-  });
+  try {
+    const result = await listPublicCreators({
+      page,
+      limit,
+      sort: parseSort(searchParams.get("sort")),
+      platform: parsePlatform(searchParams.get("platform")),
+      game,
+      query: searchParams.get("q")?.trim() || null,
+      view: searchParams.get("view") === "list" ? "list" : "grid",
+    });
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+  } catch (error) {
+    // Deep pagination is capped on the offset, so the cap moves with ?limit=.
+    if (error instanceof ListOffsetOutOfRangeError) {
+      return NextResponse.json(
+        {
+          data: [],
+          meta: {},
+          error: "page_out_of_range",
+          maxPage: maxListPage(limit),
+        },
+        { status: 400 },
+      );
+    }
+    throw error;
+  }
 }

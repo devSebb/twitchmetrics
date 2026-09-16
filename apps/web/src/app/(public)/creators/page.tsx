@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Platform } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
   listPublicCreators,
+  ListOffsetOutOfRangeError,
   type CreatorListSort,
 } from "@/server/services/creator-list";
 import {
@@ -207,6 +209,8 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
   // server render and CreatorGrid's follow-up fetch agree and share a cache
   // entry. view is "grid" here: the list view's extra streaming stats are
   // only ever requested by the client.
+  // Pages past the offset cap 404 rather than paying a ~1 s offset scan for a
+  // crawler (see MAX_LIST_OFFSET); canonicals already self-reference.
   const [{ data: initialCreators, meta: initialMeta }, topGames] =
     await Promise.all([
       listPublicCreators({
@@ -217,6 +221,9 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
         game,
         query: null,
         view: "grid",
+      }).catch((error) => {
+        if (error instanceof ListOffsetOutOfRangeError) notFound();
+        throw error;
       }),
       getTopGameFilters(),
     ]);

@@ -93,11 +93,43 @@ type CreatorIdRow = { id: string };
 type TotalRow = { total: bigint };
 
 /**
+ * Deepest offset the list will serve. 500 pages of 32 is far past anything a
+ * human pages to; beyond it every request pays a ~1 s offset scan (offset
+ * 12,000 measured at 1.0 s on prod) and 18.5k pages exist for crawlers to
+ * walk. Capping the OFFSET rather than the page number keeps the limit honest
+ * for /api/creators, which accepts limit up to 100.
+ */
+export const MAX_LIST_OFFSET = 16_000;
+
+/** Thrown when a request asks for a page past MAX_LIST_OFFSET. */
+export class ListOffsetOutOfRangeError extends Error {
+  constructor(readonly maxPage: number) {
+    super(`Page out of range (max ${maxPage})`);
+    this.name = "ListOffsetOutOfRangeError";
+  }
+}
+
+export function maxListPage(limit: number): number {
+  return Math.max(1, Math.floor(MAX_LIST_OFFSET / Math.max(1, limit)));
+}
+
+/**
  * Cache key. `game` is the resolved slug rather than the raw ?game= value so
  * unknown/garbage slugs (already normalised to null) cannot spray distinct
  * keys into Redis. `view` splits list/grid because list responses carry the
  * extra streaming-stat fields.
  */
+/**
+ * buildMeta, with totalPages clamped to the servable range — CreatorGrid
+ * renders links up to totalPages and would otherwise point at pages that now
+ * 404 (see MAX_LIST_OFFSET).
+ */
+function cappedMeta(total: number, page: number, limit: number) {
+  const meta = buildMeta(total, page, limit);
+  const totalPages = Math.min(meta.totalPages, maxListPage(limit));
+  return { ...meta, totalPages, hasMore: meta.hasMore && page < totalPages };
+}
+
 function cacheKeyFor(params: CreatorListParams): string {
   return [
     "creators:list:v7",
@@ -203,6 +235,10 @@ function resolveEffectiveSort(params: CreatorListParams): {
 export async function listPublicCreators(
   params: CreatorListParams,
 ): Promise<CreatorListResult> {
+  if ((params.page - 1) * params.limit >= MAX_LIST_OFFSET) {
+    throw new ListOffsetOutOfRangeError(maxListPage(params.limit));
+  }
+
   const cacheKey = cacheKeyFor(params);
   const cached = await cacheGet<CreatorListResult>(cacheKey);
   if (cached) return cached;
@@ -222,7 +258,38 @@ async function queryPublicCreators(
   const joinClause = buildPlatformJoin(platform);
   const whereClause = buildWhereClause(query, game);
 
-  const [idRows, totalRows] = await Promise.all([
+  /**
+   * The unfiltered COUNT(*) over 593k listed rows takes ~3.5 s and used to run
+   * on every CREATOR_LIST miss (key space = page × sort × platform × game ×
+   * query × view), so most non-first-page loads paid it. It only depends on
+   * the platform filter, and the catalog changes weekly, so cache it for an
+   * hour under its own key. Free-text and game-filtered counts stay inline:
+   * those are index-bounded and their key space is unbounded.
+   */
+  const totalIsCacheable = !query && !game;
+  const totalCacheKey = `creators:total:v1:${platform ?? "all"}`;
+
+  const resolveTotal = async (): Promise<number> => {
+    if (totalIsCacheable) {
+      // Stored as a plain number — Upstash cannot serialize a bigint.
+      const cached = await cacheGet<number>(totalCacheKey);
+      if (typeof cached === "number") return cached;
+    }
+
+    const rows = await db.$queryRaw<TotalRow[]>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM "CreatorProfile" cp
+      ${joinClause}
+      ${whereClause}
+    `);
+    const value = Number(rows[0]?.total ?? 0n);
+    if (totalIsCacheable) {
+      await cacheSet(totalCacheKey, value, CACHE_TTL.CREATOR_TOTAL);
+    }
+    return value;
+  };
+
+  const [idRows, total] = await Promise.all([
     useViewershipRanking && isViewershipSort(sort)
       ? getViewershipRankedIds({
           sort,
@@ -240,19 +307,13 @@ async function queryPublicCreators(
           LIMIT ${limit}
           OFFSET ${skip}
         `),
-    db.$queryRaw<TotalRow[]>(Prisma.sql`
-      SELECT COUNT(*)::bigint AS total
-      FROM "CreatorProfile" cp
-      ${joinClause}
-      ${whereClause}
-    `),
+    resolveTotal(),
   ]);
 
   const ids = idRows.map((row) => row.id);
-  const total = Number(totalRows[0]?.total ?? 0n);
 
   if (!ids.length) {
-    return { data: [], meta: buildMeta(total, page, limit) };
+    return { data: [], meta: cappedMeta(total, page, limit) };
   }
 
   const creators = await db.creatorProfile.findMany({
@@ -353,5 +414,5 @@ async function queryPublicCreators(
     }
   }
 
-  return serializeBigInt({ data, meta: buildMeta(total, page, limit) });
+  return serializeBigInt({ data, meta: cappedMeta(total, page, limit) });
 }

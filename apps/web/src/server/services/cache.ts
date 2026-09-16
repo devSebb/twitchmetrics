@@ -11,6 +11,8 @@ export const CACHE_TTL = {
   CREATOR_PROFILE: 300, // 5 minutes
   CREATOR_SNAPSHOTS: 300, // 5 minutes
   CREATOR_LIST: 120, // 2 minutes
+  // Total row count for /creators: only moves when the catalog does (weekly).
+  CREATOR_TOTAL: 3600, // 1 hour
   GAME_PROFILE: 300, // 5 minutes
   GAME_SNAPSHOTS: 300, // 5 minutes
   GAME_LIST: 120, // 2 minutes
