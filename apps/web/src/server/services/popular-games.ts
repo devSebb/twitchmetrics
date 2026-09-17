@@ -215,39 +215,48 @@ export function rankPopularGameContributions(
     });
   }
 
-  return [...aggregated.values()]
-    .map(
-      (game): RankedPopularGame => ({
-        gameName: game.gameName,
-        twitchGameIds: [...game.twitchGameIdSet].sort(),
-        minutesWatched: game.minutesWatched,
-        airtimeMinutes: game.airtimeMinutes,
-        sessionCount: game.sessionCount,
-        observationCount: game.observationCount,
-        measurement:
-          game.hasMeasuredData && game.hasObservedData
-            ? "mixed"
-            : game.hasObservedData
-              ? "observed"
-              : "measured",
-        platforms: [...game.platformSet].sort(),
-      }),
-    )
-    .sort((left, right) => {
-      if (left.minutesWatched !== right.minutesWatched) {
-        return left.minutesWatched > right.minutesWatched ? -1 : 1;
-      }
-      if (left.airtimeMinutes !== right.airtimeMinutes) {
-        return right.airtimeMinutes - left.airtimeMinutes;
-      }
-      if (left.sessionCount !== right.sessionCount) {
-        return right.sessionCount - left.sessionCount;
-      }
-      return normalizePopularGameName(left.gameName).localeCompare(
-        normalizePopularGameName(right.gameName),
-      );
-    })
-    .slice(0, limit);
+  return (
+    [...aggregated.values()]
+      .map(
+        (game): RankedPopularGame => ({
+          gameName: game.gameName,
+          twitchGameIds: [...game.twitchGameIdSet].sort(),
+          minutesWatched: game.minutesWatched,
+          airtimeMinutes: game.airtimeMinutes,
+          sessionCount: game.sessionCount,
+          observationCount: game.observationCount,
+          measurement:
+            game.hasMeasuredData && game.hasObservedData
+              ? "mixed"
+              : game.hasObservedData
+                ? "observed"
+                : "measured",
+          platforms: [...game.platformSet].sort(),
+        }),
+      )
+      // Ranked by hours streamed (Air Time), matching Stream Hatchet's channel
+      // view; watch time breaks ties. Observation-only games carry a live-sample
+      // COUNT in airtimeMinutes (1 per sample), not real minutes, so they can
+      // never outrank a game with measured airtime — they sort after it.
+      .sort((left, right) => {
+        const leftMeasured = left.measurement !== "observed";
+        const rightMeasured = right.measurement !== "observed";
+        if (leftMeasured !== rightMeasured) return leftMeasured ? -1 : 1;
+        if (left.airtimeMinutes !== right.airtimeMinutes) {
+          return right.airtimeMinutes - left.airtimeMinutes;
+        }
+        if (left.minutesWatched !== right.minutesWatched) {
+          return left.minutesWatched > right.minutesWatched ? -1 : 1;
+        }
+        if (left.sessionCount !== right.sessionCount) {
+          return right.sessionCount - left.sessionCount;
+        }
+        return normalizePopularGameName(left.gameName).localeCompare(
+          normalizePopularGameName(right.gameName),
+        );
+      })
+      .slice(0, limit)
+  );
 }
 
 export function popularGamesWindowStart(now: Date): Date {

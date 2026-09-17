@@ -20,7 +20,8 @@
 #     catalog step failed). Refreshes isActiveLast30d / lastStreamAt / primary
 #     game for SH-born profiles from our rollups (the only writer of those
 #     fields), then fills missing Twitch/Kick avatars. Separate job so the
-#     catalog build and enrichment each get their own timeout budget.
+#     catalog build and enrichment each get their own timeout budget. Ends
+#     with a read-only invariant check (no SH history on merged stubs).
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   DATABASE_URL              — Neon pooled connection string (same as .env.local)
@@ -232,3 +233,10 @@ jobs:
           KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
           KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: npx tsx workers/enrich-sh-profiles.ts --kick-avatars --write
+      # Invariant, checked after the catalog build (the most likely writer to
+      # break it): SH history must never point at a merged-away stub. Exits 1
+      # and fails the job; fix with repair-merge-stranding --phase history.
+      # Stub-OWNED accounts are expected and never fail this.
+      - name: Check stream history is not stranded on merged stubs
+        if: ${{ !cancelled() }}
+        run: npx tsx workers/check-merge-stranding.ts

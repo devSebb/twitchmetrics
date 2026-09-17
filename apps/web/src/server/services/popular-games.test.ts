@@ -46,7 +46,7 @@ describe("popular game ranking", () => {
     });
   });
 
-  it("ranks by viewer-minutes, then Air Time, then real sessions", () => {
+  it("ranks by Air Time, then watch time, then real sessions", () => {
     const ranked = rankPopularGameContributions(
       [
         {
@@ -68,7 +68,7 @@ describe("popular game ranking", () => {
           estimated: false,
         },
         {
-          gameName: "Air Time tie-breaker",
+          gameName: "Air Time winner",
           platform: "kick",
           minutesWatched: 900n,
           airtimeMinutes: 120,
@@ -80,10 +80,43 @@ describe("popular game ranking", () => {
       3,
     );
 
+    // Hours streamed first (SH's ordering); watch time only breaks ties.
     expect(ranked.map((game) => game.gameName)).toEqual([
-      "Audience winner",
-      "Air Time tie-breaker",
+      "Air Time winner",
       "Many snapshots",
+      "Audience winner",
+    ]);
+  });
+
+  it("keeps observation-only games below any game with measured airtime", () => {
+    const ranked = rankPopularGameContributions(
+      [
+        {
+          gameName: "Observed only",
+          platform: "twitch",
+          minutesWatched: 100_000n,
+          // 500 live samples, not 500 minutes of airtime.
+          airtimeMinutes: 500,
+          sessionCount: 0,
+          observationCount: 500,
+          estimated: true,
+        },
+        {
+          gameName: "Measured",
+          platform: "twitch",
+          minutesWatched: 60n,
+          airtimeMinutes: 30,
+          sessionCount: 1,
+          observationCount: 0,
+          estimated: false,
+        },
+      ],
+      3,
+    );
+
+    expect(ranked.map((game) => game.gameName)).toEqual([
+      "Measured",
+      "Observed only",
     ]);
   });
 

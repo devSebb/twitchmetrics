@@ -3,6 +3,7 @@ import {
   type SnapshotTier,
   type Platform,
 } from "@twitchmetrics/database";
+import { AdapterError } from "@/server/adapters/types";
 import { decryptToken } from "@/lib/encryption";
 import { createLogger } from "@/lib/logger";
 import { getAdapter } from "@/server/adapters";
@@ -16,6 +17,9 @@ import { refreshCreatorClips } from "@/server/services/clip-sync";
 const log = createLogger("snapshot-worker");
 
 const BATCH_SIZE = 50;
+// Consecutive "channel does not exist" results before an account stops being
+// polled. Deleted/banned Twitch channels were ~2,540 failures a day.
+const NOT_FOUND_SKIP_THRESHOLD = 3;
 
 function toJsonValue(value: unknown) {
   return JSON.parse(
@@ -35,8 +39,13 @@ type SnapshotableProfile = {
     platformUserId: string;
     isOAuthConnected: boolean;
     accessToken: string | null;
+    notFoundCount: number;
   }>;
 };
+
+function isNotFoundError(err: unknown): boolean {
+  return err instanceof AdapterError && err.code === "not_found";
+}
 
 // Inngest step tools type is complex with deep conditional types.
 // Using a minimal structural type avoids tight coupling to Inngest internals.
@@ -125,13 +134,20 @@ async function snapshotProfileBatch(
         // handles + reach) have no adapter session and must never be polled;
         // X in particular has a public adapter that fails on every one of
         // them, which used to show up as ~2.8k "failed" per tier1 run.
-        where: { discoverySource: null },
+        // notFoundCount: an account the platform keeps reporting as gone
+        // (deleted/banned) is dropped from the rotation until it comes back
+        // via OAuth reconnect.
+        where: {
+          discoverySource: null,
+          notFoundCount: { lt: NOT_FOUND_SKIP_THRESHOLD },
+        },
         select: {
           id: true,
           platform: true,
           platformUserId: true,
           isOAuthConnected: true,
           accessToken: true,
+          notFoundCount: true,
         },
       },
     },
@@ -146,6 +162,28 @@ async function snapshotProfileBatch(
         await snapshotPlatformAccount(profile.id, account);
         processed++;
       } catch (err) {
+        if (isNotFoundError(err)) {
+          // Expected for deleted/banned channels: count it, don't call it a
+          // failure, and stop polling once the threshold is reached.
+          const notFoundCount = account.notFoundCount + 1;
+          await prisma.platformAccount
+            .update({
+              where: { id: account.id },
+              data: { notFoundCount, lastNotFoundAt: new Date() },
+            })
+            .catch(() => {});
+          log.warn(
+            {
+              creatorProfileId: profile.id,
+              platform: account.platform,
+              platformUserId: account.platformUserId,
+              notFoundCount,
+              stopped: notFoundCount >= NOT_FOUND_SKIP_THRESHOLD,
+            },
+            "Platform account not found",
+          );
+          continue;
+        }
         errors++;
         log.error(
           {
@@ -243,7 +281,9 @@ export async function snapshotPlatformAccount(
     },
   });
 
-  // Update cached fields on PlatformAccount
+  // Update cached fields on PlatformAccount. The channel answered, so any
+  // earlier not-found streak is over (a renamed/unbanned channel returning,
+  // or an OAuth reconnect) — clear it and keep the account in the rotation.
   await prisma.platformAccount.update({
     where: { id: account.id },
     data: {
@@ -253,6 +293,8 @@ export async function snapshotPlatformAccount(
       subscriberCount: snapshotData.subscriberCount,
       postCount: snapshotData.postCount,
       lastSyncedAt: snapshotData.snapshotAt,
+      notFoundCount: 0,
+      lastNotFoundAt: null,
     },
   });
 

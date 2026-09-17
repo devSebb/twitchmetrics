@@ -17,6 +17,8 @@ type PopularGamesProps = {
 };
 
 const HEADING = "Popular Games · Last 30 days";
+// The list is ranked by Air Time (hours streamed), matching Stream Hatchet.
+const SUBHEADING = "Ranked by hours streamed";
 
 export function PopularGames({ games }: PopularGamesProps) {
   if (games.length === 0) {
@@ -39,7 +41,10 @@ export function PopularGames({ games }: PopularGamesProps) {
 
   return (
     <div className="mt-6">
-      <h2 className="mb-3 text-lg font-bold text-[#F2F3F5]">{HEADING}</h2>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#F2F3F5]">{HEADING}</h2>
+        <span className="text-xs text-[#949BA4]">{SUBHEADING}</span>
+      </div>
       <Card>
         <div className="space-y-3">
           {games.slice(0, 6).map((game) => {
@@ -74,9 +79,11 @@ export function PopularGames({ games }: PopularGamesProps) {
                           : "observations"}
                       </span>
                     ) : game.airtimeMinutes !== undefined ? (
-                      <span>
-                        <span className="font-medium">AT:</span>{" "}
-                        {formatDuration(game.airtimeMinutes * 60)}
+                      <span title="Air Time — the ranking metric">
+                        <span className="font-medium text-[#F2F3F5]">AT:</span>{" "}
+                        <span className="text-[#DBDEE1]">
+                          {formatDuration(game.airtimeMinutes * 60)}
+                        </span>
                       </span>
                     ) : null}
                   </div>
