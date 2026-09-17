@@ -12,6 +12,15 @@
  *   pnpm worker:streamhatchet -- --platform twitch --date 2026-05-13 --matched-only --write
  *   pnpm worker:streamhatchet -- --platform yt --start-date 2026-04-10 --end-date 2026-08-15 --fill-missing --write
  *
+ * --recompute-rollups  rebuild rollups for a date range from facts already in the
+ *                database — no S3 download, no parsing. Used by the Phase C backfill
+ *                and after any change to the rollup builder. Honours --platform,
+ *                --date / --start-date+--end-date / --days and --matched-only.
+ *                Dry-run prints what it would rebuild; --write applies.
+ *                Also rebuilds that date's CreatorDailyRollup (merged airtime
+ *                across platforms) unless --skip-creator-rollups.
+ * --creator-rollups-only  rebuild ONLY CreatorDailyRollup for the date range.
+ *                Use after the per-platform rollups are already correct.
  * --force        delete the object's facts and re-import everything, rebuild rollups.
  * --fill-missing re-parse an already-imported object WITHOUT deleting: only rows the
  *                unique key does not yet hold get inserted (createMany skipDuplicates),
@@ -21,6 +30,11 @@
  */
 
 import { PrismaClient, Prisma, type Platform } from "@prisma/client";
+import {
+  recomputeCreatorRollups as coreRecomputeCreatorRollups,
+  recomputeRollups as coreRecomputeRollups,
+  upsertStreamSessionFacts,
+} from "@twitchmetrics/core/rollups";
 import {
   buildDailySessionKey,
   countS3CsvRows,
@@ -93,6 +107,9 @@ type ImportConfig = {
   force: boolean;
   fillMissing: boolean;
   matchedOnly: boolean;
+  recomputeRollupsOnly: boolean;
+  creatorRollupsOnly: boolean;
+  skipCreatorRollups: boolean;
   rowLimit: number | undefined;
 };
 
@@ -185,6 +202,11 @@ function parseConfig(): ImportConfig {
     force: args.includes("--force"),
     fillMissing: args.includes("--fill-missing"),
     matchedOnly: args.includes("--matched-only"),
+    recomputeRollupsOnly:
+      args.includes("--recompute-rollups") ||
+      args.includes("--creator-rollups-only"),
+    creatorRollupsOnly: args.includes("--creator-rollups-only"),
+    skipCreatorRollups: args.includes("--skip-creator-rollups"),
     rowLimit:
       rowLimit && Number.isFinite(rowLimit) && rowLimit > 0
         ? rowLimit
@@ -356,309 +378,26 @@ function sessionCreateInput(
   };
 }
 
-type RollupSession = Awaited<
-  ReturnType<typeof prisma.streamSessionFact.findMany>
->[number];
-
-function weightedAverage(
-  weightedValues: Array<{ value: number | null; weight: number }>,
-): number | null {
-  const usable = weightedValues.filter(
-    (item) => item.value !== null && item.weight > 0,
-  ) as Array<{ value: number; weight: number }>;
-  if (usable.length === 0) return null;
-  const weight = usable.reduce((sum, item) => sum + item.weight, 0);
-  return (
-    usable.reduce((sum, item) => sum + item.value * item.weight, 0) / weight
-  );
-}
-
-function mostWatchedGame(sessions: RollupSession[]): string | null {
-  const totals = new Map<string, bigint>();
-  for (const session of sessions) {
-    if (!session.primaryGameName) continue;
-    totals.set(
-      session.primaryGameName,
-      (totals.get(session.primaryGameName) ?? 0n) + session.minutesWatched,
-    );
-  }
-  return (
-    [...totals.entries()].sort((a, b) =>
-      a[1] === b[1] ? a[0].localeCompare(b[0]) : a[1] > b[1] ? -1 : 1,
-    )[0]?.[0] ?? null
-  );
-}
-
+/**
+ * Rebuild one partition's rollups. The grouping lives in
+ * @twitchmetrics/core/rollups — this worker used to carry a full copy of it,
+ * so every rollup change had to be made twice. `retry` keeps the long local
+ * backfills alive across Neon connection drops; skipDuplicates makes a
+ * retried write batch a no-op.
+ */
 async function recomputeRollups(input: {
   platform: DailySessionPlatform;
   partitionDate: Date;
   matchedOnly: boolean;
-}): Promise<{
-  channelRollups: number;
-  gameRollups: number;
-  channelGameRollups: number;
-}> {
-  const sessions = await withRetry(() =>
-    prisma.streamSessionFact.findMany({
-      where: {
-        source: SOURCE,
-        platform: input.platform,
-        partitionDate: input.partitionDate,
-      },
-      orderBy: { streamEndsAt: "asc" },
-    }),
-  );
-
-  await withRetry(() =>
-    prisma.$transaction([
-      prisma.channelDailyRollup.deleteMany({
-        where: {
-          source: SOURCE,
-          platform: input.platform,
-          date: input.partitionDate,
-        },
-      }),
-      ...(input.matchedOnly
-        ? []
-        : [
-            prisma.gameDailyRollup.deleteMany({
-              where: {
-                source: SOURCE,
-                platform: input.platform,
-                date: input.partitionDate,
-              },
-            }),
-          ]),
-      prisma.channelGameDailyRollup.deleteMany({
-        where: {
-          source: SOURCE,
-          platform: input.platform,
-          date: input.partitionDate,
-        },
-      }),
-    ]),
-  );
-
-  const byChannel = new Map<string, RollupSession[]>();
-  const byGame = new Map<string, RollupSession[]>();
-  const byChannelGame = new Map<string, RollupSession[]>();
-
-  for (const session of sessions) {
-    const channelKey = session.platformUserId;
-    byChannel.set(channelKey, [...(byChannel.get(channelKey) ?? []), session]);
-
-    const gameName = session.primaryGameName;
-    if (gameName) {
-      if (!input.matchedOnly) {
-        byGame.set(gameName, [...(byGame.get(gameName) ?? []), session]);
-      }
-      const channelGameKey = `${channelKey}\u0000${gameName}`;
-      byChannelGame.set(channelGameKey, [
-        ...(byChannelGame.get(channelGameKey) ?? []),
-        session,
-      ]);
-    }
-  }
-
-  const channelRollups: Prisma.ChannelDailyRollupCreateManyInput[] = [];
-  for (const channelSessions of byChannel.values()) {
-    const latest = channelSessions[channelSessions.length - 1]!;
-    const peak = channelSessions.reduce(
-      (best, session) =>
-        best === null || session.peakViewers > best.peakViewers
-          ? session
-          : best,
-      null as RollupSession | null,
-    );
-    const minutesWatched = channelSessions.reduce(
-      (sum, session) => sum + session.minutesWatched,
-      0n,
-    );
-    const airtimeMinutes = channelSessions.reduce(
-      (sum, session) => sum + session.airtimeMinutes,
-      0,
-    );
-    const sessionViews = channelSessions.reduce(
-      (sum, session) => sum + (session.sessionViews ?? 0n),
-      0n,
-    );
-    const averageViewers =
-      airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null;
-
-    channelRollups.push({
-      source: SOURCE,
-      platform: input.platform,
-      date: input.partitionDate,
-      creatorProfileId: latest.creatorProfileId,
-      platformUserId: latest.platformUserId,
-      platformUsername: latest.platformUsername,
-      platformDisplayName: latest.platformDisplayName,
-      platformLogoUrl: latest.platformLogoUrl,
-      country: latest.country,
-      sessionCount: channelSessions.length,
-      airtimeMinutes,
-      minutesWatched,
-      sessionViews,
-      averageViewers,
-      averageViewersGlobal: weightedAverage(
-        channelSessions.map((session) => ({
-          value: session.averageViewersGlobal,
-          weight: session.airtimeMinutes,
-        })),
-      ),
-      peakViewers: peak?.peakViewers ?? null,
-      peakViewersAt: peak?.peakViewersAt ?? null,
-      primaryGameName: mostWatchedGame(channelSessions),
-      gameNames: [
-        ...new Set(
-          channelSessions
-            .flatMap((session) => [
-              session.primaryGameName,
-              ...session.allGameNames,
-            ])
-            .filter((game): game is string => Boolean(game)),
-        ),
-      ].slice(0, 20),
-      bestRank: channelSessions.reduce<number | null>(
-        (best, session) =>
-          session.bestRank === null
-            ? best
-            : best === null
-              ? session.bestRank
-              : Math.min(best, session.bestRank),
-        null,
-      ),
-      averageRank: weightedAverage(
-        channelSessions.map((session) => ({
-          value: session.averageRank,
-          weight: session.airtimeMinutes,
-        })),
-      ),
-      worstRank: channelSessions.reduce<number | null>(
-        (worst, session) =>
-          session.worstRank === null
-            ? worst
-            : worst === null
-              ? session.worstRank
-              : Math.max(worst, session.worstRank),
-        null,
-      ),
-      lastStreamAt: latest.streamEndsAt,
-    });
-  }
-
-  const gameRollups: Prisma.GameDailyRollupCreateManyInput[] = [];
-  if (!input.matchedOnly) {
-    for (const [gameName, gameSessions] of byGame.entries()) {
-      const minutesWatched = gameSessions.reduce(
-        (sum, session) => sum + session.minutesWatched,
-        0n,
-      );
-      const airtimeMinutes = gameSessions.reduce(
-        (sum, session) => sum + session.airtimeMinutes,
-        0,
-      );
-      const peak = gameSessions.reduce(
-        (best, session) =>
-          best === null || session.peakViewers > best.peakViewers
-            ? session
-            : best,
-        null as RollupSession | null,
-      );
-      const topChannel = gameSessions.reduce(
-        (best, session) =>
-          best === null || session.minutesWatched > best.minutesWatched
-            ? session
-            : best,
-        null as RollupSession | null,
-      );
-
-      gameRollups.push({
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-        gameName,
-        sessionCount: gameSessions.length,
-        channelCount: new Set(gameSessions.map((s) => s.platformUserId)).size,
-        airtimeMinutes,
-        minutesWatched,
-        averageViewers:
-          airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
-        peakViewers: peak?.peakViewers ?? null,
-        topChannelUserId: topChannel?.platformUserId ?? null,
-        topChannelUsername: topChannel?.platformUsername ?? null,
-        topChannelDisplayName: topChannel?.platformDisplayName ?? null,
-      });
-    }
-  }
-
-  const channelGameRollups: Prisma.ChannelGameDailyRollupCreateManyInput[] = [];
-  for (const channelGameSessions of byChannelGame.values()) {
-    const latest = channelGameSessions[channelGameSessions.length - 1]!;
-    const minutesWatched = channelGameSessions.reduce(
-      (sum, session) => sum + session.minutesWatched,
-      0n,
-    );
-    const airtimeMinutes = channelGameSessions.reduce(
-      (sum, session) => sum + session.airtimeMinutes,
-      0,
-    );
-    const peak = channelGameSessions.reduce(
-      (best, session) =>
-        best === null || session.peakViewers > best.peakViewers
-          ? session
-          : best,
-      null as RollupSession | null,
-    );
-
-    if (!latest.primaryGameName) continue;
-    channelGameRollups.push({
-      source: SOURCE,
-      platform: input.platform,
-      date: input.partitionDate,
-      creatorProfileId: latest.creatorProfileId,
-      platformUserId: latest.platformUserId,
-      platformUsername: latest.platformUsername,
-      platformDisplayName: latest.platformDisplayName,
-      gameName: latest.primaryGameName,
-      sessionCount: channelGameSessions.length,
-      airtimeMinutes,
-      minutesWatched,
-      averageViewers:
-        airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
-      peakViewers: peak?.peakViewers ?? null,
-    });
-  }
-
-  for (const batch of chunk(channelRollups, BATCH_SIZE)) {
-    // skipDuplicates so a retried batch whose first attempt committed before
-    // the connection dropped doesn't trip the rollup unique keys.
-    await withRetry(() =>
-      prisma.channelDailyRollup.createMany({
-        data: batch,
-        skipDuplicates: true,
-      }),
-    );
-  }
-  for (const batch of chunk(gameRollups, BATCH_SIZE)) {
-    await withRetry(() =>
-      prisma.gameDailyRollup.createMany({ data: batch, skipDuplicates: true }),
-    );
-  }
-  for (const batch of chunk(channelGameRollups, BATCH_SIZE)) {
-    await withRetry(() =>
-      prisma.channelGameDailyRollup.createMany({
-        data: batch,
-        skipDuplicates: true,
-      }),
-    );
-  }
-
-  return {
-    channelRollups: channelRollups.length,
-    gameRollups: gameRollups.length,
-    channelGameRollups: channelGameRollups.length,
-  };
+}) {
+  return coreRecomputeRollups(prisma, {
+    source: SOURCE,
+    platform: input.platform,
+    partitionDate: input.partitionDate,
+    matchedOnly: input.matchedOnly,
+    retry: withRetry,
+    skipDuplicates: true,
+  });
 }
 
 async function importOneDate(config: ImportConfig, date: Date) {
@@ -721,6 +460,9 @@ async function importOneDate(config: ImportConfig, date: Date) {
   const matches = await loadExistingProfileMatches(config.platform);
   let matchedSessions = 0;
   let written = 0;
+  // Re-sighted streams merged into an existing row (see upsert): not new rows,
+  // and not skipped either.
+  let updatedSessions = 0;
   let pendingBatch: Prisma.StreamSessionFactCreateManyInput[] = [];
 
   let sourceObjectId: string | null = null;
@@ -805,13 +547,14 @@ async function importOneDate(config: ImportConfig, date: Date) {
 
   async function flushPendingBatch() {
     if (pendingBatch.length === 0) return;
+    // Upsert, not createMany: a stream still live at the export cut is
+    // re-sighted in the next file with a slid window, and merges into the row
+    // it already has (see upsertStreamSessionFacts).
     const result = await withRetry(() =>
-      prisma.streamSessionFact.createMany({
-        data: pendingBatch,
-        skipDuplicates: true,
-      }),
+      upsertStreamSessionFacts(prisma, pendingBatch),
     );
-    written += result.count;
+    written += result.inserted;
+    updatedSessions += result.updated;
     pendingBatch = [];
   }
 
@@ -875,7 +618,8 @@ async function importOneDate(config: ImportConfig, date: Date) {
     date: formatDate(date),
     parsedRows: parseStats.rowsAccepted,
     written,
-    skippedOrDuplicateRows: parseStats.rowsAccepted - written,
+    updated: updatedSessions,
+    skippedOrDuplicateRows: parseStats.rowsAccepted - written - updatedSessions,
     rejectedRows: parseStats.rowsRejected,
     matchedExistingProfiles: matchedSessions,
     matchedOnly: config.matchedOnly,
@@ -885,14 +629,101 @@ async function importOneDate(config: ImportConfig, date: Date) {
   return {
     scanned: parseStats.rowsScanned,
     written,
-    skipped: parseStats.rowsAccepted - written,
+    updated: updatedSessions,
+    skipped: parseStats.rowsAccepted - written - updatedSessions,
     failed: parseStats.rowsRejected,
     matched: matchedSessions,
   };
 }
 
+/**
+ * --recompute-rollups: rebuild each date's rollups straight from the facts
+ * already stored. Every other path downloads and re-parses the S3 object
+ * first, which is hours of needless work when only the rollup math changed.
+ */
+async function recomputeRollupsOnly(config: ImportConfig) {
+  let channelRollups = 0;
+  let gameRollups = 0;
+  let channelGameRollups = 0;
+  let creatorRollups = 0;
+
+  for (const date of config.dates) {
+    const partitionDate = new Date(date);
+    partitionDate.setUTCHours(0, 0, 0, 0);
+
+    if (!config.write) {
+      const facts = await withRetry(() =>
+        prisma.streamSessionFact.count({
+          where: { source: SOURCE, platform: config.platform, partitionDate },
+        }),
+      );
+      log("info", "Would rebuild rollups", {
+        date: formatDate(partitionDate),
+        facts,
+        creatorRollups: !config.skipCreatorRollups,
+      });
+      continue;
+    }
+
+    if (!config.creatorRollupsOnly) {
+      const rollups = await recomputeRollups({
+        platform: config.platform,
+        partitionDate,
+        matchedOnly: config.matchedOnly,
+      });
+      channelRollups += rollups.channelRollups;
+      gameRollups += rollups.gameRollups;
+      channelGameRollups += rollups.channelGameRollups;
+      // An interrupted backfill resumes from the last date logged here.
+      log("info", "Rollups rebuilt", {
+        date: formatDate(partitionDate),
+        ...rollups,
+      });
+    }
+
+    // Per-creator merged airtime spans platforms, so it is rebuilt per date
+    // rather than per (platform, date). Running the platforms one after
+    // another therefore recomputes this a few times for the same day, which
+    // is idempotent.
+    if (!config.skipCreatorRollups) {
+      const creator = await coreRecomputeCreatorRollups(prisma, {
+        source: SOURCE,
+        partitionDate,
+        retry: withRetry,
+      });
+      creatorRollups += creator.creatorRollups;
+      log("info", "Creator rollups rebuilt", {
+        date: formatDate(partitionDate),
+        ...creator,
+      });
+    }
+  }
+
+  log("info", "Rollup recompute complete", {
+    write: config.write,
+    platform: config.platform,
+    dates: config.dates.length,
+    channelRollups,
+    gameRollups,
+    channelGameRollups,
+    creatorRollups,
+  });
+}
+
 async function main() {
   const config = parseConfig();
+
+  if (config.recomputeRollupsOnly) {
+    log("info", "Rebuilding rollups from stored facts (no S3 read)", {
+      platform: config.platform,
+      dates: config.dates.map(formatDate),
+      matchedOnly: config.matchedOnly,
+      write: config.write,
+    });
+    await recomputeRollupsOnly(config);
+    return;
+  }
+
   log("info", "Starting StreamHatchet daily session ingestion", {
     platform: config.platform,
     dates: config.dates.map(formatDate),

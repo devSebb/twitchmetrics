@@ -258,6 +258,7 @@ model CreatorProfile {
   clips             CreatorClip[]
   streamSessions    StreamSessionFact[]
   audienceDemographics AudienceDemographics[]
+  dailyRollups         CreatorDailyRollup[]
 
   identityLinksAsCanonical IdentityLink[] @relation("IdentityLinkCanonical")
   identityLinksAsOther     IdentityLink[] @relation("IdentityLinkOther")
@@ -874,17 +875,28 @@ model StreamSessionFact {
   // RAW UNIQUE INDEX THAT PRISMA CANNOT DECLARE — DO NOT LET A GENERATED
   // MIGRATION DROP IT (see the same warning on PlatformAccount).
   //
-  //   StreamSessionFact_source_platform_user_video_window_key
+  //   StreamSessionFact_stream_identity_key
   //     UNIQUE (source, platform, "platformUserId",
-  //             (COALESCE("platformVideoId", '')), "streamBeginsAt", "streamEndsAt")
+  //             (COALESCE("platformVideoId", '')),
+  //             (COALESCE(CASE WHEN "platformVideoId" IS NULL
+  //                            THEN "streamBeginsAt" END,
+  //                       TIMESTAMP '1970-01-01')))
   //
-  // Replaces the old (source, platform, platformUserId, streamBeginsAt,
-  // streamEndsAt) unique. YouTube channels run several concurrent live
-  // streams (distinct video_id, identical begin/end — 24/7 news, radio,
-  // multi-stream VTubers) and the old key silently dropped ~8% of yt rows a
-  // day via createMany(skipDuplicates). COALESCE keeps it NULL-safe for
-  // kick (no video id) so a retried import still de-duplicates.
-  // Created in 20260817000000_stream_session_video_id_unique.
+  // A stream is ONE row for its whole life. Every SH export carries a rolling
+  // 3-day window, so a stream still live at the cut reappears the next day
+  // with the SAME video id but a slid begin/end: measured 2026-09-16, 2,956 of
+  // 3,000 duplicated yt streams had a later begin in the newest file, each
+  // sighting capped at the window (max 4,319 min) while the true streams ran a
+  // median 37,439 min (~26 days, 24/7 channels). The previous key included
+  // (streamBeginsAt, streamEndsAt), so every slid copy inserted a new row:
+  // +199% yt airtime, +109% yt watch time. Video-id platforms now key on the
+  // video id alone; kick (no video id) keys on its begin time, verified not to
+  // slide (102 overlapping pairs in 104,751 rows / 7 days). The '1970-01-01'
+  // sentinel keeps every key column NOT NULL — Postgres treats NULLs in a
+  // unique index as DISTINCT, so a bare CASE would never conflict at all.
+  // Imports merge with upsertStreamSessionFacts (@twitchmetrics/core/rollups).
+  // Created in 20260917000000_stream_session_identity_unique; the previous key
+  // (…_source_platform_user_video_window_key, 20260817000000) is dropped there.
   // ---------------------------------------------------------------------
   @@index([sourceObjectId])
   @@index([creatorProfileId, platform, partitionDate])
@@ -932,6 +944,44 @@ model ChannelDailyRollup {
   @@index([platform, date, minutesWatched(sort: Desc)])
   @@index([platform, date, peakViewers(sort: Desc)])
   @@index([platformUserId, platform])
+}
+
+/// One row per creator per UTC day, across every platform they streamed on.
+///
+/// ChannelDailyRollup is per platform channel, so summing it double-counts a
+/// simulcast: a 4 h stream on Twitch + YouTube reads as 8 h of airtime, and
+/// avgViewers (watch time / airtime) is halved. This table stores the MERGED
+/// wall-clock time instead, so airtime and averages are per creator.
+model CreatorDailyRollup {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  creatorProfileId String   @db.Uuid
+  date             DateTime @db.Date
+
+  /// Wall-clock minutes the creator was live on at least one platform.
+  uniqueAirtimeMinutes Int    @default(0)
+  minutesWatched       BigInt @default(0)
+  /// Merged live blocks: a simulcast counts once (unlike ChannelDailyRollup.sessionCount).
+  streamBlocks         Int    @default(0)
+
+  platforms Platform[] @default([])
+
+  /// Merged live intervals as [startMinute, endMinute] pairs from 00:00Z, so
+  /// read-time sources (e.g. Twitch VOD durations for creators missing from
+  /// the SH feed) can be unioned in without double-counting.
+  intervals Json?
+
+  /// Best single-platform peak of the day; peakPlatform names it (null once
+  /// an estimated combined peak replaces it).
+  peakViewers  Int?
+  peakPlatform Platform?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  creatorProfile CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorProfileId, date])
+  @@index([date])
 }
 
 model GameDailyRollup {

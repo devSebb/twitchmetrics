@@ -1,6 +1,7 @@
 import { inngest } from "../../client";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 import {
+  finalizeCreatorDailyRollups,
   finalizeStreamHatchetDailySessionRollups,
   formatPartitionDate,
   ingestStreamHatchetDailySessionObject,
@@ -16,7 +17,7 @@ type CronPlatformTarget = {
 type CronStepFailure = {
   platform: string;
   date: string;
-  stage: "import" | "rollups";
+  stage: "import" | "rollups" | "creator-rollups";
   error: string;
 };
 
@@ -37,7 +38,10 @@ type StreamHatchetS3CronResult =
       summary: ReturnType<typeof summarizeResults>;
     };
 
-const DEFAULT_RETRY_DAYS = 3;
+// 4, not 3: a stream still live at the export cut is re-sighted the next day
+// with a later end, and C26 attributes that extra time to the days it covers —
+// so the earlier days must be recomputed once the stream's end moves.
+const DEFAULT_RETRY_DAYS = 4;
 // StreamHatchet is the primary catalog source: ingest ALL channels (full mode),
 // not just ones already matched to a CreatorProfile. `yt` is the canonical
 // YouTube creator feed; `ytg` (YouTube Gaming) is opt-in via env because of its
@@ -111,6 +115,8 @@ function summarizeResults(results: StreamHatchetDailySessionImportResult[]) {
     (summary, result) => {
       summary.recordsScanned += result.scanned;
       summary.recordsWritten += result.written;
+      // Re-sighted streams that merged into an existing fact row.
+      summary.recordsUpdated += result.updated;
       summary.recordsSkipped += result.skipped;
       summary.recordsFailed += result.failed;
       summary.matched += result.matched;
@@ -120,6 +126,7 @@ function summarizeResults(results: StreamHatchetDailySessionImportResult[]) {
     {
       recordsScanned: 0,
       recordsWritten: 0,
+      recordsUpdated: 0,
       recordsSkipped: 0,
       recordsFailed: 0,
       matched: 0,
@@ -198,8 +205,11 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
               continue;
             }
             results.push(importResult);
-            if (importResult.skippedExisting) continue;
 
+            // Rollups run even when the file was already imported: a
+            // neighbouring day's import can extend a stream that overlaps
+            // THIS day, and the day's totals then change without its own
+            // file changing.
             try {
               await step.run(`rollups-${target.platform}-${dateKey}`, () =>
                 finalizeStreamHatchetDailySessionRollups({
@@ -216,6 +226,21 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
                 error: errorMessage(error),
               });
             }
+          }
+
+          // After every platform for this date: merge each creator's live
+          // intervals across platforms so a simulcast counts once.
+          try {
+            await step.run(`creator-rollups-${dateKey}`, () =>
+              finalizeCreatorDailyRollups({ date }),
+            );
+          } catch (error) {
+            failures.push({
+              platform: "all",
+              date: dateKey,
+              stage: "creator-rollups",
+              error: errorMessage(error),
+            });
           }
         }
 

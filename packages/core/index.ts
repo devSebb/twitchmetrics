@@ -8,3 +8,4 @@
 
 export * from "./src/tiers";
 export * from "./src/creator-aggregates";
+export * from "./src/rollups";

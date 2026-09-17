@@ -7,6 +7,11 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
+import {
+  recomputeCreatorRollups as coreRecomputeCreatorRollups,
+  recomputeRollups as coreRecomputeRollups,
+  upsertStreamSessionFacts,
+} from "@twitchmetrics/core/rollups";
 import { canonicalProfileId } from "../identity/canonical-profile";
 
 export type StreamHatchetDailySessionPlatform =
@@ -23,6 +28,8 @@ export type StreamHatchetDailySessionImportResult = {
   scanned: number;
   parsed: number;
   written: number;
+  /** Re-sighted streams merged into an existing fact row. */
+  updated: number;
   skipped: number;
   failed: number;
   matched: number;
@@ -80,31 +87,6 @@ type StreamHatchetDailySession = {
   contentLabel: unknown | null;
   rowHash: string;
 };
-
-const ROLLUP_SESSION_SELECT = {
-  creatorProfileId: true,
-  platformUserId: true,
-  platformUsername: true,
-  platformDisplayName: true,
-  platformLogoUrl: true,
-  country: true,
-  streamEndsAt: true,
-  peakViewersAt: true,
-  primaryGameName: true,
-  allGameNames: true,
-  airtimeMinutes: true,
-  minutesWatched: true,
-  sessionViews: true,
-  averageViewersGlobal: true,
-  peakViewers: true,
-  bestRank: true,
-  averageRank: true,
-  worstRank: true,
-} satisfies Prisma.StreamSessionFactSelect;
-
-type RollupSession = Prisma.StreamSessionFactGetPayload<{
-  select: typeof ROLLUP_SESSION_SELECT;
-}>;
 
 const SOURCE = "streamhatchet";
 const DEFAULT_BUCKET = "streamhatchet-aggregations";
@@ -302,290 +284,17 @@ function sessionCreateInput(
   };
 }
 
-function weightedAverage(
-  weightedValues: Array<{ value: number | null; weight: number }>,
-): number | null {
-  const usable = weightedValues.filter(
-    (item) => item.value !== null && item.weight > 0,
-  ) as Array<{ value: number; weight: number }>;
-  if (usable.length === 0) return null;
-  const weight = usable.reduce((sum, item) => sum + item.weight, 0);
-  return (
-    usable.reduce((sum, item) => sum + item.value * item.weight, 0) / weight
-  );
-}
-
-function mostWatchedGame(sessions: RollupSession[]): string | null {
-  const totals = new Map<string, bigint>();
-  for (const session of sessions) {
-    if (!session.primaryGameName) continue;
-    totals.set(
-      session.primaryGameName,
-      (totals.get(session.primaryGameName) ?? 0n) + session.minutesWatched,
-    );
-  }
-  return (
-    [...totals.entries()].sort((a, b) =>
-      a[1] === b[1] ? a[0].localeCompare(b[0]) : a[1] > b[1] ? -1 : 1,
-    )[0]?.[0] ?? null
-  );
-}
-
 async function recomputeRollups(input: {
   platform: StreamHatchetDailySessionPlatform;
   partitionDate: Date;
   matchedOnly: boolean;
-}): Promise<{
-  channelRollups: number;
-  gameRollups: number;
-  channelGameRollups: number;
-}> {
-  // Select only rollup inputs — the full row drags rawData/contentLabel JSON
-  // for every session (~82k rows for twitch), which alone blew the step budget.
-  const sessions = await prisma.streamSessionFact.findMany({
-    where: {
-      source: SOURCE,
-      platform: input.platform,
-      partitionDate: input.partitionDate,
-    },
-    orderBy: { streamEndsAt: "asc" },
-    select: ROLLUP_SESSION_SELECT,
+}) {
+  return coreRecomputeRollups(prisma, {
+    source: SOURCE,
+    platform: input.platform,
+    partitionDate: input.partitionDate,
+    matchedOnly: input.matchedOnly,
   });
-
-  await prisma.$transaction([
-    prisma.channelDailyRollup.deleteMany({
-      where: {
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-      },
-    }),
-    ...(input.matchedOnly
-      ? []
-      : [
-          prisma.gameDailyRollup.deleteMany({
-            where: {
-              source: SOURCE,
-              platform: input.platform,
-              date: input.partitionDate,
-            },
-          }),
-        ]),
-    prisma.channelGameDailyRollup.deleteMany({
-      where: {
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-      },
-    }),
-  ]);
-
-  const byChannel = new Map<string, RollupSession[]>();
-  const byGame = new Map<string, RollupSession[]>();
-  const byChannelGame = new Map<string, RollupSession[]>();
-
-  for (const session of sessions) {
-    const channelKey = session.platformUserId;
-    byChannel.set(channelKey, [...(byChannel.get(channelKey) ?? []), session]);
-
-    const gameName = session.primaryGameName;
-    if (!gameName) continue;
-
-    if (!input.matchedOnly) {
-      byGame.set(gameName, [...(byGame.get(gameName) ?? []), session]);
-    }
-    const channelGameKey = `${channelKey}\u0000${gameName}`;
-    byChannelGame.set(channelGameKey, [
-      ...(byChannelGame.get(channelGameKey) ?? []),
-      session,
-    ]);
-  }
-
-  const channelRollups: Prisma.ChannelDailyRollupCreateManyInput[] = [];
-  for (const channelSessions of byChannel.values()) {
-    const latest = channelSessions[channelSessions.length - 1]!;
-    const peak = channelSessions.reduce(
-      (best, session) =>
-        best === null || session.peakViewers > best.peakViewers
-          ? session
-          : best,
-      null as RollupSession | null,
-    );
-    const minutesWatched = channelSessions.reduce(
-      (sum, session) => sum + session.minutesWatched,
-      0n,
-    );
-    const airtimeMinutes = channelSessions.reduce(
-      (sum, session) => sum + session.airtimeMinutes,
-      0,
-    );
-    const sessionViews = channelSessions.reduce(
-      (sum, session) => sum + (session.sessionViews ?? 0n),
-      0n,
-    );
-
-    channelRollups.push({
-      source: SOURCE,
-      platform: input.platform,
-      date: input.partitionDate,
-      creatorProfileId: latest.creatorProfileId,
-      platformUserId: latest.platformUserId,
-      platformUsername: latest.platformUsername,
-      platformDisplayName: latest.platformDisplayName,
-      platformLogoUrl: latest.platformLogoUrl,
-      country: latest.country,
-      sessionCount: channelSessions.length,
-      airtimeMinutes,
-      minutesWatched,
-      sessionViews,
-      averageViewers:
-        airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
-      averageViewersGlobal: weightedAverage(
-        channelSessions.map((session) => ({
-          value: session.averageViewersGlobal,
-          weight: session.airtimeMinutes,
-        })),
-      ),
-      peakViewers: peak?.peakViewers ?? null,
-      peakViewersAt: peak?.peakViewersAt ?? null,
-      primaryGameName: mostWatchedGame(channelSessions),
-      gameNames: [
-        ...new Set(
-          channelSessions
-            .flatMap((session) => [
-              session.primaryGameName,
-              ...session.allGameNames,
-            ])
-            .filter((game): game is string => Boolean(game)),
-        ),
-      ].slice(0, 20),
-      bestRank: channelSessions.reduce<number | null>(
-        (best, session) =>
-          session.bestRank === null
-            ? best
-            : best === null
-              ? session.bestRank
-              : Math.min(best, session.bestRank),
-        null,
-      ),
-      averageRank: weightedAverage(
-        channelSessions.map((session) => ({
-          value: session.averageRank,
-          weight: session.airtimeMinutes,
-        })),
-      ),
-      worstRank: channelSessions.reduce<number | null>(
-        (worst, session) =>
-          session.worstRank === null
-            ? worst
-            : worst === null
-              ? session.worstRank
-              : Math.max(worst, session.worstRank),
-        null,
-      ),
-      lastStreamAt: latest.streamEndsAt,
-    });
-  }
-
-  const gameRollups: Prisma.GameDailyRollupCreateManyInput[] = [];
-  if (!input.matchedOnly) {
-    for (const [gameName, gameSessions] of byGame.entries()) {
-      const minutesWatched = gameSessions.reduce(
-        (sum, session) => sum + session.minutesWatched,
-        0n,
-      );
-      const airtimeMinutes = gameSessions.reduce(
-        (sum, session) => sum + session.airtimeMinutes,
-        0,
-      );
-      const peak = gameSessions.reduce(
-        (best, session) =>
-          best === null || session.peakViewers > best.peakViewers
-            ? session
-            : best,
-        null as RollupSession | null,
-      );
-      const topChannel = gameSessions.reduce(
-        (best, session) =>
-          best === null || session.minutesWatched > best.minutesWatched
-            ? session
-            : best,
-        null as RollupSession | null,
-      );
-
-      gameRollups.push({
-        source: SOURCE,
-        platform: input.platform,
-        date: input.partitionDate,
-        gameName,
-        sessionCount: gameSessions.length,
-        channelCount: new Set(gameSessions.map((s) => s.platformUserId)).size,
-        airtimeMinutes,
-        minutesWatched,
-        averageViewers:
-          airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
-        peakViewers: peak?.peakViewers ?? null,
-        topChannelUserId: topChannel?.platformUserId ?? null,
-        topChannelUsername: topChannel?.platformUsername ?? null,
-        topChannelDisplayName: topChannel?.platformDisplayName ?? null,
-      });
-    }
-  }
-
-  const channelGameRollups: Prisma.ChannelGameDailyRollupCreateManyInput[] = [];
-  for (const channelGameSessions of byChannelGame.values()) {
-    const latest = channelGameSessions[channelGameSessions.length - 1]!;
-    if (!latest.primaryGameName) continue;
-
-    const minutesWatched = channelGameSessions.reduce(
-      (sum, session) => sum + session.minutesWatched,
-      0n,
-    );
-    const airtimeMinutes = channelGameSessions.reduce(
-      (sum, session) => sum + session.airtimeMinutes,
-      0,
-    );
-    const peak = channelGameSessions.reduce(
-      (best, session) =>
-        best === null || session.peakViewers > best.peakViewers
-          ? session
-          : best,
-      null as RollupSession | null,
-    );
-
-    channelGameRollups.push({
-      source: SOURCE,
-      platform: input.platform,
-      date: input.partitionDate,
-      creatorProfileId: latest.creatorProfileId,
-      platformUserId: latest.platformUserId,
-      platformUsername: latest.platformUsername,
-      platformDisplayName: latest.platformDisplayName,
-      gameName: latest.primaryGameName,
-      sessionCount: channelGameSessions.length,
-      airtimeMinutes,
-      minutesWatched,
-      averageViewers:
-        airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null,
-      peakViewers: peak?.peakViewers ?? null,
-    });
-  }
-
-  for (const batch of chunk(channelRollups, BATCH_SIZE)) {
-    await prisma.channelDailyRollup.createMany({ data: batch });
-  }
-  for (const batch of chunk(gameRollups, BATCH_SIZE)) {
-    await prisma.gameDailyRollup.createMany({ data: batch });
-  }
-  for (const batch of chunk(channelGameRollups, BATCH_SIZE)) {
-    await prisma.channelGameDailyRollup.createMany({ data: batch });
-  }
-
-  return {
-    channelRollups: channelRollups.length,
-    gameRollups: gameRollups.length,
-    channelGameRollups: channelGameRollups.length,
-  };
 }
 
 function isCsvRecordComplete(record: string): boolean {
@@ -901,6 +610,7 @@ export async function ingestStreamHatchetDailySessionObject(
       scanned: 0,
       parsed: 0,
       written: 0,
+      updated: 0,
       skipped: existingObject.importedRows,
       failed: 0,
       matched: 0,
@@ -962,6 +672,9 @@ export async function ingestStreamHatchetDailySessionObject(
 
     let matchedSessions = 0;
     let written = 0;
+    // Re-sighted streams merged into an existing row: not new rows, but not
+    // "skipped" either — a re-sighting extends a stream we already had.
+    let updatedSessions = 0;
     let pendingSessions: StreamHatchetDailySession[] = [];
 
     async function flushPendingSessions() {
@@ -985,11 +698,12 @@ export async function ingestStreamHatchetDailySessionObject(
         );
       if (rows.length === 0) return;
 
-      const result = await prisma.streamSessionFact.createMany({
-        data: rows,
-        skipDuplicates: true,
-      });
-      written += result.count;
+      // Upsert, not createMany: a stream still live at the export cut is
+      // re-sighted in the next file with a slid window, and merges into the
+      // row it already has (see upsertStreamSessionFacts).
+      const result = await upsertStreamSessionFacts(prisma, rows);
+      written += result.inserted;
+      updatedSessions += result.updated;
     }
 
     const parseStats = await parseDailySessionCsv({
@@ -1021,7 +735,7 @@ export async function ingestStreamHatchetDailySessionObject(
         status: input.skipRollups ? "running" : "completed",
         rowCount: parseStats.rowsScanned,
         importedRows: written,
-        skippedRows: parseStats.rowsAccepted - written,
+        skippedRows: parseStats.rowsAccepted - written - updatedSessions,
         failedRows: parseStats.rowsRejected,
         lastImportedAt: new Date(),
         metadata: {
@@ -1043,7 +757,8 @@ export async function ingestStreamHatchetDailySessionObject(
       scanned: parseStats.rowsScanned,
       parsed: parseStats.rowsAccepted,
       written,
-      skipped: parseStats.rowsAccepted - written,
+      updated: updatedSessions,
+      skipped: parseStats.rowsAccepted - written - updatedSessions,
       failed: parseStats.rowsRejected,
       matched: matchedSessions,
       skippedExisting: false,
@@ -1112,4 +827,20 @@ export async function finalizeStreamHatchetDailySessionRollups(
   });
 
   return rollups;
+}
+
+/**
+ * Rebuild the per-creator rollups for one day. Runs once per DATE after every
+ * platform's rollups for that date: a creator's day spans platforms, and the
+ * point of this table is merging their intervals.
+ */
+export async function finalizeCreatorDailyRollups(input: {
+  date: Date;
+}): Promise<{ creatorRollups: number }> {
+  const partitionDate = new Date(input.date);
+  partitionDate.setUTCHours(0, 0, 0, 0);
+  return coreRecomputeCreatorRollups(prisma, {
+    source: SOURCE,
+    partitionDate,
+  });
 }
