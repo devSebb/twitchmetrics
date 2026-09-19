@@ -1,10 +1,12 @@
 import { prisma, type Platform } from "@twitchmetrics/database";
 import { fetchVideos } from "@/server/adapters/twitch";
 import {
+  aggregateCreatorRollups,
   aggregateShRollups,
   combineViewerStats,
   rollupWindowStart,
   viewerMetricsFromExtended,
+  type CreatorRollupDay,
   type ShRollupTotals,
 } from "@/server/services/streaming-stats";
 import { internalPlatformForStreamHatchet } from "@/server/adapters/streamhatchet";
@@ -71,42 +73,63 @@ export async function getStreamingStatsBatch(
   // UTC-midnight start so @db.Date rollup rows on the boundary day match.
   const since = rollupWindowStart(sinceDays);
 
-  const [snapshots, rollups, twitchAccounts] = await Promise.all([
-    prisma.metricSnapshot.findMany({
-      where: {
-        creatorProfileId: { in: creatorProfileIds },
-        snapshotAt: { gte: since },
-      },
-      select: {
-        creatorProfileId: true,
-        extendedMetrics: true,
-      },
-    }),
-    prisma.channelDailyRollup.findMany({
-      where: {
-        creatorProfileId: { in: creatorProfileIds },
-        date: { gte: since },
-      },
-      select: {
-        creatorProfileId: true,
-        platform: true,
-        sessionCount: true,
-        airtimeMinutes: true,
-        minutesWatched: true,
-        peakViewers: true,
-      },
-    }),
-    prisma.platformAccount.findMany({
-      where: {
-        creatorProfileId: { in: creatorProfileIds },
-        platform: "twitch",
-      },
-      select: {
-        creatorProfileId: true,
-        platformUserId: true,
-      },
-    }),
-  ]);
+  const [snapshots, rollups, creatorRollups, twitchAccounts] =
+    await Promise.all([
+      prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: { in: creatorProfileIds },
+          snapshotAt: { gte: since },
+        },
+        select: {
+          creatorProfileId: true,
+          extendedMetrics: true,
+        },
+      }),
+      prisma.channelDailyRollup.findMany({
+        where: {
+          creatorProfileId: { in: creatorProfileIds },
+          date: { gte: since },
+        },
+        select: {
+          creatorProfileId: true,
+          platform: true,
+          sessionCount: true,
+          airtimeMinutes: true,
+          minutesWatched: true,
+          peakViewers: true,
+        },
+      }),
+      // C27: merged per-creator days, so a simulcast is not counted twice.
+      // Falls back to the per-platform rows above for creators the rollup
+      // pass has not covered yet.
+      prisma.creatorDailyRollup.findMany({
+        where: {
+          creatorProfileId: { in: creatorProfileIds },
+          date: { gte: since },
+        },
+        select: {
+          creatorProfileId: true,
+          date: true,
+          uniqueAirtimeMinutes: true,
+          minutesWatched: true,
+          streamBlocks: true,
+          platforms: true,
+          intervals: true,
+          peakViewers: true,
+          peakPlatform: true,
+        },
+      }),
+      prisma.platformAccount.findMany({
+        where: {
+          creatorProfileId: { in: creatorProfileIds },
+          platform: "twitch",
+        },
+        select: {
+          creatorProfileId: true,
+          platformUserId: true,
+        },
+      }),
+    ]);
 
   const viewerAccs = new Map<string, ViewerAccumulator>();
   for (const snap of snapshots) {
@@ -129,6 +152,13 @@ export async function getStreamingStatsBatch(
     rollupsByCreator.set(row.creatorProfileId, list);
   }
 
+  const creatorRollupsByCreator = new Map<string, CreatorRollupDay[]>();
+  for (const row of creatorRollups) {
+    const list = creatorRollupsByCreator.get(row.creatorProfileId) ?? [];
+    list.push(row);
+    creatorRollupsByCreator.set(row.creatorProfileId, list);
+  }
+
   const shTotalsByCreator = new Map<
     string,
     ShRollupTotals & { coversTwitch: boolean }
@@ -141,33 +171,47 @@ export async function getStreamingStatsBatch(
     shTotalsByCreator.set(creatorId, { ...totals, coversTwitch });
   }
 
+  /** Merged per-creator totals win; per-platform sums are the fallback. */
+  function totalsFor(creatorId: string): ShRollupTotals | null {
+    const merged = creatorRollupsByCreator.get(creatorId);
+    if (merged && merged.length > 0) return aggregateCreatorRollups(merged);
+    return shTotalsByCreator.get(creatorId) ?? null;
+  }
+
+  function applyAirtime(creatorId: string, totals: ShRollupTotals | null) {
+    const stats = result.get(creatorId);
+    if (!stats || !totals || totals.airtimeSeconds <= 0) return;
+    stats.airTimeSeconds = totals.airtimeSeconds;
+    stats.avgAirTimeSeconds =
+      totals.streamCount > 0
+        ? Math.round(totals.airtimeSeconds / totals.streamCount)
+        : null;
+  }
+
   for (const creatorId of creatorProfileIds) {
     const stats = result.get(creatorId)!;
     const acc = viewerAccs.get(creatorId) ?? { peak: null, values: [] };
-    const sh = shTotalsByCreator.get(creatorId) ?? null;
+    const totals = totalsFor(creatorId);
 
     const { peakViewers, avgViewers } = combineViewerStats(
       { peak: acc.peak, avgSamples: acc.values },
-      sh,
+      totals,
     );
     stats.peakViewers = peakViewers;
     stats.avgViewers = avgViewers;
 
-    if (sh && sh.airtimeSeconds > 0) {
-      stats.airTimeSeconds = sh.airtimeSeconds;
-      stats.avgAirTimeSeconds =
-        sh.streamCount > 0
-          ? Math.round(sh.airtimeSeconds / sh.streamCount)
-          : null;
-    }
+    applyAirtime(creatorId, totals);
   }
 
   const airtimeOutcomes = await Promise.allSettled(
     twitchAccounts.map(async (account) => {
       // When SH rollups already cover Twitch for this creator, skip the
-      // Videos API — adding it would double-count the same streams.
+      // Videos API — adding it would double-count the same streams. Creators
+      // on the merged path still fetch: their VOD time is unioned per day, so
+      // a day SH missed can be filled without double-counting the rest.
+      const merged = creatorRollupsByCreator.get(account.creatorProfileId);
       const sh = shTotalsByCreator.get(account.creatorProfileId);
-      if (sh?.coversTwitch) return null;
+      if (!merged?.length && sh?.coversTwitch) return null;
 
       const videos = await fetchVideos(account.platformUserId, {
         startedAfter: since,
@@ -183,6 +227,23 @@ export async function getStreamingStatsBatch(
     if (videos.length === 0) continue;
     const stats = result.get(creatorProfileId);
     if (!stats) continue;
+
+    const merged = creatorRollupsByCreator.get(creatorProfileId);
+    if (merged?.length) {
+      // Union, not sum: the VOD intervals merge into each day's live blocks.
+      applyAirtime(
+        creatorProfileId,
+        aggregateCreatorRollups(
+          merged,
+          videos.map((v) => ({
+            startedAt: new Date(v.createdAt),
+            durationSeconds: v.durationSeconds,
+          })),
+        ),
+      );
+      continue;
+    }
+
     const airTime = videos.reduce((sum, v) => sum + v.durationSeconds, 0);
     stats.airTimeSeconds = (stats.airTimeSeconds ?? 0) + airTime;
     const sh = shTotalsByCreator.get(creatorProfileId);

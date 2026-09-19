@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateCreatorRollups,
   aggregateShRollups,
   combineViewerStats,
   extractSnapshotViewerStats,
   rollupWindowStart,
   viewerMetricsFromExtended,
+  vodIntervalsByDay,
+  type CreatorRollupDay,
   type ShRollupTotals,
 } from "./streaming-stats";
 
@@ -236,5 +239,137 @@ describe("combineViewerStats", () => {
       peakPlatform: null,
       viewerPlatforms: [],
     });
+  });
+});
+
+describe("vodIntervalsByDay", () => {
+  it("splits a stream crossing midnight into one interval per UTC day", () => {
+    const byDay = vodIntervalsByDay([
+      {
+        startedAt: new Date("2026-09-10T23:00:00.000Z"),
+        durationSeconds: 7200,
+      },
+    ]);
+    expect([...byDay.entries()]).toEqual([
+      ["2026-09-10", [[1380, 1440]]],
+      ["2026-09-11", [[0, 60]]],
+    ]);
+  });
+
+  it("ignores zero-length VODs", () => {
+    expect(
+      vodIntervalsByDay([
+        { startedAt: new Date("2026-09-10T10:00:00.000Z"), durationSeconds: 0 },
+      ]).size,
+    ).toBe(0);
+  });
+});
+
+describe("aggregateCreatorRollups", () => {
+  const day = (over: Partial<CreatorRollupDay> = {}): CreatorRollupDay => ({
+    date: new Date("2026-09-10T00:00:00.000Z"),
+    uniqueAirtimeMinutes: 240,
+    minutesWatched: 2_880_000n,
+    streamBlocks: 1,
+    platforms: ["twitch", "youtube"],
+    intervals: [[600, 840]],
+    peakViewers: 15_000,
+    peakPlatform: "twitch",
+    ...over,
+  });
+
+  it("reports the merged simulcast airtime, so the average is not halved", () => {
+    // The QA fixture: 4 h simulcast, 2.4M + 480k watch minutes. Summing the
+    // channel rows would give 480 min of airtime and avg 6,000.
+    const totals = aggregateCreatorRollups([
+      day({ minutesWatched: 2_880_000n }),
+    ]);
+    expect(totals.airtimeSeconds).toBe(240 * 60);
+    expect(combineViewerStats({ peak: null, avgSamples: [] }, totals)).toEqual({
+      peakViewers: 15_000,
+      avgViewers: 12_000,
+      peakPlatform: "twitch",
+      viewerPlatforms: ["twitch", "youtube"],
+    });
+  });
+
+  it("does not add VOD time on a day Stream Hatchet already covers Twitch", () => {
+    const totals = aggregateCreatorRollups(
+      [day()],
+      [
+        {
+          startedAt: new Date("2026-09-10T10:00:00.000Z"),
+          durationSeconds: 4 * 3600,
+        },
+      ],
+    );
+    expect(totals.airtimeSeconds).toBe(240 * 60);
+    expect(totals.vodMinutesAdded).toBe(0);
+  });
+
+  it("unions VOD time with a non-Twitch day instead of adding it", () => {
+    // YouTube 10:00-14:00 stored; the Twitch VOD runs 12:00-16:00, so only the
+    // two non-overlapping hours are new.
+    const totals = aggregateCreatorRollups(
+      [day({ platforms: ["youtube"], intervals: [[600, 840]] })],
+      [
+        {
+          startedAt: new Date("2026-09-10T12:00:00.000Z"),
+          durationSeconds: 4 * 3600,
+        },
+      ],
+    );
+    expect(totals.airtimeSeconds).toBe(360 * 60);
+    expect(totals.vodMinutesAdded).toBe(120);
+    expect(totals.streamBlocks).toBe(1);
+    expect(totals.airtimePlatforms).toContain("twitch");
+  });
+
+  it("counts a VOD-only day in full", () => {
+    const totals = aggregateCreatorRollups(
+      [],
+      [
+        {
+          startedAt: new Date("2026-09-12T08:00:00.000Z"),
+          durationSeconds: 2 * 3600,
+        },
+      ],
+    );
+    expect(totals.airtimeSeconds).toBe(120 * 60);
+    expect(totals.streamBlocks).toBe(1);
+    expect(totals.airtimePlatforms).toEqual(["twitch"]);
+  });
+
+  it("keeps the stored figure when intervals are missing", () => {
+    const totals = aggregateCreatorRollups(
+      [day({ platforms: ["youtube"], intervals: null })],
+      [
+        {
+          startedAt: new Date("2026-09-10T12:00:00.000Z"),
+          durationSeconds: 3600,
+        },
+      ],
+    );
+    expect(totals.airtimeSeconds).toBe(240 * 60);
+    expect(totals.vodMinutesAdded).toBe(0);
+  });
+
+  it("sums watch time across days and keeps the highest peak", () => {
+    const totals = aggregateCreatorRollups([
+      day({ peakViewers: 9_000, peakPlatform: "youtube" }),
+      day({
+        date: new Date("2026-09-11T00:00:00.000Z"),
+        uniqueAirtimeMinutes: 120,
+        minutesWatched: 600_000n,
+        peakViewers: 21_000,
+        peakPlatform: "kick",
+        platforms: ["kick"],
+      }),
+    ]);
+    expect(totals.airtimeSeconds).toBe(360 * 60);
+    expect(totals.minutesWatched).toBe(3_480_000);
+    expect(totals.peak).toBe(21_000);
+    expect(totals.peakPlatform).toBe("kick");
+    expect(totals.streamCount).toBe(2);
   });
 });

@@ -6,11 +6,13 @@ import { adminProcedure } from "../middleware";
 import { getTierForCreator } from "@twitchmetrics/core/tiers";
 import { getPopularGames } from "@/server/services/popular-games";
 import {
+  aggregateCreatorRollups,
   aggregateShRollups,
   combineViewerStats,
   extractSnapshotViewerStats,
   rollupWindowStart,
   type ShRollupTotals,
+  type VodAirtime,
 } from "@/server/services/streaming-stats";
 import { isRecentObservation } from "@/lib/metric-freshness";
 
@@ -748,6 +750,9 @@ export const snapshotRouter = router({
       let streamCount = 0;
       let twitchApiAirTimeSeconds: number | null = null;
       let twitchApiStreamCount = 0;
+      // Kept as intervals too: the creator-rollup path unions VOD time with
+      // the day's live blocks instead of adding a bare duration.
+      let twitchVods: VodAirtime[] = [];
       let addedTwitchApiAirtime = false;
       let suppressTwitchApiAirtime = false;
 
@@ -773,6 +778,10 @@ export const snapshotRouter = router({
               (sum, v) => sum + v.durationSeconds,
               0,
             );
+            twitchVods = videos.map((v) => ({
+              startedAt: new Date(v.createdAt),
+              durationSeconds: v.durationSeconds,
+            }));
           }
         }
       } catch {
@@ -795,7 +804,46 @@ export const snapshotRouter = router({
 
       let shTotals: ShRollupTotals | null = null;
 
-      if (streamHatchetWhere.length > 0) {
+      // C27. CreatorDailyRollup stores each day's MERGED live intervals, so a
+      // simulcast counts once: airtime is wall-clock time and
+      // Σ minutesWatched / airtime is the combined concurrent average rather
+      // than a halved one. The per-platform ChannelDailyRollup path below
+      // stays as the fallback for creators the rollup pass has not covered
+      // yet (it runs per date, so recent days can lag).
+      const creatorRollups = await ctx.prisma.creatorDailyRollup.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          date: { gte: since },
+        },
+        select: {
+          date: true,
+          uniqueAirtimeMinutes: true,
+          minutesWatched: true,
+          streamBlocks: true,
+          platforms: true,
+          intervals: true,
+          peakViewers: true,
+          peakPlatform: true,
+        },
+      });
+
+      if (creatorRollups.length > 0) {
+        const totals = aggregateCreatorRollups(creatorRollups, twitchVods);
+        shTotals = totals;
+        airTimeSeconds = totals.airtimeSeconds;
+        streamCount = totals.streamCount;
+        avgAirTimeSeconds =
+          streamCount > 0 ? Math.round(airTimeSeconds / streamCount) : null;
+        for (const platform of totals.airtimePlatforms) {
+          allPlatforms.add(platform);
+        }
+        for (const platform of totals.watchPlatforms) {
+          allPlatforms.add(platform);
+        }
+        // VOD time is already unioned into the figures above; adding the raw
+        // Videos API duration on top would double-count it.
+        suppressTwitchApiAirtime = true;
+      } else if (streamHatchetWhere.length > 0) {
         const rollups = await ctx.prisma.channelDailyRollup.findMany({
           where: {
             date: { gte: since },

@@ -1,4 +1,5 @@
 import type { Platform } from "@twitchmetrics/database";
+import { mergeIntervals, totalMinutes } from "@twitchmetrics/core/rollups";
 
 /**
  * Pure aggregation math shared by the profile stats (trpc snapshot router)
@@ -151,6 +152,165 @@ export function aggregateShRollups(
     airtimeSeconds,
     minutesWatched,
     streamCount,
+    peak,
+    peakPlatform,
+    airtimePlatforms: [...airtimePlatforms],
+    watchPlatforms: [...watchPlatforms],
+  };
+}
+
+/** One CreatorDailyRollup row, as both read paths select it. */
+export type CreatorRollupDay = {
+  date: Date;
+  uniqueAirtimeMinutes: number;
+  minutesWatched: bigint;
+  streamBlocks: number;
+  platforms: Platform[];
+  /** Merged [startMinute, endMinute] pairs from 00:00Z; Json, so unknown. */
+  intervals: unknown;
+  peakViewers: number | null;
+  peakPlatform: Platform | null;
+};
+
+/** A Twitch VOD, as the Videos API returns it. */
+export type VodAirtime = { startedAt: Date; durationSeconds: number };
+
+const MINUTE_MS = 60_000;
+
+function dayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseIntervals(value: unknown): [number, number][] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed: [number, number][] = [];
+  for (const entry of value) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const [start, end] = entry;
+    if (typeof start !== "number" || typeof end !== "number") continue;
+    parsed.push([start, end]);
+  }
+  return parsed;
+}
+
+/**
+ * Split VODs into per-UTC-day minute intervals. A stream crossing midnight
+ * yields one interval per day it touches, in the same shape (minutes from
+ * 00:00Z) that `CreatorDailyRollup.intervals` stores, so the two can merge.
+ */
+export function vodIntervalsByDay(
+  vods: VodAirtime[],
+): Map<string, [number, number][]> {
+  const byDay = new Map<string, [number, number][]>();
+  for (const vod of vods) {
+    if (vod.durationSeconds <= 0) continue;
+    const startMs = vod.startedAt.getTime();
+    const endMs = startMs + vod.durationSeconds * 1000;
+
+    let cursor = new Date(vod.startedAt);
+    cursor.setUTCHours(0, 0, 0, 0);
+    while (cursor.getTime() < endMs) {
+      const dayStartMs = cursor.getTime();
+      const start = Math.max(startMs, dayStartMs);
+      const end = Math.min(endMs, dayStartMs + DAY_MS);
+      if (end > start) {
+        const key = dayKey(cursor);
+        const list = byDay.get(key) ?? [];
+        list.push([
+          (start - dayStartMs) / MINUTE_MS,
+          (end - dayStartMs) / MINUTE_MS,
+        ]);
+        byDay.set(key, list);
+      }
+      cursor = new Date(dayStartMs + DAY_MS);
+    }
+  }
+  return byDay;
+}
+
+/**
+ * Fold CreatorDailyRollup rows into the same shape `combineViewerStats` takes,
+ * so the viewer math is identical whichever table fed it.
+ *
+ * Airtime is the creator's MERGED wall-clock time: a simulcast counts once, so
+ * `Σ minutesWatched / airtime` is the combined concurrent average rather than
+ * a halved one (the QA sheet's "should be unique airtime" and "doing the
+ * average instead of both platforms combined").
+ *
+ * Twitch VOD time is UNIONED, never added. SH's Twitch feed misses ~8 % of
+ * live channels, so VODs still have to fill those gaps — but on a day SH
+ * already covers Twitch, adding VOD duration would double-count the very
+ * stream the rollup describes. Days SH covers for Twitch are therefore left
+ * alone, and on other days the VOD intervals merge with the stored ones, so
+ * time that overlaps a YouTube or Kick block is not counted twice either.
+ */
+export function aggregateCreatorRollups(
+  rows: CreatorRollupDay[],
+  vods: VodAirtime[] = [],
+): ShRollupTotals & { streamBlocks: number; vodMinutesAdded: number } {
+  const vodsByDay = vodIntervalsByDay(vods);
+
+  let airtimeMinutes = 0;
+  let minutesWatched = 0;
+  let streamBlocks = 0;
+  let vodMinutesAdded = 0;
+  let peak: number | null = null;
+  let peakPlatform: Platform | null = null;
+  const airtimePlatforms = new Set<Platform>();
+  const watchPlatforms = new Set<Platform>();
+
+  for (const row of rows) {
+    const key = dayKey(row.date);
+    const dayVods = vodsByDay.get(key);
+    vodsByDay.delete(key);
+
+    const stored = parseIntervals(row.intervals);
+    const coversTwitch = row.platforms.includes("twitch");
+    // Rows written before `intervals` existed, or by a path that left it null,
+    // can't be merged against — keep their own figure and skip the union.
+    const canMerge = stored !== null && stored.length > 0;
+
+    if (dayVods && !coversTwitch && canMerge) {
+      const merged = mergeIntervals([...stored, ...dayVods]);
+      const mergedMinutes = Math.round(totalMinutes(merged));
+      vodMinutesAdded += Math.max(0, mergedMinutes - row.uniqueAirtimeMinutes);
+      airtimeMinutes += mergedMinutes;
+      streamBlocks += merged.length;
+      airtimePlatforms.add("twitch");
+    } else {
+      airtimeMinutes += row.uniqueAirtimeMinutes;
+      streamBlocks += row.streamBlocks;
+    }
+
+    minutesWatched += Number(row.minutesWatched);
+    if (row.peakViewers !== null && (peak === null || row.peakViewers > peak)) {
+      peak = row.peakViewers;
+      peakPlatform = row.peakPlatform;
+    }
+    for (const platform of row.platforms) {
+      if (row.uniqueAirtimeMinutes > 0) airtimePlatforms.add(platform);
+      if (row.minutesWatched > 0n) watchPlatforms.add(platform);
+    }
+  }
+
+  // Days with VODs but no rollup row at all: SH never saw the creator that
+  // day, so the VOD time is all we have.
+  for (const dayVods of vodsByDay.values()) {
+    const merged = mergeIntervals(dayVods);
+    const mergedMinutes = Math.round(totalMinutes(merged));
+    if (mergedMinutes <= 0) continue;
+    airtimeMinutes += mergedMinutes;
+    vodMinutesAdded += mergedMinutes;
+    streamBlocks += merged.length;
+    airtimePlatforms.add("twitch");
+  }
+
+  return {
+    airtimeSeconds: airtimeMinutes * 60,
+    minutesWatched,
+    streamCount: streamBlocks,
+    streamBlocks,
+    vodMinutesAdded,
     peak,
     peakPlatform,
     airtimePlatforms: [...airtimePlatforms],

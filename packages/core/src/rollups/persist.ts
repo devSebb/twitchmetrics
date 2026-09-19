@@ -245,3 +245,116 @@ export async function recomputeCreatorRollups(
 
   return { creatorRollups: rows.length };
 }
+
+/**
+ * Rebuild CreatorDailyRollup for specific profiles over a date range.
+ *
+ * Merges, identity links and stranding repairs re-point history from one
+ * profile to another (`StreamSessionFact.creatorProfileId`), which silently
+ * invalidates both sides' merged days: the stub keeps rows for facts it no
+ * longer owns, and the canonical is missing the ones it gained. Callers pass
+ * every profile they touched — stub and canonical — plus the moved history's
+ * range, and run this outside their transaction.
+ *
+ * Unlike `recomputeCreatorRollups`, which owns a whole date, this deletes only
+ * the given profiles' rows, so it is safe to run while other days and creators
+ * are untouched.
+ */
+export async function recomputeCreatorRollupsForProfiles(
+  db: CreatorRollupDb,
+  input: {
+    source: string;
+    profileIds: string[];
+    from: Date;
+    to: Date;
+    retry?: <T>(fn: () => Promise<T>) => Promise<T>;
+  },
+): Promise<{ dates: number; creatorRollups: number }> {
+  const { source, profileIds } = input;
+  const run = input.retry ?? (<T>(fn: () => Promise<T>) => fn());
+  if (profileIds.length === 0) return { dates: 0, creatorRollups: 0 };
+
+  const firstDay = new Date(input.from);
+  firstDay.setUTCHours(0, 0, 0, 0);
+  const lastDay = new Date(input.to);
+  lastDay.setUTCHours(0, 0, 0, 0);
+
+  const rangeEnd = new Date(lastDay.getTime() + DAY_MS);
+  // One load for the whole range, then the per-day grouping runs in memory: a
+  // merge must not fan out into a query per day (a two-year creator would be
+  // ~700 round trips inside an admin request).
+  const facts = (await run(() =>
+    db.streamSessionFact.findMany({
+      where: {
+        source,
+        creatorProfileId: { in: profileIds },
+        partitionDate: {
+          gte: new Date(firstDay.getTime() - SCAN_MARGIN_DAYS * DAY_MS),
+          lte: new Date(lastDay.getTime() + SCAN_MARGIN_DAYS * DAY_MS),
+        },
+        streamBeginsAt: { lt: rangeEnd },
+        streamEndsAt: { gt: firstDay },
+      },
+      select: { ...ROLLUP_FACT_SELECT, platform: true },
+    }),
+  )) as (RollupFact & { platform: string })[];
+
+  const creatorFacts = facts.map(
+    (fact): CreatorRollupFact => ({
+      ...fact,
+      internalPlatform: internalPlatformForCode(fact.platform),
+    }),
+  );
+
+  const rows = [];
+  let dates = 0;
+  for (
+    let dayStart = firstDay;
+    dayStart.getTime() <= lastDay.getTime();
+    dayStart = new Date(dayStart.getTime() + DAY_MS)
+  ) {
+    dates += 1;
+    const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+    const overlapping = creatorFacts.filter(
+      (fact) =>
+        fact.streamBeginsAt.getTime() < dayEnd.getTime() &&
+        fact.streamEndsAt.getTime() > dayStart.getTime(),
+    );
+    if (overlapping.length === 0) continue;
+    rows.push(...buildCreatorRollups(overlapping, dayStart));
+  }
+
+  // Delete the whole range first: a profile that lost all its history for a
+  // day must lose that row, not keep a stale one.
+  await run(() =>
+    db.creatorDailyRollup.deleteMany({
+      where: {
+        creatorProfileId: { in: profileIds },
+        date: { gte: firstDay, lte: lastDay },
+      },
+    }),
+  );
+
+  let written = 0;
+  for (const batch of chunk(rows, WRITE_BATCH)) {
+    await run(() =>
+      db.creatorDailyRollup.createMany({
+        data: batch.map((row) => ({
+          creatorProfileId: row.creatorProfileId,
+          date: row.date,
+          uniqueAirtimeMinutes: row.uniqueAirtimeMinutes,
+          minutesWatched: row.minutesWatched,
+          streamBlocks: row.streamBlocks,
+          platforms: row.platforms as never[],
+          intervals: row.intervals,
+          peakViewers: row.peakViewers,
+          peakPlatform: row.peakPlatform as never,
+        })),
+        skipDuplicates: true,
+      }),
+    );
+    written += batch.length;
+  }
+
+  return { dates, creatorRollups: written };
+}

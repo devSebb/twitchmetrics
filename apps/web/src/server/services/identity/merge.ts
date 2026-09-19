@@ -27,17 +27,21 @@
  */
 
 import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
+import { recomputeCreatorRollupsForProfiles } from "@twitchmetrics/core/rollups";
 import { listedAfterMerge } from "../creator-visibility";
 
 // Local logger (no `@/` alias) so this service is importable from both the
 // Next.js app and the standalone identity worker.
+const formatLog = (data: Record<string, unknown>, message: string) =>
+  `[identity-merge] ${message} ${JSON.stringify(data, (_k, v) =>
+    typeof v === "bigint" ? v.toString() : v,
+  )}`;
+
 const log = {
   info: (data: Record<string, unknown>, message: string) =>
-    console.info(
-      `[identity-merge] ${message} ${JSON.stringify(data, (_k, v) =>
-        typeof v === "bigint" ? v.toString() : v,
-      )}`,
-    ),
+    console.info(formatLog(data, message)),
+  warn: (data: Record<string, unknown>, message: string) =>
+    console.warn(formatLog(data, message)),
 };
 const SOURCE = "streamhatchet";
 
@@ -203,6 +207,40 @@ export async function moveShHistoryForAccount(
     rollups: rollups.count,
     gameRollups: gameRollups.count,
   };
+}
+
+/**
+ * Rebuild CreatorDailyRollup for profiles whose SH history just moved.
+ *
+ * Best-effort by design: the merge itself has already committed, and a failed
+ * rebuild only leaves stale merged days that the next scheduled rollup pass
+ * corrects. It also keeps merges working before the Phase C migration lands,
+ * when the table does not exist yet.
+ */
+async function recomputeMergedCreatorDays(profileIds: string[]): Promise<void> {
+  try {
+    const range = await prisma.streamSessionFact.aggregate({
+      where: { source: SOURCE, creatorProfileId: { in: profileIds } },
+      _min: { streamBeginsAt: true },
+      _max: { streamEndsAt: true },
+    });
+    const from = range._min.streamBeginsAt;
+    const to = range._max.streamEndsAt;
+    if (!from || !to) return;
+
+    const result = await recomputeCreatorRollupsForProfiles(prisma, {
+      source: SOURCE,
+      profileIds,
+      from,
+      to,
+    });
+    log.info({ profileIds, ...result }, "Rebuilt creator daily rollups");
+  } catch (err) {
+    log.warn(
+      { profileIds, err: err instanceof Error ? err.message : String(err) },
+      "Creator daily rollup rebuild failed after history move",
+    );
+  }
 }
 
 export type MergeParams = {
@@ -385,6 +423,13 @@ export async function mergeProfiles(params: MergeParams): Promise<MergeResult> {
     select: { id: true },
   });
 
+  // Outside the transaction: moving history invalidates both profiles' merged
+  // days (the stub keeps rows for facts it no longer owns, the canonical is
+  // missing the ones it gained).
+  if (movedStreamSessions > 0) {
+    await recomputeMergedCreatorDays([canonical.id, other.id]);
+  }
+
   log.info(
     {
       canonicalId: canonical.id,
@@ -471,6 +516,13 @@ export async function unmergeProfiles(identityLinkId: string): Promise<void> {
       data: { status: "rejected", decidedAt: new Date() },
     });
   }, MERGE_TX_OPTIONS);
+
+  // History moved back to the restored profile: both sides' merged days are
+  // stale for exactly the same reason as in mergeProfiles.
+  await recomputeMergedCreatorDays([
+    link.canonicalProfileId,
+    link.otherProfileId,
+  ]);
 
   log.info(
     { identityLinkId, otherId: link.otherProfileId },
