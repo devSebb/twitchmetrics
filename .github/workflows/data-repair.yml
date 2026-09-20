@@ -40,6 +40,9 @@ on:
           - repair-platform-urls
           - reslug-hash-creators
           - enrich-activity
+          - dedupe-stream-sessions
+          - recompute-rollups
+          - creator-rollups-only
       write:
         description: "Write to the database (unchecked = dry run)"
         required: false
@@ -52,6 +55,25 @@ on:
         type: string
       cursor:
         description: "Resume from this profile/account id (blank = from the start)"
+        required: false
+        default: ""
+        type: string
+      platform:
+        description: "Stream Hatchet platform (dedupe / recompute-rollups only)"
+        required: false
+        default: yt
+        type: choice
+        options:
+          - yt
+          - twitch
+          - kick
+      from:
+        description: "First date, YYYY-MM-DD (rollup rebuilds only)"
+        required: false
+        default: ""
+        type: string
+      to:
+        description: "Last date, YYYY-MM-DD (rollup rebuilds only)"
         required: false
         default: ""
         type: string
@@ -75,6 +97,9 @@ jobs:
       WRITE_FLAG: ${{ inputs.write && '--write' || '' }}
       LIMIT: ${{ inputs.limit }}
       CURSOR: ${{ inputs.cursor }}
+      PLATFORM: ${{ inputs.platform }}
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -107,3 +132,32 @@ jobs:
       - name: enrich-sh-profiles --activity
         if: ${{ inputs.worker == 'enrich-activity' }}
         run: npx tsx workers/enrich-sh-profiles.ts --activity $WRITE_FLAG
+
+      # --- Phase C (rollup overhaul) ------------------------------------
+      # These three live on the rollups branch until it merges, so dispatch
+      # them with `--ref <branch>` until then. ORDER MATTERS:
+      #   1. dedupe-stream-sessions (yt, then twitch, then kick)
+      #   2. create StreamSessionFact_stream_identity_key + migrate deploy
+      #   3. deploy the app
+      #   4. recompute-rollups per platform, then creator-rollups-only
+      - name: dedupe-stream-sessions
+        if: ${{ inputs.worker == 'dedupe-stream-sessions' }}
+        run: |
+          npx tsx workers/dedupe-stream-sessions.ts \
+            --platform "$PLATFORM" --limit-groups "$LIMIT" $WRITE_FLAG
+
+      - name: streamhatchet-ingest --recompute-rollups
+        if: ${{ inputs.worker == 'recompute-rollups' }}
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts --recompute-rollups \
+            --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            $WRITE_FLAG
+
+      # Cross-platform by nature, but the worker still wants a --platform for
+      # its date parsing; the creator rollup it writes covers every platform.
+      - name: streamhatchet-ingest --creator-rollups-only
+        if: ${{ inputs.worker == 'creator-rollups-only' }}
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts --creator-rollups-only \
+            --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            $WRITE_FLAG
