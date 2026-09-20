@@ -218,13 +218,21 @@ async function main() {
       }
 
       if (WRITE) {
+        // DELETE FIRST, then update the keeper. The OLD unique index is still
+        // in place while this runs — (source, platform, platformUserId,
+        // COALESCE(videoId,''), streamBeginsAt, streamEndsAt) — and the
+        // keeper's merged span is (earliest begin, latest end). When one of
+        // the sightings already covers the full span (P1 measured 44 of 3,000
+        // groups nesting rather than sliding), writing the keeper before that
+        // sibling is gone collides with it. Prisma runs a $transaction array
+        // in order, so the delete simply has to come first.
         await prisma.$transaction([
+          prisma.streamSessionFact.deleteMany({
+            where: { id: { in: merged.deleteIds } },
+          }),
           prisma.streamSessionFact.update({
             where: { id: merged.keeperId },
             data: merged.data,
-          }),
-          prisma.streamSessionFact.deleteMany({
-            where: { id: { in: merged.deleteIds } },
           }),
         ]);
       }
