@@ -20,9 +20,12 @@
  *   --activity        Set-based, from our own SH rollups: lastStreamAt +
  *                     isActiveLast30d from ChannelDailyRollup, primaryGameName
  *                     (top game by minutes watched, last 30d) + primaryGameSlug
- *                     (Game.name match) from ChannelGameDailyRollup. Only for
- *                     profiles the API pipeline does not own (SH-born,
- *                     unclaimed, no user).
+ *                     (Game.name match) from ChannelGameDailyRollup. Covers
+ *                     every UNCLAIMED profile, SH-born or API-born: the daily
+ *                     `enrich-creators` job reads MetricSnapshot 500 profiles
+ *                     at a time and cannot keep up (see the comment on the
+ *                     `owned` CTE). Claimed profiles are left to
+ *                     enrich-claimed-profiles.
  *
  * All modes are idempotent and safe to re-run weekly. Dry-run by default.
  *
@@ -484,11 +487,19 @@ async function activity() {
     "activity: building per-profile activity + top-game temp table (last 90d / 30d)…",
   );
   await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS tmp_sh_activity`);
+  // Scope: every UNCLAIMED profile, whatever minted it. This was SH-born only,
+  // on the premise that the daily enrich-creators job owned the API-born ones —
+  // but that job derives from MetricSnapshot 500 profiles at a time, so on
+  // 2026-09-19, 95,285 listed profiles were over 30 days stale and 73 % of the
+  // API-born ones flagged inactive were in fact streaming. ChannelDailyRollup
+  // covers them too (30,353 of the 42,248 API-born listed profiles have rollups
+  // in the last 30 days) and these fields are derived, so the freshest source
+  // should win. Claimed profiles stay out: enrich-claimed-profiles owns those.
   await prisma.$executeRawUnsafe(`
     CREATE TEMP TABLE tmp_sh_activity AS
     WITH owned AS (
       SELECT id FROM "CreatorProfile"
-      WHERE "catalogSource" = 'streamhatchet' AND "mergedIntoId" IS NULL
+      WHERE "mergedIntoId" IS NULL
         AND state = 'unclaimed' AND "userId" IS NULL
     ),
     act AS (
@@ -549,7 +560,7 @@ async function activity() {
   // Profiles that streamed >90d ago (or never in our data): mark inactive.
   const inactive = await prisma.$executeRawUnsafe(`
     UPDATE "CreatorProfile" cp SET "isActiveLast30d" = false
-    WHERE cp."catalogSource" = 'streamhatchet' AND cp."mergedIntoId" IS NULL AND cp.state = 'unclaimed' AND cp."userId" IS NULL
+    WHERE cp."mergedIntoId" IS NULL AND cp.state = 'unclaimed' AND cp."userId" IS NULL
       AND cp."isActiveLast30d" = true
       AND NOT EXISTS (SELECT 1 FROM tmp_sh_activity t WHERE t.id = cp.id AND t.active30)`);
   log("activity applied", { updated, markedInactive: inactive });

@@ -1,0 +1,163 @@
+# One-off data repair workers, run from a cloud runner instead of a laptop.
+#
+# WHY THIS EXISTS. These workers update one row per query, serially. From the
+# maintainer's laptop a Neon round trip costs ~277 ms (Bangkok -> us-east-1),
+# so repair-platform-urls managed ~1.2 rows/s: 9 h for 40k rows, and days for
+# reslug's 547k profiles. A GitHub runner sits next to the database, where the
+# same loop runs in minutes. Nothing about the workers changed — only where
+# they run.
+#
+# Manual only: no schedule. Actions tab -> this workflow -> Run workflow.
+# Every worker here is DRY-RUN unless `write` is checked, and every one is
+# cursor-resumable: if a run times out, re-run it with `cursor` set to the last
+# `nextCursor` in the log.
+#
+# Workers:
+#   repair-platform-urls  --fill-null: builds platformUrl from the username for
+#     accounts that have none (~42k twitch + x, all born from the twitch API
+#     poller). The API and media-kit JSON-LD have no fallback, so those links
+#     are missing there today.
+#   reslug-hash-creators: rewrites the July catalog build's hash slugs
+#     (`name-76116e27`) to clean ones, leaving a SlugRedirect per rename so old
+#     URLs keep resolving. 547k profiles; expect ~1 % collisions (kept as-is).
+#   enrich-activity: recomputes isActiveLast30d / lastStreamAt / primaryGame
+#     for SH-born profiles from our own rollups. Last run 2026-08-17, so 44 %
+#     of "inactive" profiles are in fact streaming.
+#
+# Required repository secrets: DATABASE_URL, DIRECT_URL.
+
+name: Data repair (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: "Which repair worker to run"
+        required: true
+        default: repair-platform-urls
+        type: choice
+        options:
+          - repair-platform-urls
+          - reslug-hash-creators
+          - enrich-activity
+          - dedupe-stream-sessions
+          - recompute-rollups
+          - creator-rollups-only
+      write:
+        description: "Write to the database (unchecked = dry run)"
+        required: false
+        default: false
+        type: boolean
+      limit:
+        description: "Row/profile limit, 0 = no limit (ignored by enrich-activity)"
+        required: false
+        default: "0"
+        type: string
+      cursor:
+        description: "Resume from this profile/account id (blank = from the start)"
+        required: false
+        default: ""
+        type: string
+      platform:
+        description: "Stream Hatchet platform (dedupe / recompute-rollups only)"
+        required: false
+        default: yt
+        type: choice
+        options:
+          - yt
+          - twitch
+          - kick
+      from:
+        description: "First date, YYYY-MM-DD (rollup rebuilds only)"
+        required: false
+        default: ""
+        type: string
+      to:
+        description: "Last date, YYYY-MM-DD (rollup rebuilds only)"
+        required: false
+        default: ""
+        type: string
+
+# Never let two repair runs write at once, and never fight the weekly SH jobs
+# for Neon's compute.
+concurrency:
+  group: data-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    # Hosted runners hard-cap at 360; reslug over 547k profiles is the long pole.
+    timeout-minutes: 350
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      # Inputs go through the environment, never inline in a run: script, so a
+      # value cannot break out of the command line.
+      WRITE_FLAG: ${{ inputs.write && '--write' || '' }}
+      LIMIT: ${{ inputs.limit }}
+      CURSOR: ${{ inputs.cursor }}
+      PLATFORM: ${{ inputs.platform }}
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+
+      - name: Report what will run
+        run: |
+          echo "worker=${{ inputs.worker }} write=${{ inputs.write }} limit=$LIMIT cursor=${CURSOR:-<none>}"
+
+      - name: repair-platform-urls --fill-null
+        if: ${{ inputs.worker == 'repair-platform-urls' }}
+        run: |
+          npx tsx workers/repair-platform-urls.ts --fill-null \
+            --limit "$LIMIT" ${CURSOR:+--cursor "$CURSOR"} $WRITE_FLAG
+
+      - name: reslug-hash-creators
+        if: ${{ inputs.worker == 'reslug-hash-creators' }}
+        run: |
+          npx tsx workers/reslug-hash-creators.ts \
+            --limit "$LIMIT" ${CURSOR:+--cursor "$CURSOR"} $WRITE_FLAG
+
+      # Set-based SQL over its own targets: no --limit, no cursor.
+      - name: enrich-sh-profiles --activity
+        if: ${{ inputs.worker == 'enrich-activity' }}
+        run: npx tsx workers/enrich-sh-profiles.ts --activity $WRITE_FLAG
+
+      # --- Phase C (rollup overhaul) ------------------------------------
+      # These three live on the rollups branch until it merges, so dispatch
+      # them with `--ref <branch>` until then. ORDER MATTERS:
+      #   1. dedupe-stream-sessions (yt, then twitch, then kick)
+      #   2. create StreamSessionFact_stream_identity_key + migrate deploy
+      #   3. deploy the app
+      #   4. recompute-rollups per platform, then creator-rollups-only
+      - name: dedupe-stream-sessions
+        if: ${{ inputs.worker == 'dedupe-stream-sessions' }}
+        run: |
+          npx tsx workers/dedupe-stream-sessions.ts \
+            --platform "$PLATFORM" --limit-groups "$LIMIT" $WRITE_FLAG
+
+      - name: streamhatchet-ingest --recompute-rollups
+        if: ${{ inputs.worker == 'recompute-rollups' }}
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts --recompute-rollups \
+            --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            $WRITE_FLAG
+
+      # Cross-platform by nature, but the worker still wants a --platform for
+      # its date parsing; the creator rollup it writes covers every platform.
+      - name: streamhatchet-ingest --creator-rollups-only
+        if: ${{ inputs.worker == 'creator-rollups-only' }}
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts --creator-rollups-only \
+            --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            $WRITE_FLAG
