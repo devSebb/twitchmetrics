@@ -47,7 +47,16 @@ const intArg = (name: string, fallback: number): number => {
 
 const PLATFORM = argValue("--platform") ?? "yt";
 const WRITE = args.includes("--write");
-const GROUP_BATCH = intArg("--group-batch", 200);
+// Groups fetched per discovery scan. NOT a transaction size — each group is
+// merged in its own transaction.
+//
+// The discovery query is a full GROUP BY over the platform's partition: 158
+// SECONDS for yt (8M rows, 32 GB table) measured on prod 2026-09-20, and it
+// re-runs for every batch. At the old default of 200 that capped throughput at
+// ~77 groups/min no matter how fast the merges ran, and the 62,800-group run
+// spent most of its 5h50m rescanning. Merging is ~57 groups/s, so a large
+// batch amortises the scan: 5,000 groups costs one scan plus ~90 s of work.
+const GROUP_BATCH = intArg("--group-batch", 5_000);
 const LIMIT_GROUPS = intArg("--limit-groups", 0);
 const SLEEP_MS = intArg("--sleep-ms", 0);
 const SOURCE = "streamhatchet";
