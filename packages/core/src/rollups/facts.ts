@@ -73,6 +73,11 @@ const COLUMNS = [
   "rawData",
   "contentLabel",
   "rowHash",
+  // Prisma applies @updatedAt in the client, not the database: the column is
+  // NOT NULL with no DEFAULT, so a raw INSERT has to set it itself. Leaving it
+  // out failed every batch containing a new row with 23502, which silently
+  // zeroed the 2026-09-21 import (written 0, updated 0).
+  "updatedAt",
 ] as const;
 
 function jsonParam(value: unknown): Prisma.Sql {
@@ -115,7 +120,8 @@ function valuesTuple(fact: StreamFactInput): Prisma.Sql {
     ${raw.aggregation ?? "basic"},
     ${jsonParam(raw.rawData)},
     ${jsonParam(raw.contentLabel)},
-    ${raw.rowHash}
+    ${raw.rowHash},
+    now()
   )`;
 }
 
