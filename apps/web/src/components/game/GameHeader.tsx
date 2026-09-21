@@ -8,6 +8,8 @@ import { GameCoverImage } from "@/components/games/GameCoverImage";
 type PlatformMetricRow = {
   platform: Platform;
   value: number;
+  /** Set when the figure is a daily average rather than a live reading. */
+  caption?: string | null;
 };
 
 type PlatformMetricGroup = {
@@ -64,8 +66,15 @@ function KpiCard({
                 key={row.platform}
                 className="flex items-center justify-between gap-2"
               >
-                <span className="text-lg font-bold leading-tight text-[#F2F3F5]">
-                  {formatNumber(row.value)}
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="text-lg font-bold leading-tight text-[#F2F3F5]">
+                    {formatNumber(row.value)}
+                  </span>
+                  {row.caption ? (
+                    <span className="truncate text-[10px] leading-tight text-[#949BA4]">
+                      {row.caption}
+                    </span>
+                  ) : null}
                 </span>
                 <PlatformIcon platform={row.platform} size="xs" rounded="lg" />
               </div>

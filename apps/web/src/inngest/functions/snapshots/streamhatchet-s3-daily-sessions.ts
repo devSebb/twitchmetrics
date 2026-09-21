@@ -8,6 +8,7 @@ import {
   type StreamHatchetDailySessionImportResult,
   type StreamHatchetDailySessionPlatform,
 } from "@/server/services/streamhatchet/daily-sessions";
+import { writeDailyGamePlatformSnapshots } from "@/server/services/streamhatchet/daily-game-platform";
 
 type CronPlatformTarget = {
   platform: StreamHatchetDailySessionPlatform;
@@ -17,7 +18,7 @@ type CronPlatformTarget = {
 type CronStepFailure = {
   platform: string;
   date: string;
-  stage: "import" | "rollups" | "creator-rollups";
+  stage: "import" | "rollups" | "creator-rollups" | "game-snapshots";
   error: string;
 };
 
@@ -225,6 +226,24 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
                 stage: "rollups",
                 error: errorMessage(error),
               });
+            }
+
+            // C23: YouTube has no live games feed (the quota rejects it), so
+            // the day's rollups stand in until one exists. Runs after the
+            // rollup step because it reads what that step just wrote.
+            if (target.platform === "yt") {
+              try {
+                await step.run(`game-snapshots-yt-${dateKey}`, () =>
+                  writeDailyGamePlatformSnapshots({ date }),
+                );
+              } catch (error) {
+                failures.push({
+                  platform: target.platform,
+                  date: dateKey,
+                  stage: "game-snapshots",
+                  error: errorMessage(error),
+                });
+              }
             }
           }
 
