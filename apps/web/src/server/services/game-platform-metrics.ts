@@ -5,17 +5,48 @@ import { DAILY_GAME_SNAPSHOT_SOURCE } from "@/server/services/streamhatchet/dail
 const CURRENT_SNAPSHOT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 /**
- * Stream Hatchet's daily rollups (C23) are a day's average, published once the
- * export lands the following morning, so a two-hour window would never show
- * them. 48 h keeps yesterday's figure visible all of today and drops it as soon
- * as it is two days stale.
+ * A daily average is judged by the DAY IT COVERS, not when we computed it, so a
+ * backfill of an old date cannot present April's figures as current.
+ *
+ * That day is already over when the row is written: day D's export lands at
+ * D+1 08:10 UTC, making it 32 h old on arrival. 72 h leaves it valid until
+ * D+3 00:00 — comfortably past the next morning's import, where 48 h would
+ * have blanked the YouTube column every night between 00:00 and 08:10.
  */
-const DAILY_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+const DAILY_SNAPSHOT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+
+function isDailyAverage(source: string): boolean {
+  return source === DAILY_GAME_SNAPSHOT_SOURCE;
+}
 
 function maxAgeMsForSource(source: string): number {
-  return source === DAILY_GAME_SNAPSHOT_SOURCE
+  return isDailyAverage(source)
     ? DAILY_SNAPSHOT_MAX_AGE_MS
     : CURRENT_SNAPSHOT_MAX_AGE_MS;
+}
+
+/** The timestamp a source's freshness is measured from. */
+function effectiveDateFor(snapshot: SnapshotTiming): Date {
+  return isDailyAverage(snapshot.source)
+    ? snapshot.bucketStartedAt
+    : snapshot.snapshotAt;
+}
+
+export type SnapshotTiming = {
+  source: string;
+  snapshotAt: Date;
+  bucketStartedAt: Date;
+};
+
+/**
+ * Whether a snapshot is still worth showing. Live sources get two hours from
+ * when they were read; a daily average gets 72 h from the day it covers.
+ */
+export function isSnapshotFresh(
+  snapshot: SnapshotTiming,
+  now = Date.now(),
+): boolean {
+  return isFresh(effectiveDateFor(snapshot), snapshot.source, now);
 }
 
 const PLATFORM_ORDER: Platform[] = [
@@ -87,9 +118,12 @@ export function preferSnapshot(
 }
 
 /** "daily avg · 2026-09-20" for a rollup-derived figure, nothing for a live one. */
-export function captionFor(source: string, snapshotAt: Date): string | null {
-  if (source !== DAILY_GAME_SNAPSHOT_SOURCE) return null;
-  return `daily avg · ${snapshotAt.toISOString().slice(0, 10)}`;
+export function captionFor(
+  source: string,
+  bucketStartedAt: Date,
+): string | null {
+  if (!isDailyAverage(source)) return null;
+  return `daily avg · ${bucketStartedAt.toISOString().slice(0, 10)}`;
 }
 
 function group(rows: GamePlatformMetricRow[]): GamePlatformMetricGroup {
@@ -138,9 +172,11 @@ export async function getGamePlatformMetrics(input: {
     prisma.gamePlatformViewerSnapshot.findMany({
       where: {
         gameId: input.gameId,
-        // Widest window any source allows; each row is then held to its own
-        // limit by isFresh, so a stale live row cannot ride in on the 48 h.
-        snapshotAt: {
+        // Widest window any source allows, measured on the day covered so a
+        // daily average written today for an old date is excluded here rather
+        // than relying on isFresh alone. Each row is still held to its own
+        // limit below, so a stale live row cannot ride in on the 72 h.
+        bucketStartedAt: {
           gte: new Date(Date.now() - DAILY_SNAPSHOT_MAX_AGE_MS),
         },
       },
@@ -148,6 +184,7 @@ export async function getGamePlatformMetrics(input: {
       select: {
         platform: true,
         snapshotAt: true,
+        bucketStartedAt: true,
         viewers: true,
         channels: true,
         source: true,
@@ -161,6 +198,7 @@ export async function getGamePlatformMetrics(input: {
       viewers: number;
       channels: number | null;
       snapshotAt: Date;
+      bucketStartedAt: Date;
       source: string;
     }
   >();
@@ -172,6 +210,7 @@ export async function getGamePlatformMetrics(input: {
         viewers: snapshot.viewers,
         channels: snapshot.channels,
         snapshotAt: snapshot.snapshotAt,
+        bucketStartedAt: snapshot.bucketStartedAt,
         source: snapshot.source,
       });
     }
@@ -182,6 +221,7 @@ export async function getGamePlatformMetrics(input: {
       viewers: legacySnapshot.twitchViewers,
       channels: legacySnapshot.twitchChannels,
       snapshotAt: legacySnapshot.snapshotAt,
+      bucketStartedAt: legacySnapshot.snapshotAt,
       source: "twitch_api",
     });
 
@@ -190,6 +230,7 @@ export async function getGamePlatformMetrics(input: {
         viewers: legacySnapshot.kickViewers,
         channels: legacySnapshot.kickChannels,
         snapshotAt: legacySnapshot.snapshotAt,
+        bucketStartedAt: legacySnapshot.snapshotAt,
         source: "legacy_game_snapshot",
       });
     }
@@ -199,6 +240,7 @@ export async function getGamePlatformMetrics(input: {
         viewers: legacySnapshot.youtubeViewers,
         channels: legacySnapshot.youtubeChannels,
         snapshotAt: legacySnapshot.snapshotAt,
+        bucketStartedAt: legacySnapshot.snapshotAt,
         source: "legacy_game_snapshot",
       });
     }
@@ -208,8 +250,8 @@ export async function getGamePlatformMetrics(input: {
   const channelRows: GamePlatformMetricRow[] = [];
 
   for (const [platform, snapshot] of latestByPlatform) {
-    if (!isFresh(snapshot.snapshotAt, snapshot.source)) continue;
-    const caption = captionFor(snapshot.source, snapshot.snapshotAt);
+    if (!isSnapshotFresh(snapshot)) continue;
+    const caption = captionFor(snapshot.source, snapshot.bucketStartedAt);
     viewerRows.push({ platform, value: snapshot.viewers, caption });
     if (snapshot.channels !== null) {
       channelRows.push({ platform, value: snapshot.channels, caption });

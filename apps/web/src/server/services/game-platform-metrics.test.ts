@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { captionFor, preferSnapshot } from "./game-platform-metrics";
+import {
+  captionFor,
+  isSnapshotFresh,
+  preferSnapshot,
+} from "./game-platform-metrics";
 import { DAILY_GAME_SNAPSHOT_SOURCE } from "./streamhatchet/daily-game-platform";
 
 /**
@@ -79,5 +83,53 @@ describe("captionFor", () => {
     expect(
       captionFor("streamhatchet_live", new Date("2026-09-21T10:00:00Z")),
     ).toBeNull();
+  });
+});
+
+describe("isSnapshotFresh", () => {
+  const covered = new Date("2026-09-20T00:00:00Z");
+  const dailyRow = {
+    source: DAILY_GAME_SNAPSHOT_SOURCE,
+    // Written the next morning, when the export lands.
+    snapshotAt: new Date("2026-09-21T08:10:00Z"),
+    bucketStartedAt: covered,
+  };
+
+  it("survives until the import that replaces it", () => {
+    // 2026-09-22 08:10 is the next import; the row must still show at 08:09.
+    expect(isSnapshotFresh(dailyRow, Date.parse("2026-09-22T08:09:00Z"))).toBe(
+      true,
+    );
+  });
+
+  it("expires three days after the day it covers", () => {
+    expect(isSnapshotFresh(dailyRow, Date.parse("2026-09-23T00:01:00Z"))).toBe(
+      false,
+    );
+  });
+
+  it("ignores when it was computed, so a backfill is not passed off as current", () => {
+    const backfilled = {
+      source: DAILY_GAME_SNAPSHOT_SOURCE,
+      snapshotAt: new Date("2026-09-21T16:00:00Z"), // written today
+      bucketStartedAt: new Date("2026-04-10T00:00:00Z"), // covers April
+    };
+    expect(
+      isSnapshotFresh(backfilled, Date.parse("2026-09-21T16:05:00Z")),
+    ).toBe(false);
+  });
+
+  it("holds live readings to two hours", () => {
+    const liveRow = {
+      source: "streamhatchet_live",
+      snapshotAt: new Date("2026-09-21T10:00:00Z"),
+      bucketStartedAt: new Date("2026-09-21T10:00:00Z"),
+    };
+    expect(isSnapshotFresh(liveRow, Date.parse("2026-09-21T11:30:00Z"))).toBe(
+      true,
+    );
+    expect(isSnapshotFresh(liveRow, Date.parse("2026-09-21T12:30:00Z"))).toBe(
+      false,
+    );
   });
 });

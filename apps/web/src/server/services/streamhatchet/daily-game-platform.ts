@@ -86,9 +86,11 @@ const UPSERT_CONCURRENCY = 25;
 export async function writeDailyGamePlatformSnapshots(input: {
   date: Date;
   source?: string;
+  computedAt?: Date;
 }): Promise<WriteDailyGamePlatformSnapshotsResult> {
   const bucketStartedAt = new Date(input.date);
   bucketStartedAt.setUTCHours(0, 0, 0, 0);
+  const computedAt = input.computedAt ?? new Date();
 
   const rollups = await prisma.gameDailyRollup.findMany({
     where: {
@@ -152,13 +154,15 @@ export async function writeDailyGamePlatformSnapshots(input: {
             source: DAILY_GAME_SNAPSHOT_SOURCE,
             platformGameName: row.gameName,
             bucketStartedAt,
-            snapshotAt: bucketStartedAt,
+            // When we computed it, not the day it covers — bucketStartedAt
+            // already records that, and the reader needs both.
+            snapshotAt: computedAt,
             viewers: row.viewers,
             channels: row.channels,
           },
           update: {
             platformGameName: row.gameName,
-            snapshotAt: bucketStartedAt,
+            snapshotAt: computedAt,
             viewers: row.viewers,
             channels: row.channels,
           },
