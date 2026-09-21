@@ -97,6 +97,7 @@ describe("aggregateShRollups", () => {
       streamCount: 3,
       peak: 500,
       peakPlatform: null,
+      peakCombined: false,
       airtimePlatforms: [],
       watchPlatforms: [],
     });
@@ -148,6 +149,7 @@ describe("combineViewerStats", () => {
     streamCount: 0,
     peak: null,
     peakPlatform: null,
+    peakCombined: false,
     airtimePlatforms: [],
     watchPlatforms: [],
     ...overrides,
@@ -171,6 +173,31 @@ describe("combineViewerStats", () => {
     expect(result.peakViewers).toBe(500);
     expect(result.peakPlatform).toBe("youtube");
     expect(result.viewerPlatforms).toEqual(["twitch", "youtube"]);
+  });
+
+  it("marks the peak combined only when the SH estimate wins", () => {
+    const combined = shTotals({
+      airtimeSeconds: 60 * 60,
+      minutesWatched: 6_000,
+      peak: 500,
+      peakPlatform: null,
+      peakCombined: true,
+    });
+
+    // SH's combined estimate is the higher figure, so it is what is shown.
+    expect(
+      combineViewerStats({ peak: 300, avgSamples: [] }, combined).peakCombined,
+    ).toBe(true);
+
+    // A snapshot reading beats it: that number is one platform's, so the
+    // label must not claim it combines platforms.
+    const snapshotWins = combineViewerStats(
+      { peak: 900, avgSamples: [], peakPlatform: "twitch" },
+      combined,
+    );
+    expect(snapshotWins.peakViewers).toBe(900);
+    expect(snapshotWins.peakCombined).toBe(false);
+    expect(snapshotWins.peakPlatform).toBe("twitch");
   });
 
   it("falls back to the snapshot mean when SH has no airtime", () => {
@@ -215,6 +242,7 @@ describe("combineViewerStats", () => {
       peakViewers: 300,
       avgViewers: 100,
       peakPlatform: null,
+      peakCombined: false,
       viewerPlatforms: [],
     });
     expect(
@@ -231,12 +259,14 @@ describe("combineViewerStats", () => {
       peakViewers: 240,
       avgViewers: 100,
       peakPlatform: null,
+      peakCombined: false,
       viewerPlatforms: [],
     });
     expect(combineViewerStats({ peak: null, avgSamples: [] }, null)).toEqual({
       peakViewers: null,
       avgViewers: null,
       peakPlatform: null,
+      peakCombined: false,
       viewerPlatforms: [],
     });
   });
@@ -289,6 +319,7 @@ describe("aggregateCreatorRollups", () => {
       peakViewers: 15_000,
       avgViewers: 12_000,
       peakPlatform: "twitch",
+      peakCombined: false,
       viewerPlatforms: ["twitch", "youtube"],
     });
   });

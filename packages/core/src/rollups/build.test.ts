@@ -39,6 +39,7 @@ function fact(overrides: Partial<RollupFact> = {}): RollupFact {
     airtimeMinutes: 60,
     minutesWatched: 6_000n,
     sessionViews: 10n,
+    averageViewers: 100,
     averageViewersGlobal: 100,
     peakViewers: 200,
     bestRank: 5,

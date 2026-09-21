@@ -58,6 +58,7 @@ export const ROLLUP_FACT_SELECT = {
   airtimeMinutes: true,
   minutesWatched: true,
   sessionViews: true,
+  averageViewers: true,
   averageViewersGlobal: true,
   peakViewers: true,
   bestRank: true,

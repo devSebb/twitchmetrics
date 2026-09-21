@@ -23,6 +23,8 @@ export type RollupFact = {
   airtimeMinutes: number;
   minutesWatched: bigint;
   sessionViews: bigint | null;
+  /** Concurrent average over the fact's own airtime; C28 adds these across platforms. */
+  averageViewers: number;
   averageViewersGlobal: number | null;
   peakViewers: number;
   bestRank: number | null;

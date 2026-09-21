@@ -58,6 +58,72 @@ export function totalMinutes(intervals: [number, number][]): number {
   return intervals.reduce((sum, [start, end]) => sum + (end - start), 0);
 }
 
+/**
+ * Estimated combined peak (C28, option C).
+ *
+ * The true combined peak is max over t of the summed concurrent audience, and
+ * nothing in the export carries a viewer series — only one peak per channel per
+ * day, with the minute it happened. So each platform's peak is treated as a
+ * candidate moment: take that platform's peak, and add what every OTHER
+ * platform was averaging while it was live at that same minute.
+ *
+ * Every fact also stands alone as a candidate, which keeps the result at or
+ * above the old single-platform maximum and covers facts whose peakViewersAt is
+ * null (the export omits it) — those simply contribute their own peak, since
+ * there is no minute to line the other platforms up against.
+ *
+ * It is an estimate in one direction: the other platforms contribute their
+ * average rather than their value at t, so a creator whose audiences spike
+ * together reads low. Labelled "estimated combined" in the UI for that reason.
+ */
+function estimateCombinedPeak(
+  facts: CreatorRollupFact[],
+  date: Date,
+): { viewers: number | null; platform: string | null } {
+  let best: { viewers: number; platform: string | null } | null = null;
+
+  const consider = (viewers: number, platform: string | null) => {
+    if (!best || viewers > best.viewers) best = { viewers, platform };
+  };
+
+  const live: { fact: CreatorRollupFact; interval: [number, number] }[] = [];
+  for (const fact of facts) {
+    const interval = clipToDay(fact, date);
+    if (interval) live.push({ fact, interval });
+  }
+
+  for (const { fact, interval } of live) {
+    // Floor: this platform alone, which is what C24 showed.
+    consider(fact.peakViewers, fact.internalPlatform);
+
+    if (!fact.peakViewersAt) continue;
+    const at = (fact.peakViewersAt.getTime() - date.getTime()) / 60_000;
+    // A merged multi-day stream keeps one peak for the whole span, so the
+    // minute can fall outside today; there is nothing to align here.
+    if (at < interval[0] || at > interval[1]) continue;
+
+    let total = fact.peakViewers;
+    const platforms = new Set<string | null>([fact.internalPlatform]);
+    for (const other of live) {
+      if (other.fact === fact) continue;
+      // Same platform: its own concurrent streams are already reflected in
+      // the channel's peak, and adding them would double-count.
+      if (other.fact.internalPlatform === fact.internalPlatform) continue;
+      if (at < other.interval[0] || at > other.interval[1]) continue;
+      total += other.fact.averageViewers;
+      platforms.add(other.fact.internalPlatform);
+    }
+
+    // A combined figure belongs to no single platform.
+    consider(
+      Math.round(total),
+      platforms.size > 1 ? null : fact.internalPlatform,
+    );
+  }
+
+  return best ?? { viewers: null, platform: null };
+}
+
 /** A fact's live interval clipped to the day, in minutes from 00:00Z. */
 function clipToDay(
   fact: Pick<RollupFact, "streamBeginsAt" | "streamEndsAt">,
@@ -96,8 +162,6 @@ export function buildCreatorRollups(
     const clipped: [number, number][] = [];
     const platforms = new Set<string>();
     let minutesWatched = 0n;
-    let peakViewers: number | null = null;
-    let peakPlatform: string | null = null;
 
     for (const fact of creatorFacts) {
       const interval = clipToDay(fact, date);
@@ -116,15 +180,11 @@ export function buildCreatorRollups(
       minutesWatched += BigInt(
         Math.round(Number(fact.minutesWatched) * Math.min(1, fraction)),
       );
-
-      if (peakViewers === null || fact.peakViewers > peakViewers) {
-        peakViewers = fact.peakViewers;
-        peakPlatform = fact.internalPlatform;
-      }
     }
 
     if (clipped.length === 0) continue;
     const intervals = mergeIntervals(clipped);
+    const peak = estimateCombinedPeak(creatorFacts, date);
 
     rows.push({
       creatorProfileId,
@@ -138,8 +198,8 @@ export function buildCreatorRollups(
         ([start, end]) =>
           [Math.round(start), Math.round(end)] as [number, number],
       ),
-      peakViewers,
-      peakPlatform,
+      peakViewers: peak.viewers,
+      peakPlatform: peak.platform,
     });
   }
 

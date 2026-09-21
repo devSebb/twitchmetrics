@@ -72,7 +72,19 @@ const CREATOR_STAT_NAMES: Record<CreatorStatMetric, string> = {
 
 /** Explains the peak tile, which is not a combined cross-platform peak. */
 export const CREATOR_PEAK_VIEWERS_TOOLTIP =
-  "Highest single-platform peak in the period. Combined simulcast peak coming soon.";
+  "Highest single-platform peak in the period.";
+
+/**
+ * Shown instead when the figure combines platforms (C28). The export carries
+ * one peak per channel per day and no viewer series, so a simulcast's combined
+ * peak is estimated: the best platform's peak plus what the others averaged
+ * while live at that minute.
+ */
+export const CREATOR_COMBINED_PEAK_TOOLTIP =
+  "Estimated combined peak: the highest platform peak in the period, plus what the creator's other platforms averaged at that moment.";
+
+/** Suffix marking a peak figure that spans platforms rather than naming one. */
+export const COMBINED_PEAK_SUFFIX = "estimated combined";
 
 /** Creator stat tile label with its window, e.g. "Airtime · 30d". */
 export function creatorStatLabel(

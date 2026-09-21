@@ -25,6 +25,7 @@ function fact(overrides: Partial<CreatorRollupFact> = {}): CreatorRollupFact {
     airtimeMinutes: 240,
     minutesWatched: 0n,
     sessionViews: null,
+    averageViewers: 0,
     averageViewersGlobal: null,
     peakViewers: 0,
     bestRank: null,
@@ -160,6 +161,157 @@ describe("buildCreatorRollups", () => {
       date,
     );
     expect(rows[0]).toMatchObject({ peakViewers: 900, peakPlatform: "kick" });
+  });
+
+  /**
+   * C28 option C: the export has no viewer series, so each platform's peak is
+   * treated as a candidate moment and the other platforms contribute their
+   * average while live at it.
+   */
+  describe("estimated combined peak", () => {
+    it("adds the other platform's average when the peaks overlap", () => {
+      const rows = buildCreatorRollups(
+        [
+          fact({
+            internalPlatform: "twitch",
+            peakViewers: 1000,
+            peakViewersAt: new Date("2026-09-10T12:00:00.000Z"),
+            averageViewers: 500,
+          }),
+          fact({
+            internalPlatform: "kick",
+            platformUserId: "chan-2",
+            peakViewers: 300,
+            peakViewersAt: new Date("2026-09-10T13:00:00.000Z"),
+            averageViewers: 200,
+          }),
+        ],
+        date,
+      );
+
+      // Twitch's 1,000 at 12:00 plus Kick's 200 average, which beats Kick's
+      // own moment (300 + 500). No single platform owns the figure.
+      expect(rows[0]).toMatchObject({
+        peakViewers: 1200,
+        peakPlatform: null,
+      });
+    });
+
+    it("falls back to the single-platform max when the streams never overlap", () => {
+      const rows = buildCreatorRollups(
+        [
+          fact({
+            internalPlatform: "twitch",
+            streamBeginsAt: new Date("2026-09-10T00:00:00.000Z"),
+            streamEndsAt: new Date("2026-09-10T06:00:00.000Z"),
+            peakViewers: 1000,
+            peakViewersAt: new Date("2026-09-10T03:00:00.000Z"),
+            averageViewers: 500,
+          }),
+          fact({
+            internalPlatform: "kick",
+            platformUserId: "chan-2",
+            streamBeginsAt: new Date("2026-09-10T12:00:00.000Z"),
+            streamEndsAt: new Date("2026-09-10T18:00:00.000Z"),
+            peakViewers: 300,
+            peakViewersAt: new Date("2026-09-10T15:00:00.000Z"),
+            averageViewers: 200,
+          }),
+        ],
+        date,
+      );
+
+      expect(rows[0]).toMatchObject({
+        peakViewers: 1000,
+        peakPlatform: "twitch",
+      });
+    });
+
+    it("lets a fact with no peak time contribute only its own peak", () => {
+      const rows = buildCreatorRollups(
+        [
+          fact({
+            internalPlatform: "twitch",
+            peakViewers: 1000,
+            peakViewersAt: null,
+            averageViewers: 500,
+          }),
+          fact({
+            internalPlatform: "kick",
+            platformUserId: "chan-2",
+            peakViewers: 300,
+            peakViewersAt: new Date("2026-09-10T13:00:00.000Z"),
+            averageViewers: 200,
+          }),
+        ],
+        date,
+      );
+
+      // Kick's moment combines to 800; Twitch's unpositioned 1,000 still wins
+      // and stays attributed to Twitch.
+      expect(rows[0]).toMatchObject({
+        peakViewers: 1000,
+        peakPlatform: "twitch",
+      });
+    });
+
+    it("does not add a creator's own concurrent streams on one platform", () => {
+      const rows = buildCreatorRollups(
+        [
+          fact({
+            internalPlatform: "twitch",
+            peakViewers: 1000,
+            peakViewersAt: new Date("2026-09-10T12:00:00.000Z"),
+            averageViewers: 500,
+          }),
+          fact({
+            internalPlatform: "twitch",
+            platformUserId: "chan-1b",
+            peakViewers: 100,
+            peakViewersAt: null,
+            averageViewers: 400,
+          }),
+        ],
+        date,
+      );
+
+      expect(rows[0]).toMatchObject({
+        peakViewers: 1000,
+        peakPlatform: "twitch",
+      });
+    });
+
+    it("ignores a peak minute that falls outside the day", () => {
+      const rows = buildCreatorRollups(
+        [
+          fact({
+            internalPlatform: "twitch",
+            // Runs into the next day; its peak happened after midnight.
+            streamBeginsAt: new Date("2026-09-10T22:00:00.000Z"),
+            streamEndsAt: new Date("2026-09-11T04:00:00.000Z"),
+            peakViewers: 1000,
+            peakViewersAt: new Date("2026-09-11T02:00:00.000Z"),
+            averageViewers: 500,
+          }),
+          fact({
+            internalPlatform: "kick",
+            platformUserId: "chan-2",
+            streamBeginsAt: new Date("2026-09-10T22:00:00.000Z"),
+            streamEndsAt: new Date("2026-09-11T04:00:00.000Z"),
+            peakViewers: 200,
+            peakViewersAt: null,
+            averageViewers: 300,
+          }),
+        ],
+        date,
+      );
+
+      // No combining is possible, so the day keeps the single-platform max.
+      expect(rows[0]).toMatchObject({
+        peakViewers: 1000,
+        peakPlatform: "twitch",
+      });
+    });
   });
 
   it("skips unmatched channels and days with no overlap", () => {

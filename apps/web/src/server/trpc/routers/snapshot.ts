@@ -911,8 +911,13 @@ export const snapshotRouter = router({
 
       // SH watch-time-weighted average wins over the mean of per-poll
       // samples; the two sources are never mixed into one mean.
-      const { peakViewers, avgViewers, peakPlatform, viewerPlatforms } =
-        combineViewerStats(snapshotViewer, shTotals);
+      const {
+        peakViewers,
+        avgViewers,
+        peakPlatform,
+        peakCombined,
+        viewerPlatforms,
+      } = combineViewerStats(snapshotViewer, shTotals);
 
       // Platforms that actually fed the airtime figure (tile dots): SH rollup
       // platforms with airtime, plus Twitch when Videos API time was added.
@@ -938,6 +943,7 @@ export const snapshotRouter = router({
         airtimePlatforms: [...airtimePlatforms],
         viewerPlatforms,
         peakPlatform,
+        peakCombined,
       };
     }),
 

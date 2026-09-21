@@ -6,7 +6,9 @@ import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber, formatDuration, formatDate } from "@/lib/utils/format";
 import {
+  CREATOR_COMBINED_PEAK_TOOLTIP,
   CREATOR_PEAK_VIEWERS_TOOLTIP,
+  COMBINED_PEAK_SUFFIX,
   CREATOR_STAT_PERIODS,
   creatorStatLabel,
   type CreatorStatPeriod,
@@ -132,7 +134,11 @@ export function StatsRow({ profile }: StatsRowProps) {
       platforms: streamingStats?.airtimePlatforms,
     },
     {
-      label: creatorStatLabel("peakViewers", period),
+      // A combined estimate belongs to no platform, so it says so in words
+      // where a single-platform reading shows that platform's icon.
+      label: streamingStats?.peakCombined
+        ? `${creatorStatLabel("peakViewers", period)} · ${COMBINED_PEAK_SUFFIX}`
+        : creatorStatLabel("peakViewers", period),
       value:
         streamingStats?.peakViewers != null
           ? formatNumber(streamingStats.peakViewers)
@@ -140,7 +146,9 @@ export function StatsRow({ profile }: StatsRowProps) {
       platforms: streamingStats?.peakPlatform
         ? [streamingStats.peakPlatform]
         : [],
-      tooltip: CREATOR_PEAK_VIEWERS_TOOLTIP,
+      tooltip: streamingStats?.peakCombined
+        ? CREATOR_COMBINED_PEAK_TOOLTIP
+        : CREATOR_PEAK_VIEWERS_TOOLTIP,
     },
     {
       label: creatorStatLabel("avgViewers", period),
