@@ -43,6 +43,7 @@ on:
           - dedupe-stream-sessions
           - recompute-rollups
           - creator-rollups-only
+          - import-sessions
       write:
         description: "Write to the database (unchecked = dry run)"
         required: false
@@ -67,13 +68,18 @@ on:
           - yt
           - twitch
           - kick
+      force:
+        description: "Re-import dates already marked completed (import-sessions only)"
+        required: false
+        default: false
+        type: boolean
       from:
-        description: "First date, YYYY-MM-DD (rollup rebuilds only)"
+        description: "First date, YYYY-MM-DD (rollup rebuilds and imports)"
         required: false
         default: ""
         type: string
       to:
-        description: "Last date, YYYY-MM-DD (rollup rebuilds only)"
+        description: "Last date, YYYY-MM-DD (rollup rebuilds and imports)"
         required: false
         default: ""
         type: string
@@ -100,6 +106,12 @@ jobs:
       PLATFORM: ${{ inputs.platform }}
       FROM: ${{ inputs.from }}
       TO: ${{ inputs.to }}
+      FORCE_FLAG: ${{ inputs.force && '--force' || '' }}
+      # The S3 export is read with a read-only key; nothing here writes to
+      # StreamHatchet's bucket.
+      AWS_ACCESS_KEY_ID: ${{ secrets.SH_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SH_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -152,6 +164,16 @@ jobs:
           npx tsx workers/streamhatchet-ingest.ts --recompute-rollups \
             --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
             $WRITE_FLAG
+
+      # Re-import a date range from the S3 export. Needed when a day's import
+      # failed: the 08:10 cron only retries the last four dates, so anything
+      # older drops out of its window and has to be asked for by name.
+      - name: streamhatchet-ingest (import sessions)
+        if: ${{ inputs.worker == 'import-sessions' }}
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts \
+            --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            $FORCE_FLAG $WRITE_FLAG
 
       # Cross-platform by nature, but the worker still wants a --platform for
       # its date parsing; the creator rollup it writes covers every platform.
