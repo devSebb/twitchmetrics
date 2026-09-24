@@ -58,12 +58,18 @@ export type StreamHatchetDailySession = {
 };
 
 type AwsOptions = {
+  /**
+   * Named AWS CLI profile. Empty means "use the ambient credentials" — a
+   * GitHub runner has AWS_ACCESS_KEY_ID/SECRET in the environment and no
+   * profile file, and passing --profile there fails with "The config profile
+   * could not be found".
+   */
   profile: string;
   region?: string;
 };
 
 function awsBaseArgs(options: AwsOptions): string[] {
-  const args = ["--profile", options.profile];
+  const args = options.profile ? ["--profile", options.profile] : [];
   if (options.region) args.push("--region", options.region);
   return args;
 }

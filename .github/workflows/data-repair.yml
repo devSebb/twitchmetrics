@@ -171,8 +171,11 @@ jobs:
       - name: streamhatchet-ingest (import sessions)
         if: ${{ inputs.worker == 'import-sessions' }}
         run: |
+          # Empty --profile: the runner authenticates with the AWS_* env vars
+          # above and has no profile file for the worker's laptop default.
           npx tsx workers/streamhatchet-ingest.ts \
             --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            --profile "" \
             $FORCE_FLAG $WRITE_FLAG
 
       # Cross-platform by nature, but the worker still wants a --platform for
