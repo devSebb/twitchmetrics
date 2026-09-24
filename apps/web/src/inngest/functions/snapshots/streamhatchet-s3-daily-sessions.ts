@@ -136,6 +136,59 @@ function summarizeResults(results: StreamHatchetDailySessionImportResult[]) {
   );
 }
 
+/**
+ * A run that wrote nothing must not report success.
+ *
+ * Failures here are caught per (platform, date) so one platform cannot abort
+ * the sweep — but that also meant the run finished "completed" with the reason
+ * buried in metadata. Two import bugs hid behind that: the missing updatedAt
+ * (2026-09-21, every platform wrote 0) and the ON CONFLICT duplicate key
+ * (2026-09-20 onward, twitch only, unnoticed for four days).
+ *
+ * Degraded, not failed: the platforms that did import are still worth keeping,
+ * and the run genuinely ran.
+ */
+export function assessImportHealth(input: {
+  targets: CronPlatformTarget[];
+  results: StreamHatchetDailySessionImportResult[];
+  failures: CronStepFailure[];
+}): { status: "completed" | "degraded"; errorSummary?: string } {
+  const notes: string[] = [];
+
+  if (input.failures.length > 0) {
+    const counts = new Map<string, number>();
+    for (const failure of input.failures) {
+      counts.set(failure.platform, (counts.get(failure.platform) ?? 0) + 1);
+    }
+    const breakdown = [...counts]
+      .map(([platform, count]) => `${platform}x${count}`)
+      .join(", ");
+    notes.push(`${input.failures.length} step failure(s): ${breakdown}`);
+  }
+
+  // A platform that opened files and still stored nothing is broken, even when
+  // every step reported success.
+  for (const target of input.targets) {
+    const processed = input.results.filter(
+      (result) =>
+        result.platform === target.platform && !result.skippedExisting,
+    );
+    if (processed.length === 0) continue;
+    const stored = processed.reduce(
+      (sum, result) => sum + result.written + result.updated,
+      0,
+    );
+    if (stored === 0) {
+      notes.push(
+        `${target.platform} stored no rows from ${processed.length} file(s)`,
+      );
+    }
+  }
+
+  if (notes.length === 0) return { status: "completed" };
+  return { status: "degraded", errorSummary: notes.join("; ").slice(0, 1000) };
+}
+
 export const streamHatchetS3DailySessions = inngest.createFunction(
   {
     id: "streamhatchet-s3-daily-sessions",
@@ -275,6 +328,7 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
             summary,
           },
           summary: {
+            ...assessImportHealth({ targets, results, failures }),
             recordsScanned: summary.recordsScanned,
             recordsWritten: summary.recordsWritten,
             recordsSkipped: summary.recordsSkipped,
