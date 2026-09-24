@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { upsertStreamSessionFacts, type StreamFactInput } from "./facts";
+import {
+  batchByIdentity,
+  upsertStreamSessionFacts,
+  type StreamFactInput,
+} from "./facts";
 
 /**
  * Guards the hand-written INSERT in facts.ts.
@@ -94,5 +98,96 @@ describe("upsertStreamSessionFacts", () => {
     expect(values[index]).toBe("now()");
     // The conflict branch keeps it fresh too.
     expect(statements[0]).toContain('"updatedAt" = now()');
+  });
+});
+
+/**
+ * Postgres rejects an ON CONFLICT DO UPDATE whose VALUES repeat a conflict key
+ * (21000). The export produces exactly that: Stream Hatchet emits one row per
+ * (stream, category), so a broadcast that switches game appears twice under one
+ * video id. Twitch's import failed every day from 2026-09-20 on it.
+ */
+describe("batchByIdentity", () => {
+  const fact = (over: Partial<Record<string, unknown>> = {}): StreamFactInput =>
+    ({
+      source: "streamhatchet",
+      platform: "twitch",
+      platformUserId: "chan-1",
+      platformVideoId: "vid-1",
+      streamBeginsAt: new Date("2026-09-23T10:00:00.000Z"),
+      ...over,
+    }) as StreamFactInput;
+
+  it("never repeats an identity inside one statement", () => {
+    // One stream, two categories — the shape that broke the import.
+    const batches = batchByIdentity([
+      fact({ primaryGameName: "Just Chatting" }),
+      fact({ primaryGameName: "Valorant" }),
+    ]);
+
+    expect(batches).toHaveLength(2);
+    expect(batches[0]).toHaveLength(1);
+    expect(batches[1]).toHaveLength(1);
+  });
+
+  it("keeps distinct streams together in one statement", () => {
+    const batches = batchByIdentity([
+      fact({ platformVideoId: "vid-1" }),
+      fact({ platformVideoId: "vid-2" }),
+      fact({ platformUserId: "chan-2" }),
+    ]);
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(3);
+  });
+
+  it("separates kick rows by begin time, which is its identity", () => {
+    // No video id: the key falls back to streamBeginsAt.
+    const sameStart = [
+      fact({ platform: "kick", platformVideoId: null }),
+      fact({ platform: "kick", platformVideoId: null }),
+    ];
+    expect(batchByIdentity(sameStart)).toHaveLength(2);
+
+    const differentStart = [
+      fact({ platform: "kick", platformVideoId: null }),
+      fact({
+        platform: "kick",
+        platformVideoId: null,
+        streamBeginsAt: new Date("2026-09-23T18:00:00.000Z"),
+      }),
+    ];
+    expect(batchByIdentity(differentStart)).toHaveLength(1);
+  });
+
+  it("does not treat a video-id row and a null-video row as the same key", () => {
+    const batches = batchByIdentity([
+      fact({ platformVideoId: "vid-1" }),
+      fact({ platformVideoId: null }),
+    ]);
+    expect(batches).toHaveLength(1);
+  });
+
+  it("respects the statement size limit", () => {
+    const many = Array.from({ length: 5 }, (_, i) =>
+      fact({ platformVideoId: `vid-${i}` }),
+    );
+    const batches = batchByIdentity(many, 2);
+    expect(batches.map((b) => b.length)).toEqual([2, 2, 1]);
+  });
+
+  it("orders repeats after their first sighting, so the merge applies", () => {
+    const batches = batchByIdentity([
+      fact({ primaryGameName: "first" }),
+      fact({ primaryGameName: "second" }),
+      fact({ primaryGameName: "third" }),
+    ]);
+
+    expect(batches).toHaveLength(3);
+    expect(
+      batches.map(
+        (b) => (b[0] as unknown as { primaryGameName: string }).primaryGameName,
+      ),
+    ).toEqual(["first", "second", "third"]);
   });
 });
