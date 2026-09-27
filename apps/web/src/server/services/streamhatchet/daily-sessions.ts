@@ -120,6 +120,23 @@ export function formatPartitionDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * The partition dates a daily sweep should cover: yesterday first, then
+ * backwards. Shared by the facts import and the creator-rollup sweep so the
+ * two always agree on which days are in play.
+ */
+export function recentPartitionDates(retryDays: number): Date[] {
+  const yesterdayUtc = new Date();
+  yesterdayUtc.setUTCHours(0, 0, 0, 0);
+  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1);
+
+  return Array.from({ length: retryDays }, (_, index) => {
+    const date = new Date(yesterdayUtc);
+    date.setUTCDate(yesterdayUtc.getUTCDate() - index);
+    return date;
+  });
+}
+
 function toInternalPlatform(
   platform: StreamHatchetDailySessionPlatform,
 ): Platform | null {

@@ -1,10 +1,10 @@
 import { inngest } from "../../client";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 import {
-  finalizeCreatorDailyRollups,
   finalizeStreamHatchetDailySessionRollups,
   formatPartitionDate,
   ingestStreamHatchetDailySessionObject,
+  recentPartitionDates,
   type StreamHatchetDailySessionImportResult,
   type StreamHatchetDailySessionPlatform,
 } from "@/server/services/streamhatchet/daily-sessions";
@@ -18,7 +18,7 @@ type CronPlatformTarget = {
 type CronStepFailure = {
   platform: string;
   date: string;
-  stage: "import" | "rollups" | "creator-rollups" | "game-snapshots";
+  stage: "import" | "rollups" | "game-snapshots";
   error: string;
 };
 
@@ -97,18 +97,6 @@ function parsePlatformTargets(): CronPlatformTarget[] {
   }
 
   return targets;
-}
-
-function recentPartitionDates(retryDays: number): Date[] {
-  const yesterdayUtc = new Date();
-  yesterdayUtc.setUTCHours(0, 0, 0, 0);
-  yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1);
-
-  return Array.from({ length: retryDays }, (_, index) => {
-    const date = new Date(yesterdayUtc);
-    date.setUTCDate(yesterdayUtc.getUTCDate() - index);
-    return date;
-  });
 }
 
 function summarizeResults(results: StreamHatchetDailySessionImportResult[]) {
@@ -233,6 +221,11 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
         // Each (platform, date) runs as two steps — facts import, then rollup
         // recompute — so each fits maxDuration. Failures are caught per pair:
         // one platform crashing must not abort the rest of the sweep.
+        //
+        // Creator rollups are NOT here: they were the last step per date and so
+        // the first thing lost when this sweep ran long (three days missing in
+        // 2026-09). They now run as streamhatchet-creator-rollups at 09:40 UTC,
+        // which only needs the facts to be stored, not this run to survive.
         for (const date of dates) {
           const dateKey = formatPartitionDate(date);
           for (const target of targets) {
@@ -298,21 +291,6 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
                 });
               }
             }
-          }
-
-          // After every platform for this date: merge each creator's live
-          // intervals across platforms so a simulcast counts once.
-          try {
-            await step.run(`creator-rollups-${dateKey}`, () =>
-              finalizeCreatorDailyRollups({ date }),
-            );
-          } catch (error) {
-            failures.push({
-              platform: "all",
-              date: dateKey,
-              stage: "creator-rollups",
-              error: errorMessage(error),
-            });
           }
         }
 

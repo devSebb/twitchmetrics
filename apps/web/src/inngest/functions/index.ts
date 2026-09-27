@@ -13,6 +13,7 @@ import {
   streamHatchetLiveGamesSnapshot,
 } from "./snapshots/streamhatchet-game-snapshot";
 import { streamHatchetS3DailySessions } from "./snapshots/streamhatchet-s3-daily-sessions";
+import { streamHatchetCreatorRollups } from "./snapshots/streamhatchet-creator-rollups";
 import { demoteInactiveCreators } from "./snapshots/demote-inactive";
 import { onConnectSnapshot } from "./snapshots/on-connect-snapshot";
 import { processClaim } from "./claims/process-claim";
@@ -40,6 +41,7 @@ export const functions = [
   streamHatchetLiveChannelsSnapshot,
   streamHatchetLiveGamesSnapshot,
   streamHatchetS3DailySessions,
+  streamHatchetCreatorRollups,
   demoteInactiveCreators,
   onConnectSnapshot,
   processClaim,
