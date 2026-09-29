@@ -82,7 +82,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install DuckDB CLI
         run: |
-          curl -fsSL https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
+          # Retry: a transient 504 from the GitHub CDN killed the whole weekly
+          # follower refresh on 2026-09-21, and because this job only runs on
+          # Mondays that cost a full week of Kick follower data (coverage sat at
+          # 18% until the next run restored it to 86%).
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+            https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
           sudo unzip -o /tmp/duckdb.zip -d /usr/local/bin
           duckdb --version
       - name: Run follower refresh (write)
@@ -114,7 +119,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install DuckDB CLI
         run: |
-          curl -fsSL https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
+          # Retry: a transient 504 from the GitHub CDN killed the whole weekly
+          # follower refresh on 2026-09-21, and because this job only runs on
+          # Mondays that cost a full week of Kick follower data (coverage sat at
+          # 18% until the next run restored it to 86%).
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+            https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
           sudo unzip -o /tmp/duckdb.zip -d /usr/local/bin
           duckdb --version
       - name: Run social-links refresh (write)
@@ -146,7 +156,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install DuckDB CLI
         run: |
-          curl -fsSL https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
+          # Retry: a transient 504 from the GitHub CDN killed the whole weekly
+          # follower refresh on 2026-09-21, and because this job only runs on
+          # Mondays that cost a full week of Kick follower data (coverage sat at
+          # 18% until the next run restored it to 86%).
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+            https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
           sudo unzip -o /tmp/duckdb.zip -d /usr/local/bin
           duckdb --version
       - name: Run demographics refresh (write)
