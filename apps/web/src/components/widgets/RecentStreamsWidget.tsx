@@ -34,6 +34,18 @@ function SortArrow({ active, order }: { active: boolean; order: SortOrder }) {
   );
 }
 
+/** A measured viewer figure, or a dash when we have none for this stream. */
+function ViewerCount({ value }: { value: number | null }) {
+  if (value === null) {
+    return (
+      <span className="text-[#949BA4]" title="No viewer data for this stream">
+        &mdash;
+      </span>
+    );
+  }
+  return <>{formatNumber(value)}</>;
+}
+
 export function RecentStreamsWidget({ profile }: Props) {
   const [sortBy, setSortBy] = useState<SortBy>("date");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
@@ -129,10 +141,19 @@ export function RecentStreamsWidget({ profile }: Props) {
                   {formatDuration(session.durationMinutes * 60)}
                 </td>
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
-                  {formatNumber(session.avgViewers)}
+                  {session.viewerData === "processing" ? (
+                    <span
+                      className="rounded bg-[#383A40] px-1.5 py-0.5 text-[10px] font-medium text-[#949BA4]"
+                      title="Viewer stats arrive with Stream Hatchet's daily data, usually by the next morning (UTC)."
+                    >
+                      Processing
+                    </span>
+                  ) : (
+                    <ViewerCount value={session.avgViewers} />
+                  )}
                 </td>
                 <td className="px-3 py-2.5 text-[#DBDEE1]">
-                  {formatNumber(session.peakViewers)}
+                  <ViewerCount value={session.peakViewers} />
                 </td>
               </tr>
             ))}

@@ -31,8 +31,19 @@ type StreamSession = {
   source: "twitch_api" | "streamhatchet";
   game: string | null;
   durationMinutes: number;
-  avgViewers: number;
-  peakViewers: number;
+  /** Null when we have no measured figure (see viewerData). */
+  avgViewers: number | null;
+  peakViewers: number | null;
+  /**
+   * measured   — Stream Hatchet's numbers for this stream.
+   * processing — a Twitch VOD newer than the last SH day we have imported;
+   *              SH's row replaces it once that day's file lands.
+   * unavailable — a Twitch VOD SH never recorded.
+   * Twitch-VOD rows never carry viewer numbers: the only reading we had was a
+   * sparse snapshot sample, shown as avg = peak (QA 2026-10: Domingo 8.5K/8.5K
+   * where SH later measured 7,318 avg / 11,076 peak).
+   */
+  viewerData: "measured" | "processing" | "unavailable";
   title: string | null;
   viewCount: number;
   thumbnailUrl: string | null;
@@ -144,6 +155,17 @@ function sessionsOverlap(left: StreamSession, right: StreamSession): boolean {
   if (overlap <= 0) return Math.abs(leftStart - rightStart) <= 30 * 60 * 1000;
   const shorter = Math.min(leftEnd - leftStart, rightEnd - rightStart);
   return shorter > 0 && overlap / shorter >= 0.5;
+}
+
+function compareViewers(
+  left: number | null,
+  right: number | null,
+  order: "asc" | "desc",
+): number {
+  if (left === null || right === null) {
+    return left === right ? 0 : left === null ? 1 : -1;
+  }
+  return order === "desc" ? right - left : left - right;
 }
 
 function dedupeStreamSessions(sessions: StreamSession[]): StreamSession[] {
@@ -424,9 +446,9 @@ export const snapshotRouter = router({
         }
       }
 
-      // Best-effort game / viewer enrichment: look up creator's snapshots
-      // that fall inside each VOD's [createdAt, createdAt + duration] window
-      // and pull CURRENT_GAME / PEAK_VIEWERS / AVG_VIEWERS.
+      // Best-effort game enrichment: look up creator's snapshots that fall
+      // inside each VOD's [createdAt, createdAt + duration] window and pull
+      // CURRENT_GAME. Viewer counts are deliberately NOT taken from them.
       const earliestStart =
         videos.length > 0
           ? videos.reduce(
@@ -452,40 +474,38 @@ export const snapshotRouter = router({
             })
           : [];
 
+      // End of the newest Twitch day whose SH file is fully imported. A VOD
+      // that ended after it is still waiting for its SH row.
+      const latestTwitchFile =
+        videos.length > 0
+          ? await ctx.prisma.streamHatchetSourceObject.findFirst({
+              where: {
+                dataset: "daily_sessions_summary",
+                platform: "twitch",
+                status: "completed",
+                lastImportedAt: { not: null },
+              },
+              orderBy: { partitionDate: "desc" },
+              select: { partitionDate: true },
+            })
+          : null;
+      const shCoveredUntil = latestTwitchFile?.partitionDate
+        ? latestTwitchFile.partitionDate.getTime() + 24 * 60 * 60 * 1000
+        : null;
+
       const sessions: StreamSession[] = videos.map((video) => {
         const start = new Date(video.createdAt);
         const end = new Date(start.getTime() + video.durationSeconds * 1000);
 
         let game: string | null = null;
-        let peak = 0;
-        const viewerSamples: number[] = [];
-
         for (const snap of snapshots) {
           if (snap.snapshotAt < start || snap.snapshotAt > end) continue;
           const ext = snap.extendedMetrics as Record<string, unknown> | null;
-          if (!ext) continue;
-
-          if (!game && typeof ext.CURRENT_GAME === "string") {
+          if (ext && typeof ext.CURRENT_GAME === "string") {
             game = ext.CURRENT_GAME;
+            break;
           }
-          const avg =
-            typeof ext.AVG_VIEWERS === "number"
-              ? ext.AVG_VIEWERS
-              : typeof ext.LIVE_VIEWER_COUNT === "number"
-                ? ext.LIVE_VIEWER_COUNT
-                : null;
-          if (avg !== null) viewerSamples.push(avg);
-          const snapPeak =
-            typeof ext.PEAK_VIEWERS === "number" ? ext.PEAK_VIEWERS : null;
-          if (snapPeak !== null && snapPeak > peak) peak = snapPeak;
         }
-
-        const avgViewers =
-          viewerSamples.length > 0
-            ? Math.round(
-                viewerSamples.reduce((a, b) => a + b, 0) / viewerSamples.length,
-              )
-            : 0;
 
         return {
           startedAt: start.toISOString(),
@@ -494,8 +514,12 @@ export const snapshotRouter = router({
           source: "twitch_api",
           game,
           durationMinutes: Math.round(video.durationSeconds / 60),
-          avgViewers,
-          peakViewers: peak,
+          avgViewers: null,
+          peakViewers: null,
+          viewerData:
+            shCoveredUntil === null || end.getTime() > shCoveredUntil
+              ? "processing"
+              : "unavailable",
           title: video.title || null,
           viewCount: video.viewCount,
           thumbnailUrl: video.thumbnailUrl || null,
@@ -545,6 +569,7 @@ export const snapshotRouter = router({
                 durationMinutes: session.airtimeMinutes,
                 avgViewers: Math.round(session.averageViewers),
                 peakViewers: session.peakViewers,
+                viewerData: "measured",
                 title: session.sessionTitle,
                 viewCount: Number(session.sessionViews ?? 0n),
                 thumbnailUrl: null,
@@ -571,14 +596,15 @@ export const snapshotRouter = router({
             return input.sortOrder === "desc"
               ? b.durationMinutes - a.durationMinutes
               : a.durationMinutes - b.durationMinutes;
+          // Rows without measured viewers sort last either way.
           case "avgViewers":
-            return input.sortOrder === "desc"
-              ? b.avgViewers - a.avgViewers
-              : a.avgViewers - b.avgViewers;
+            return compareViewers(a.avgViewers, b.avgViewers, input.sortOrder);
           case "peakViewers":
-            return input.sortOrder === "desc"
-              ? b.peakViewers - a.peakViewers
-              : a.peakViewers - b.peakViewers;
+            return compareViewers(
+              a.peakViewers,
+              b.peakViewers,
+              input.sortOrder,
+            );
           default:
             return 0;
         }
