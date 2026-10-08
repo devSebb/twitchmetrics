@@ -10,9 +10,15 @@
  * C27 exists to fix.
  *
  * As its own function it only needs the facts to be in place, not the import
- * sweep to survive, and a slow platform can no longer starve it. It runs at
- * 09:40 UTC, ~90 minutes after the 08:10 import, and is idempotent: each date
- * is rebuilt from StreamSessionFact, so a re-run costs time and nothing else.
+ * sweep to survive, and a slow platform can no longer starve it. It is
+ * idempotent: each date is rebuilt from StreamSessionFact, so a re-run costs
+ * time and nothing else.
+ *
+ * NO CRON. A date takes ~4 min, right at the 300 s Vercel step cap; with twitch
+ * retries loading Neon it ran 1 of 9 days from 2026-09-28 and left the rest
+ * half-written. The daily sweep now runs on a GitHub runner right after the
+ * twitch import (.github/workflows/sh-daily-sessions.yml). This function stays
+ * for a manual `streamhatchet/creator-rollups` event.
  */
 import { inngest } from "../../client";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
@@ -91,7 +97,7 @@ export const streamHatchetCreatorRollups = inngest.createFunction(
     id: "streamhatchet-creator-rollups",
     concurrency: { limit: 1 },
   },
-  [{ cron: "40 9 * * *" }, { event: "streamhatchet/creator-rollups" }],
+  [{ event: "streamhatchet/creator-rollups" }],
   async ({ step }) => {
     return executeIngestionRun<CreatorRollupSweepResult>(
       {

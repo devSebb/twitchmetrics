@@ -610,9 +610,12 @@ export async function ingestStreamHatchetDailySessionObject(
   const etagChanged =
     existingObject != null && existingObject.etag !== currentEtag;
 
+  // lastImportedAt is only set once every row is written: a "completed" object
+  // without it was finalized over a killed import and must be imported again.
   if (
     existingObject &&
     existingObject.status === "completed" &&
+    existingObject.lastImportedAt != null &&
     existingObject.etag === currentEtag &&
     canSkipImportedObject({
       existingMode: metadataImportMode(existingObject.metadata),
@@ -645,6 +648,8 @@ export async function ingestStreamHatchetDailySessionObject(
       platform: input.platform,
       partitionDate,
       status: "running",
+      // Cleared until this attempt writes its last row (set below).
+      lastImportedAt: null,
       errorSummary: null,
       metadata: {
         importMode: mode,
@@ -821,6 +826,14 @@ export async function finalizeStreamHatchetDailySessionRollups(
     where: { bucket_key: { bucket, key } },
   });
   if (!sourceObject) return null;
+
+  // Finalizing over a killed import marked twitch 2026-10-06 "completed" with
+  // 0 rows, and the import then skipped it forever. Fail the step instead.
+  if (sourceObject.lastImportedAt == null) {
+    throw new Error(
+      `facts import for s3://${bucket}/${key} never finished; not marking it completed`,
+    );
+  }
 
   const rollups = await recomputeRollups({
     platform: input.platform,

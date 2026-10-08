@@ -25,6 +25,11 @@ const LIVE_CHANNEL_GAME_LIMIT = 5;
 const LIVE_CHANNEL_TARGET_POOL = 100;
 const LIVE_CHANNEL_LIMIT = 15;
 const LIVE_BUCKET_MS = 30 * 60 * 1000;
+// The live games fetch was rate limited on 417 of 418 runs from 2026-09-18,
+// each time with Retry-After ~11 s, and the run gave up instead of waiting —
+// so YouTube game viewership stopped. Wait out the window and try again.
+const LIVE_GAMES_ATTEMPTS = 3;
+const LIVE_GAMES_MAX_WAIT_SECONDS = 60;
 const STREAMHATCHET_MAPPING_PREFIX = "streamhatchet:";
 
 type GameMatch = {
@@ -880,10 +885,27 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         let timedOut = false;
         let retryAfterSeconds: number | null = null;
 
-        const fetchResult = (await step.run(
+        let fetchResult = (await step.run(
           "fetch-live-games",
           safeFetchLiveGames,
         )) as LiveGamesFetchResult;
+        for (
+          let attempt = 2;
+          attempt <= LIVE_GAMES_ATTEMPTS &&
+          !fetchResult.ok &&
+          fetchResult.code === "rate_limited";
+          attempt++
+        ) {
+          const waitSeconds = Math.min(
+            LIVE_GAMES_MAX_WAIT_SECONDS,
+            (fetchResult.retryAfterSeconds ?? 15) + 2,
+          );
+          await step.sleep(`live-games-backoff-${attempt}`, `${waitSeconds}s`);
+          fetchResult = (await step.run(
+            `fetch-live-games-attempt-${attempt}`,
+            safeFetchLiveGames,
+          )) as LiveGamesFetchResult;
+        }
 
         if (!fetchResult.ok) {
           if (fetchResult.code === "rate_limited") {

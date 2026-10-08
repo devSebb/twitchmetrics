@@ -1,0 +1,93 @@
+# Daily Stream Hatchet session pipeline — the half that does not fit Vercel.
+#
+# WHY THIS EXISTS. Inngest on Vercel gives each step 300 s. A twitch day is
+# ~85k rows; its import and its rollup rebuild each run several minutes (the
+# rollup ~28 min under load). From 2026-09-26 every twitch step was killed
+# mid-write and retried: facts landed 20 % short, the rollup delete ran but the
+# re-insert did not (twitch ChannelDailyRollup = 0 rows on 8 of 12 days), the
+# run never finished, and the next day's run queued behind it. The per-creator
+# rollup (~4 min/date) died the same way, 1 day in 9 completing.
+#
+# What stays on Inngest (streamhatchet-s3-daily-sessions, 08:10 UTC): kick and
+# yt import + rollups + the yt game snapshots. A few minutes, well inside 300 s.
+#
+# What runs here, 08:40 UTC, after kick/yt have landed:
+#   1. twitch import for the last N days (completed files are skipped, so
+#      normally only yesterday's file is read), with that day's rollups;
+#   2. twitch rollups for the older days of the window — a new file extends
+#      streams that crossed midnight, which changes the earlier days' totals;
+#   3. CreatorDailyRollup for the window, every platform merged;
+#   4. a read-only health check over what is actually in the database. It does
+#      not trust any run's own status, so a hung job still turns this red.
+#
+# A failed scheduled run emails the workflow's last committer — that is the
+# alert. Manual runs: Actions tab -> this workflow -> Run workflow.
+#
+# Required repository secrets: DATABASE_URL, DIRECT_URL, SH_AWS_ACCESS_KEY_ID,
+# SH_AWS_SECRET_ACCESS_KEY (all already used by data-repair.yml).
+
+name: SH daily sessions
+
+on:
+  schedule:
+    - cron: "40 8 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Window size in days, ending yesterday UTC"
+        required: false
+        default: "4"
+        type: string
+
+concurrency:
+  group: sh-daily-sessions
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.SH_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SH_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
+      DAYS: ${{ inputs.days || '4' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+
+      # Empty --profile: the runner authenticates with the AWS_* env vars and
+      # has no profile file for the worker's laptop default.
+      - name: Import twitch (last N days)
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts \
+            --platform twitch --days "$DAYS" --profile "" --write
+
+      - name: Rebuild twitch rollups for the older days
+        if: ${{ env.DAYS != '1' }}
+        run: |
+          FROM=$(date -u -d "-$DAYS days" +%F)
+          TO=$(date -u -d "-2 days" +%F)
+          npx tsx workers/streamhatchet-ingest.ts --recompute-rollups \
+            --platform twitch --start-date "$FROM" --end-date "$TO" \
+            --skip-creator-rollups --write
+
+      # Cross-platform; --platform only feeds the worker's date parsing.
+      - name: Rebuild creator rollups (all platforms)
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts --creator-rollups-only \
+            --platform twitch --days "$DAYS" --write
+
+      - name: Health check
+        if: ${{ always() }}
+        run: npx tsx workers/check-ingestion-health.ts --days "$DAYS"

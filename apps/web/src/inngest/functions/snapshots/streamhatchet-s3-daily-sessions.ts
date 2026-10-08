@@ -47,12 +47,18 @@ const DEFAULT_RETRY_DAYS = 4;
 // not just ones already matched to a CreatorProfile. `yt` is the canonical
 // YouTube creator feed; `ytg` (YouTube Gaming) is opt-in via env because of its
 // ~10x row volume and is used for game-level data rather than the creator catalog.
-// Ordered smallest-first so the heaviest platform (twitch) can never starve the
-// others of run time (twitch failing daily silently froze yt for 3 weeks).
+//
+// TWITCH IS NOT HERE. A twitch day is ~85k rows and its rollup recompute ran
+// ~28 min — far past the 300 s a Vercel step gets. From 2026-09-26 every twitch
+// step was killed mid-write and retried, the run never finished, the next day's
+// run queued behind it (concurrency 1), and twitch facts sat 20 % short for two
+// weeks. Twitch now imports on a GitHub runner (.github/workflows/
+// sh-daily-sessions.yml), which has no per-step cap. Kick and yt finish in a
+// few minutes and stay here. STREAMHATCHET_S3_CRON_PLATFORMS can still force
+// twitch back in, but don't.
 const BASE_TARGETS: CronPlatformTarget[] = [
   { platform: "kick", matchedOnly: false },
   { platform: "yt", matchedOnly: false },
-  { platform: "twitch", matchedOnly: false },
 ];
 
 function errorMessage(error: unknown): string {

@@ -425,10 +425,13 @@ async function importOneDate(config: ImportConfig, date: Date) {
     }),
   );
 
+  // lastImportedAt is only set once every row is written: a "completed" object
+  // without it was finalized over a killed import (twitch 2026-10-06, 0 rows).
   if (
     config.write &&
     existingObject &&
     existingObject.status === "completed" &&
+    existingObject.lastImportedAt != null &&
     existingObject.etag === metadata.etag &&
     canSkipImportedObject({
       existingMode: metadataImportMode(existingObject.metadata),
@@ -508,6 +511,8 @@ async function importOneDate(config: ImportConfig, date: Date) {
         partitionDate: date,
         status: "running",
         rowCount: s3RowCount,
+        // Cleared until this attempt writes its last row.
+        lastImportedAt: null,
         errorSummary: null,
         metadata: {
           s3RowCount,
