@@ -860,9 +860,14 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
   },
 );
 
+// NO CRON. /live/games has answered 429 to every call since the job first ran
+// (2026-05-18): 3,451 hourly runs, not one row. The retries above did not help
+// either — three attempts 13 s apart, all 429 — so this is our key's access to
+// the endpoint, not a burst limit. Event-only until Stream Hatchet confirms the
+// endpoint is in our plan; send `snapshots/streamhatchet-live-games` to test.
 export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
   { id: "streamhatchet-live-games-snapshot", concurrency: { limit: 1 } },
-  [{ cron: "5 */1 * * *" }, { event: "snapshots/streamhatchet-live-games" }],
+  [{ event: "snapshots/streamhatchet-live-games" }],
   async ({ step }) => {
     return executeIngestionRun(
       {

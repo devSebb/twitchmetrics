@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { deriveGameMetrics, intervalWeights } from "./game-metrics";
+import {
+  deriveGameMetrics,
+  intervalWeights,
+  summarizeViewerSeries,
+} from "./game-metrics";
 
 describe("deriveGameMetrics", () => {
   it("returns zeroed metrics when no snapshots exist", () => {
@@ -153,5 +157,45 @@ describe("intervalWeights", () => {
         at("2026-03-28T05:00:00.000Z"),
       ]),
     ).toEqual([0, 10 * 60_000, 30 * 60_000, 30 * 60_000]);
+  });
+});
+
+describe("summarizeViewerSeries", () => {
+  // A week of half-hourly snapshots with a gap and an off-slot reading, ending
+  // at the newest snapshot — what the game page loads. (No two share a time:
+  // (gameId, snapshotAt) is unique.)
+  const until = new Date("2026-10-08T14:00:00.000Z");
+  const week = Array.from({ length: 7 * 48 }, (_, index) => ({
+    snapshotAt: new Date(until.getTime() - index * 30 * 60_000),
+    totalViewers: 50_000 + ((index * 7_919) % 90_000),
+    totalChannels: 1_000 + (index % 50),
+  }))
+    .filter((_, index) => index < 40 || index > 46)
+    .concat({
+      snapshotAt: new Date(until.getTime() - 45 * 60_000),
+      totalViewers: 400_000,
+      totalChannels: 1,
+    });
+
+  it("prints the header's 7d average for the header's window", () => {
+    expect(summarizeViewerSeries(week).average).toBe(
+      deriveGameMetrics(week, until).avgViewers7d,
+    );
+  });
+
+  it("prints the header's 24h peak for the last 24h", () => {
+    const day = week.filter(
+      (point) => point.snapshotAt.getTime() >= until.getTime() - 86_400_000,
+    );
+    expect(summarizeViewerSeries(day).peak).toBe(
+      deriveGameMetrics(week, until).peakViewers24h,
+    );
+  });
+
+  it("is order-independent and zero for an empty window", () => {
+    expect(summarizeViewerSeries([...week].reverse())).toEqual(
+      summarizeViewerSeries(week),
+    );
+    expect(summarizeViewerSeries([])).toEqual({ average: 0, peak: 0 });
   });
 });

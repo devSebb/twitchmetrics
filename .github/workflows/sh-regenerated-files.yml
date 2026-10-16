@@ -1,0 +1,71 @@
+# Weekly sweep for Stream Hatchet files re-exported after we imported them.
+#
+# WHY THIS EXISTS. SH rewrites old daily files in place. On 2026-10-07 and
+# again 10-16 they replaced weeks of full twitch days (~85k rows) with ~14k-row
+# truncations, then later re-sent some days in full (twitch 10-02, 10-16). The
+# daily jobs only look back 4 days, so a fix SH lands for an older day was
+# never picked up.
+#
+# What it does, per platform, for days 6-35 back (the daily window is 1-4 back,
+# so the two never rebuild the same day):
+#   - files whose ETag is unchanged are skipped;
+#   - a re-export with >= 1 % more rows than we imported is upserted (never
+#     deleted first), then the days either side and their creator rollups are
+#     rebuilt;
+#   - a re-export under 95 % of what we imported is refused and logged — that
+#     is a truncation, and the full facts we already hold stay;
+#   - anything in between is a same-size re-run and is left alone.
+# See --refresh-regenerated in workers/streamhatchet-ingest.ts.
+#
+# Required repository secrets: same as sh-daily-sessions.yml.
+
+name: SH regenerated files
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      from_days_back:
+        description: "Oldest day to check, in days before today UTC"
+        required: false
+        default: "35"
+        type: string
+
+concurrency:
+  group: sh-regenerated-files
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.SH_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SH_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
+      FROM_DAYS_BACK: ${{ inputs.from_days_back || '35' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+
+      # Empty --profile: the runner authenticates with the AWS_* env vars.
+      - name: Sweep twitch, yt, kick
+        run: |
+          FROM=$(date -u -d "-$FROM_DAYS_BACK days" +%F)
+          TO=$(date -u -d "-6 days" +%F)
+          for platform in twitch yt kick; do
+            npx tsx workers/streamhatchet-ingest.ts --refresh-regenerated \
+              --platform "$platform" --start-date "$FROM" --end-date "$TO" \
+              --profile "" --write
+          done

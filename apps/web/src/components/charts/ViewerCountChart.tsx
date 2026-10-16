@@ -20,6 +20,14 @@ type ViewerCountChartProps = {
   platform: Platform;
   loading?: boolean;
   height?: number;
+  /** Tooltip noun for a point. Daily series are averages; snapshots are not. */
+  valueLabel?: string;
+  /**
+   * Average and peak computed by the caller, with the window they cover. Game
+   * charts pass the header's time-weighted figures so the avg line and the
+   * peak marker print the same numbers as the header for the same window.
+   */
+  summary?: { average: number; peak: number; windowLabel: string } | undefined;
 };
 
 export function ViewerCountChart({
@@ -27,6 +35,8 @@ export function ViewerCountChart({
   platform,
   loading = false,
   height = 400,
+  valueLabel = "avg viewers",
+  summary,
 }: ViewerCountChartProps) {
   const color = CHART_PLATFORM_COLORS[platform] ?? "#9146ff";
 
@@ -38,7 +48,12 @@ export function ViewerCountChart({
       return { series: [] };
     }
 
-    const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+    const avg =
+      summary?.average ??
+      Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+    const avgLabel = summary
+      ? `${summary.windowLabel} avg: ${formatNumber(avg)}`
+      : `Avg: ${formatNumber(avg)}`;
 
     // Prefer the true recorded peak; the plotted series is averages, so the
     // max of the series is only a fallback label, not a real peak.
@@ -57,6 +72,14 @@ export function ViewerCountChart({
     if (bestTruePeak > -Infinity) {
       peakLabelValue = bestTruePeak;
     }
+    if (summary) {
+      const summaryIndex = values.indexOf(summary.peak);
+      if (summaryIndex >= 0) peakIndex = summaryIndex;
+      peakLabelValue = summary.peak;
+    }
+    const peakLabel = summary
+      ? `${summary.windowLabel} peak: ${formatNumber(peakLabelValue)}`
+      : `Peak ${formatNumber(peakLabelValue)}`;
     const peakDate = dates[peakIndex] ?? "";
     // Marker sits on the plotted line at the peak day; its label carries the
     // true peak value (which may exceed the averaged series).
@@ -90,7 +113,7 @@ export function ViewerCountChart({
           const point = data[p.dataIndex];
 
           return tooltipHtml(chartDateLabel(p.axisValue, "full"), [
-            { value: `${formatNumber(p.value)} avg viewers` },
+            { value: `${formatNumber(p.value)} ${valueLabel}` },
             ...(point?.peak !== undefined
               ? [
                   {
@@ -141,7 +164,7 @@ export function ViewerCountChart({
               {
                 yAxis: avg,
                 label: {
-                  formatter: `Avg: ${formatNumber(avg)}`,
+                  formatter: avgLabel,
                   position: "insideEndTop" as const,
                   color: THEME.colors.textMuted,
                   fontSize: 11,
@@ -164,7 +187,7 @@ export function ViewerCountChart({
                 itemStyle: { color },
                 label: {
                   show: true,
-                  formatter: () => `Peak ${formatNumber(peakLabelValue)}`,
+                  formatter: () => peakLabel,
                   position: "top" as const,
                   color: THEME.colors.textHeader,
                   fontSize: 11,
@@ -175,7 +198,7 @@ export function ViewerCountChart({
         },
       ],
     };
-  }, [data, color]);
+  }, [data, color, valueLabel, summary]);
 
   return <BaseChart option={option} height={height} loading={loading} />;
 }

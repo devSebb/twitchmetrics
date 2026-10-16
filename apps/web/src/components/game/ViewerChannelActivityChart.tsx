@@ -25,6 +25,9 @@ type ActivityPoint = {
 
 type ViewerChannelActivityChartProps = {
   slug: string;
+  /** The page's newest snapshot: every period ends here, like the header. */
+  until: string | null;
+  /** The 7d window the header was derived from. */
   initialData: ActivityPoint[];
 };
 
@@ -133,22 +136,24 @@ function buildOption(data: ActivityPoint[], period: Period): EChartsOption {
 
 export function ViewerChannelActivityChart({
   slug,
+  until,
   initialData,
 }: ViewerChannelActivityChartProps) {
-  const [period, setPeriod] = useState<Period>("30d");
+  // 7d first, the header's window; see GameViewerChart.
+  const [period, setPeriod] = useState<Period>("7d");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["game-activity", slug, period],
+    queryKey: ["game-activity", slug, period, until],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/games/${slug}/snapshots?period=${period}&metric=all`,
-      );
+      const params = new URLSearchParams({ period, metric: "all" });
+      if (until) params.set("until", until);
+      const res = await fetch(`/api/games/${slug}/snapshots?${params}`);
       const json = (await res.json()) as {
         data: { date: string; viewers: number; channels: number }[];
       };
       return json.data;
     },
-    initialData: period === "30d" ? initialData : undefined,
+    initialData: period === "7d" ? initialData : undefined,
     staleTime: 60_000,
   });
 
@@ -160,7 +165,7 @@ export function ViewerChannelActivityChart({
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#F2F3F5]">
           <ChartBar size={16} weight="duotone" className="text-[#949BA4]" />
-          Recent Viewership &amp; Channel Activity
+          Twitch Viewership &amp; Channel Activity
         </h2>
         <div className="flex gap-1 rounded-md bg-[#1E1F22] p-0.5">
           {PERIODS.map((p) => (

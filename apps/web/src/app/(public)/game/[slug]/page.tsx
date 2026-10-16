@@ -4,6 +4,14 @@ import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import { getGamePlatformMetrics } from "@/server/services/game-platform-metrics";
+import {
+  deriveGameMetrics,
+  summarizeViewerSeries,
+} from "@/server/services/game-metrics";
+import {
+  liveTopChannelWhere,
+  selectDisplayTopChannels,
+} from "@/server/services/game-top-channels";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
   GameHeader,
@@ -18,13 +26,17 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-// ISR: game pages cache for an hour between rollup refreshes.
+// ISR: one game-snapshot run (*/30). The header and both charts are built from
+// the same snapshots and the charts ask for the window ending at the page's
+// newest snapshot, so a cached page still agrees with itself.
 // Empty generateStaticParams opts the route into on-demand static
 // generation — without it every request re-renders from scratch.
-export const revalidate = 3600;
+export const revalidate = 1800;
 export function generateStaticParams() {
   return [];
 }
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function getGame(slug: string) {
   const game = await db.game.findUnique({
@@ -32,13 +44,14 @@ async function getGame(slug: string) {
     include: {
       viewerSnapshots: {
         orderBy: { snapshotAt: "desc" },
-        take: 100,
+        take: 1,
       },
       broadcastLanguages: {
         orderBy: { percent: "desc" },
         take: 5,
       },
       topChannels: {
+        where: liveTopChannelWhere(),
         orderBy: [{ avgViewers: "desc" }, { updatedAt: "desc" }],
         take: 50,
       },
@@ -53,60 +66,21 @@ async function getGame(slug: string) {
   return serializeBigInt(game);
 }
 
-function topChannelSourcePriority(source: string | null | undefined): number {
-  switch (source) {
-    case "twitch_api":
-    case "kick_api":
-      return 100;
-    case "streamhatchet_live":
-      return 80;
-    case "api":
-      return 50;
-    default:
-      return 10;
-  }
-}
-
-function selectDisplayTopChannels<
-  T extends {
-    platform?: string | null;
-    source?: string | null;
-    channelName: string;
-    category: string;
-    avgViewers: number;
-  },
->(channels: T[]): T[] {
-  const byChannel = new Map<string, T>();
-
-  for (const channel of channels) {
-    const key = `${channel.platform ?? "unknown"}:${channel.channelName.toLowerCase()}`;
-    const existing = byChannel.get(key);
-    const shouldReplace =
-      !existing ||
-      topChannelSourcePriority(channel.source) >
-        topChannelSourcePriority(existing.source) ||
-      (topChannelSourcePriority(channel.source) ===
-        topChannelSourcePriority(existing.source) &&
-        channel.avgViewers > existing.avgViewers);
-
-    if (shouldReplace) byChannel.set(key, channel);
-  }
-
-  const deduped = [...byChannel.values()];
-  const mostWatched = deduped
-    .filter((channel) => channel.category === "most_watched")
-    .sort((left, right) => right.avgViewers - left.avgViewers)
-    .slice(0, 6);
-  const emerging = deduped
-    .filter(
-      (channel) =>
-        channel.category === "emerging" ||
-        channel.category === "fastest_growing",
-    )
-    .sort((left, right) => right.avgViewers - left.avgViewers)
-    .slice(0, 5);
-
-  return [...mostWatched, ...emerging];
+/**
+ * The 7 days of snapshots ending at the newest one. The header's 7d average
+ * and 24h peak are derived from exactly these rows, and the charts open on the
+ * same window, so the page's numbers agree with each other.
+ */
+async function getWeekSeries(gameId: string, until: Date | null) {
+  if (!until) return [];
+  return db.gameViewerSnapshot.findMany({
+    where: {
+      gameId,
+      snapshotAt: { gte: new Date(until.getTime() - WEEK_MS), lte: until },
+    },
+    orderBy: { snapshotAt: "asc" },
+    select: { snapshotAt: true, totalViewers: true, totalChannels: true },
+  });
 }
 
 export async function generateMetadata({
@@ -162,10 +136,19 @@ export default async function GamePage({ params }: PageProps) {
     notFound();
   }
 
-  const platformMetrics = await getGamePlatformMetrics({
-    gameId: game.id,
-  });
   const latestSnapshot = game.viewerSnapshots[0] ?? null;
+  // serializeBigInt turned the Date into its ISO string.
+  const until = latestSnapshot
+    ? new Date(String(latestSnapshot.snapshotAt))
+    : null;
+  const [platformMetrics, weekSeries] = await Promise.all([
+    getGamePlatformMetrics({ gameId: game.id }),
+    getWeekSeries(game.id, until),
+  ]);
+  const metrics =
+    until && weekSeries.length > 0
+      ? deriveGameMetrics(weekSeries, until)
+      : null;
 
   // Shape header data
   const headerData = {
@@ -177,23 +160,22 @@ export default async function GamePage({ params }: PageProps) {
     releaseDate: game.releaseDate ? String(game.releaseDate) : null,
     currentViewers: latestSnapshot?.totalViewers ?? game.currentViewers,
     currentChannels: latestSnapshot?.totalChannels ?? game.currentChannels,
-    peakViewers24h: game.peakViewers24h,
-    avgViewers7d: game.avgViewers7d,
-    avgLiveChannels: game.avgLiveChannels,
+    peakViewers24h: metrics?.peakViewers24h ?? game.peakViewers24h,
+    avgViewers7d: metrics?.avgViewers7d ?? game.avgViewers7d,
+    avgLiveChannels: metrics?.avgLiveChannels ?? game.avgLiveChannels,
     lastUpdatedAt: latestSnapshot ? String(latestSnapshot.snapshotAt) : null,
     platformMetrics,
   };
 
-  // Shape snapshot data for charts (reverse to chronological order)
-  const snapshots = [...game.viewerSnapshots].reverse();
+  const chartUntil = until?.toISOString() ?? null;
 
-  const chartData = snapshots.map((s) => ({
-    date: String(s.snapshotAt),
+  const chartData = weekSeries.map((s) => ({
+    date: s.snapshotAt.toISOString(),
     totalViewers: s.totalViewers,
   }));
 
-  const activityData = snapshots.map((s) => ({
-    date: String(s.snapshotAt),
+  const activityData = weekSeries.map((s) => ({
+    date: s.snapshotAt.toISOString(),
     viewers: s.totalViewers,
     channels: s.totalChannels,
   }));
@@ -254,11 +236,17 @@ export default async function GamePage({ params }: PageProps) {
         <BroadcastLanguages languages={game.broadcastLanguages} />
         <ViewerChannelActivityChart
           slug={game.slug}
+          until={chartUntil}
           initialData={activityData}
         />
       </div>
 
-      <GameViewerChart slug={game.slug} initialData={chartData} />
+      <GameViewerChart
+        slug={game.slug}
+        until={chartUntil}
+        initialData={chartData}
+        initialSummary={summarizeViewerSeries(weekSeries)}
+      />
 
       <GameTopChannels channels={selectDisplayTopChannels(game.topChannels)} />
 

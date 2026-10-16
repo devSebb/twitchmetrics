@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChartLine } from "@phosphor-icons/react/dist/ssr";
 import { ViewerCountChart } from "@/components/charts/ViewerCountChart";
@@ -11,9 +11,15 @@ type SnapshotPoint = {
   totalViewers: number;
 };
 
+type ViewerSummary = { average: number; peak: number };
+
 type GameViewerChartProps = {
   slug: string;
+  /** The page's newest snapshot: every period ends here, like the header. */
+  until: string | null;
+  /** The 7d window the header was derived from. */
   initialData: SnapshotPoint[];
+  initialSummary: ViewerSummary;
 };
 
 const PERIODS = [
@@ -24,38 +30,58 @@ const PERIODS = [
 
 type Period = (typeof PERIODS)[number]["value"];
 
-export function GameViewerChart({ slug, initialData }: GameViewerChartProps) {
-  const [period, setPeriod] = useState<Period>("30d");
+export function GameViewerChart({
+  slug,
+  until,
+  initialData,
+  initialSummary,
+}: GameViewerChartProps) {
+  // 7d first: it is the header's window, so the avg line and the header's
+  // "Avg Viewers · 7d" print the same number. (The default used to be a "30d"
+  // tab seeded with the page's last 100 snapshots — about two days.)
+  const [period, setPeriod] = useState<Period>("7d");
 
-  const { data: snapshots, isLoading } = useQuery({
-    queryKey: ["game-snapshots", slug, period],
+  const { data, isLoading } = useQuery({
+    queryKey: ["game-snapshots", slug, period, until],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/games/${slug}/snapshots?period=${period}&metric=viewers`,
-      );
+      const params = new URLSearchParams({ period, metric: "viewers" });
+      if (until) params.set("until", until);
+      const res = await fetch(`/api/games/${slug}/snapshots?${params}`);
       const json = (await res.json()) as {
         data: { date: string; value: number }[];
+        meta: { viewers?: ViewerSummary };
       };
-      return json.data.map((d) => ({
-        date: d.date,
-        viewers: d.value,
-      }));
+      return {
+        points: json.data.map((d) => ({ date: d.date, viewers: d.value })),
+        summary: json.meta.viewers ?? null,
+      };
     },
     initialData:
-      period === "30d"
-        ? initialData.map((d) => ({ date: d.date, viewers: d.totalViewers }))
+      period === "7d"
+        ? {
+            points: initialData.map((d) => ({
+              date: d.date,
+              viewers: d.totalViewers,
+            })),
+            summary: initialSummary,
+          }
         : undefined,
     staleTime: 60_000,
   });
 
-  const chartData = snapshots ?? [];
+  const chartData = data?.points ?? [];
+  const summary = useMemo(
+    () =>
+      data?.summary ? { ...data.summary, windowLabel: period } : undefined,
+    [data?.summary, period],
+  );
 
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
           <ChartLine size={20} weight="duotone" className="text-[#949BA4]" />
-          Viewership History
+          Twitch Viewership History
         </h2>
         <div className="flex gap-1 rounded-md bg-[#1E1F22] p-0.5">
           {PERIODS.map((p) => (
@@ -80,6 +106,8 @@ export function GameViewerChart({ slug, initialData }: GameViewerChartProps) {
           platform="twitch"
           loading={isLoading}
           height={350}
+          valueLabel="viewers"
+          summary={summary}
         />
       </div>
     </div>

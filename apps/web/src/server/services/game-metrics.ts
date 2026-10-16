@@ -23,7 +23,9 @@ const WEEK_MS = 7 * DAY_MS;
  * share a timestamp (legacy retry duplicates) get ~0 weight, and a gap in
  * coverage never lets one reading dominate.
  */
-export function intervalWeights(snapshots: SnapshotLike[]): number[] {
+export function intervalWeights(
+  snapshots: Pick<SnapshotLike, "snapshotAt">[],
+): number[] {
   return snapshots.map((current, index) => {
     const next = snapshots[index + 1];
     return next
@@ -60,6 +62,25 @@ function computeViewerHours(
       snapshot.totalViewers * ((weights[index] ?? 0) / (60 * 60 * 1000));
   });
   return BigInt(Math.round(viewerHours));
+}
+
+/**
+ * Time-weighted average and peak of one window of snapshots — the arithmetic
+ * behind the header's 7d average and 24h peak, so a chart showing the same
+ * window prints the same two numbers (QA: the avg line was a plain mean of the
+ * points and never matched the header).
+ */
+export function summarizeViewerSeries(
+  points: { snapshotAt: Date; totalViewers: number }[],
+): { average: number; peak: number } {
+  const ordered = [...points].sort(
+    (left, right) => left.snapshotAt.getTime() - right.snapshotAt.getTime(),
+  );
+  const values = ordered.map((point) => point.totalViewers);
+  return {
+    average: weightedFloorAverage(values, intervalWeights(ordered)),
+    peak: values.reduce((peak, value) => Math.max(peak, value), 0),
+  };
 }
 
 export function deriveGameMetrics(

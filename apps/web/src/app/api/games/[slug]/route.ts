@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
+import { liveTopChannelWhere } from "@/server/services/game-top-channels";
 
 export async function GET(
   _request: Request,
@@ -36,8 +37,10 @@ export async function GET(
     );
   }
 
+  // Live rows only: retired writers' rows and old Stream Hatchet rows would
+  // otherwise be served as current (see game-top-channels.ts).
   const topChannels = await db.gameTopChannel.findMany({
-    where: { gameId: game.id },
+    where: { gameId: game.id, ...liveTopChannelWhere() },
     orderBy: { viewerHours: "desc" },
     take: 10,
   });

@@ -147,7 +147,9 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
             />
             Most Watched Channels
           </h2>
-          <span className="text-xs text-[#949BA4]">By viewers right now</span>
+          <span className="text-xs text-[#949BA4]">
+            Live now, by current viewers
+          </span>
         </div>
         <div className="space-y-0.5">
           {mostWatched.length === 0 ? (

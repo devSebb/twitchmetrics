@@ -22,11 +22,25 @@
  * --creator-rollups-only  rebuild ONLY CreatorDailyRollup for the date range.
  *                Use after the per-platform rollups are already correct.
  * --force        delete the object's facts and re-import everything, rebuild rollups.
+ *                Refuses a file under 95 % of the rows last imported from it (a
+ *                truncated re-export would replace full facts); --allow-smaller
+ *                overrides when the smaller file is known to be right.
  * --fill-missing re-parse an already-imported object WITHOUT deleting: only rows the
  *                unique key does not yet hold get inserted (createMany skipDuplicates),
  *                then that day's rollups are rebuilt. Used to backfill the yt rows the
  *                old (video-id-less) unique key silently dropped — ~8%/day of concurrent
  *                streams — without rewriting the ~92% that were fine.
+ * --refresh-regenerated  pick up files Stream Hatchet re-exported after we imported
+ *                them (weekly sweep, .github/workflows/sh-regenerated-files.yml). An
+ *                unchanged ETag is already skipped. A re-export is upserted — never
+ *                deleted first — only when it has at least 1 % MORE rows than the file
+ *                we imported: that is a truncated day being fixed. One SMALLER than 95 %
+ *                is refused: on 2026-10-07 and again 10-16 SH replaced full twitch days
+ *                (~85k rows) with ~14k-row truncations, and a --force re-import of those
+ *                wiped the full facts. Anything in between is a same-size re-run (SH
+ *                re-exports whole months with identical counts) and is left alone.
+ *                Afterwards the days either side of each re-imported date (streams
+ *                cross midnight) and their creator rollups are rebuilt.
  */
 
 import { PrismaClient, Prisma, type Platform } from "@prisma/client";
@@ -62,6 +76,11 @@ const DEFAULT_PROFILE = "streamhatchet-readonly";
 const SOURCE = "streamhatchet";
 const BATCH_SIZE = 1000;
 const DB_MAX_RETRIES = 5;
+// --refresh-regenerated: a re-export under this share of the rows we imported
+// is a truncation, not a correction. Weekday swing doesn't apply — same day.
+const REGENERATED_MIN_ROW_SHARE = 0.95;
+// ...and one has to bring this much more to be worth re-reading.
+const REGENERATED_GAIN_ROW_SHARE = 1.01;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,6 +129,8 @@ type ImportConfig = {
   recomputeRollupsOnly: boolean;
   creatorRollupsOnly: boolean;
   skipCreatorRollups: boolean;
+  refreshRegenerated: boolean;
+  allowSmaller: boolean;
   rowLimit: number | undefined;
 };
 
@@ -207,6 +228,8 @@ function parseConfig(): ImportConfig {
       args.includes("--creator-rollups-only"),
     creatorRollupsOnly: args.includes("--creator-rollups-only"),
     skipCreatorRollups: args.includes("--skip-creator-rollups"),
+    refreshRegenerated: args.includes("--refresh-regenerated"),
+    allowSmaller: args.includes("--allow-smaller"),
     rowLimit:
       rowLimit && Number.isFinite(rowLimit) && rowLimit > 0
         ? rowLimit
@@ -427,8 +450,10 @@ async function importOneDate(config: ImportConfig, date: Date) {
 
   // lastImportedAt is only set once every row is written: a "completed" object
   // without it was finalized over a killed import (twitch 2026-10-06, 0 rows).
+  // A sweep's dry run skips unchanged files too, so it previews only what a
+  // --write run would re-read.
   if (
-    config.write &&
+    (config.write || config.refreshRegenerated) &&
     existingObject &&
     existingObject.status === "completed" &&
     existingObject.lastImportedAt != null &&
@@ -453,6 +478,49 @@ async function importOneDate(config: ImportConfig, date: Date) {
       failed: 0,
       matched: 0,
     };
+  }
+
+  if (
+    (config.refreshRegenerated || config.force) &&
+    !config.allowSmaller &&
+    existingObject?.rowCount != null &&
+    s3RowCount != null &&
+    s3RowCount < existingObject.rowCount * REGENERATED_MIN_ROW_SHARE
+  ) {
+    log("warn", "Re-export is smaller than the imported file; refusing it", {
+      key,
+      importedRows: existingObject.rowCount,
+      reExportRows: s3RowCount,
+    });
+    return {
+      scanned: 0,
+      written: 0,
+      skipped: 0,
+      failed: 0,
+      matched: 0,
+      refusedSmaller: true,
+    };
+  }
+  if (
+    config.refreshRegenerated &&
+    existingObject?.rowCount != null &&
+    s3RowCount != null &&
+    s3RowCount < existingObject.rowCount * REGENERATED_GAIN_ROW_SHARE
+  ) {
+    log("info", "Re-export is the same size as the imported file; leaving it", {
+      key,
+      importedRows: existingObject.rowCount,
+      reExportRows: s3RowCount,
+    });
+    return { scanned: 0, written: 0, skipped: 0, failed: 0, matched: 0 };
+  }
+  if (config.refreshRegenerated && !config.write) {
+    log("info", "Would re-import re-exported file", {
+      key,
+      importedRows: existingObject?.rowCount ?? null,
+      reExportRows: s3RowCount,
+    });
+    return { scanned: 0, written: 0, skipped: 0, failed: 0, matched: 0 };
   }
 
   const localPath = await downloadS3Object(config.bucket, key, {
@@ -764,6 +832,10 @@ async function main() {
     matched: 0,
   };
 
+  // --refresh-regenerated bookkeeping: what was re-read, what was refused.
+  const reimported: Date[] = [];
+  const refused: string[] = [];
+
   try {
     for (const date of config.dates) {
       // A date is retried as a unit on ANY failure (S3 download resets, Neon
@@ -793,6 +865,43 @@ async function main() {
       summary.skipped += result.skipped;
       summary.failed += result.failed;
       summary.matched += result.matched;
+      if ("refusedSmaller" in result) refused.push(formatDate(date));
+      else if (config.write && result.scanned > 0) reimported.push(date);
+    }
+
+    if (config.refreshRegenerated && config.write && reimported.length > 0) {
+      // Each re-imported date already rebuilt its own rollups. Streams that
+      // cross midnight also change the days either side, and the per-creator
+      // rollup spans platforms, so rebuild both for the whole neighbourhood.
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const around = new Map<string, Date>();
+      for (const date of reimported) {
+        for (const offset of [-1, 0, 1]) {
+          const day = new Date(date.getTime() + offset * 86_400_000);
+          if (day < today) around.set(formatDate(day), day);
+        }
+      }
+      const dates = [...around.values()].sort(
+        (a, b) => a.getTime() - b.getTime(),
+      );
+      log("info", "Rebuilding rollups around re-exported files", {
+        reimported: reimported.map(formatDate),
+        dates: dates.map(formatDate),
+      });
+      await recomputeRollupsOnly({
+        ...config,
+        dates,
+        creatorRollupsOnly: false,
+        skipCreatorRollups: false,
+      });
+    }
+    if (config.refreshRegenerated) {
+      log("info", "Regenerated-file sweep", {
+        platform: config.platform,
+        reimported: reimported.map(formatDate),
+        refusedSmaller: refused,
+      });
     }
 
     if (runId) {
