@@ -24,6 +24,55 @@ export function rollupWindowStart(days: number, now: Date = new Date()): Date {
   return start;
 }
 
+export type StatsWindow = {
+  /** UTC midnight of the first day. */
+  start: Date;
+  /** UTC midnight after the last day (exclusive). */
+  end: Date;
+  /** UTC midnight of the last day — the day the range label ends on. */
+  lastDay: Date;
+};
+
+/**
+ * The N whole UTC days ending on `lastDay`, inclusive.
+ *
+ * Creator stats used to run from midnight N days back to NOW: N+1 calendar
+ * days, the newest one or two of them still empty because a day's Stream
+ * Hatchet data only lands the next day. Totals read short of SH's and the
+ * window had no stated dates (QA 2026-10, Anyme023 / Caedrel avg airtime).
+ * Ending on the newest complete day makes "30d" mean 30 measured days.
+ */
+export function completeDayWindow(days: number, lastDay: Date): StatsWindow {
+  const last = new Date(lastDay);
+  last.setUTCHours(0, 0, 0, 0);
+  const end = new Date(last.getTime() + DAY_MS);
+  return { start: new Date(end.getTime() - days * DAY_MS), end, lastDay: last };
+}
+
+/**
+ * VODs cut to the window: one starting before `end` but running past it keeps
+ * only its in-window part, so the day after the window gains no airtime.
+ */
+export function clipVodsToWindow(
+  vods: VodAirtime[],
+  window: Pick<StatsWindow, "start" | "end">,
+): VodAirtime[] {
+  const clipped: VodAirtime[] = [];
+  for (const vod of vods) {
+    const begins = Math.max(vod.startedAt.getTime(), window.start.getTime());
+    const ends = Math.min(
+      vod.startedAt.getTime() + vod.durationSeconds * 1000,
+      window.end.getTime(),
+    );
+    if (ends <= begins) continue;
+    clipped.push({
+      startedAt: new Date(begins),
+      durationSeconds: Math.round((ends - begins) / 1000),
+    });
+  }
+  return clipped;
+}
+
 export type ViewerMetrics = {
   peak: number | null;
   avg: number | null;

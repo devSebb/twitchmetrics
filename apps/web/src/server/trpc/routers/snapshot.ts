@@ -8,12 +8,14 @@ import { getPopularGames } from "@/server/services/popular-games";
 import {
   aggregateCreatorRollups,
   aggregateShRollups,
+  clipVodsToWindow,
   combineViewerStats,
   extractSnapshotViewerStats,
   rollupWindowStart,
   type ShRollupTotals,
   type VodAirtime,
 } from "@/server/services/streaming-stats";
+import { getStatsWindow } from "@/server/services/creator-streaming-stats";
 import { isRecentObservation } from "@/lib/metric-freshness";
 
 type StreamHatchetAccount = {
@@ -716,16 +718,17 @@ export const snapshotRouter = router({
         "1y": 365,
       };
       const days = periodDays[input.period] ?? 30;
-      // UTC-midnight start so @db.Date rollup rows on the boundary day are
-      // included (a time-of-day timestamp silently drops the earliest day).
-      const since = rollupWindowStart(days);
-      const now = new Date();
+      // N whole UTC days ending on the newest day SH data is complete for.
+      // Every source below is held to it, so the dates the tiles print are
+      // the dates every number covers.
+      const window = await getStatsWindow(days);
+      const since = window.start;
 
       // Fetch snapshots with extendedMetrics for viewer stats
       const snapshots = await ctx.prisma.metricSnapshot.findMany({
         where: {
           creatorProfileId: input.creatorProfileId,
-          snapshotAt: { gte: since },
+          snapshotAt: { gte: since, lt: window.end },
         },
         select: {
           platform: true,
@@ -798,16 +801,21 @@ export const snapshotRouter = router({
             limit: 200,
           });
 
-          if (videos.length > 0) {
-            twitchApiStreamCount = videos.length;
-            twitchApiAirTimeSeconds = videos.reduce(
+          // Clipped to the window: a stream still running past its last
+          // midnight only counts its in-window part.
+          twitchVods = clipVodsToWindow(
+            videos.map((v) => ({
+              startedAt: new Date(v.createdAt),
+              durationSeconds: v.durationSeconds,
+            })),
+            window,
+          );
+          if (twitchVods.length > 0) {
+            twitchApiStreamCount = twitchVods.length;
+            twitchApiAirTimeSeconds = twitchVods.reduce(
               (sum, v) => sum + v.durationSeconds,
               0,
             );
-            twitchVods = videos.map((v) => ({
-              startedAt: new Date(v.createdAt),
-              durationSeconds: v.durationSeconds,
-            }));
           }
         }
       } catch {
@@ -839,7 +847,7 @@ export const snapshotRouter = router({
       const creatorRollups = await ctx.prisma.creatorDailyRollup.findMany({
         where: {
           creatorProfileId: input.creatorProfileId,
-          date: { gte: since },
+          date: { gte: since, lte: window.lastDay },
         },
         select: {
           date: true,
@@ -872,7 +880,7 @@ export const snapshotRouter = router({
       } else if (streamHatchetWhere.length > 0) {
         const rollups = await ctx.prisma.channelDailyRollup.findMany({
           where: {
-            date: { gte: since },
+            date: { gte: since, lte: window.lastDay },
             OR: streamHatchetWhere,
           },
           select: {
@@ -963,8 +971,9 @@ export const snapshotRouter = router({
         peakViewers,
         avgViewers,
         followersGain,
+        // UTC midnights of the first and last day, both inclusive.
         periodStart: since.toISOString(),
-        periodEnd: now.toISOString(),
+        periodEnd: window.lastDay.toISOString(),
         platforms: [...allPlatforms] as Platform[],
         airtimePlatforms: [...airtimePlatforms],
         viewerPlatforms,

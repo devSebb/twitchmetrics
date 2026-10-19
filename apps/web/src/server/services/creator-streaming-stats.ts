@@ -3,11 +3,13 @@ import { fetchVideos } from "@/server/adapters/twitch";
 import {
   aggregateCreatorRollups,
   aggregateShRollups,
+  clipVodsToWindow,
   combineViewerStats,
-  rollupWindowStart,
+  completeDayWindow,
   viewerMetricsFromExtended,
   type CreatorRollupDay,
   type ShRollupTotals,
+  type StatsWindow,
 } from "@/server/services/streaming-stats";
 import { internalPlatformForStreamHatchet } from "@/server/adapters/streamhatchet";
 
@@ -27,6 +29,45 @@ const EMPTY_STATS: StreamingStats = {
 
 export function emptyStreamingStats(): StreamingStats {
   return { ...EMPTY_STATS };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LAST_DAY_TTL_MS = 10 * 60 * 1000;
+let lastDayCache: { day: Date; fetchedAt: number } | null = null;
+
+/**
+ * The newest day creator stats can count as complete: the newest
+ * CreatorDailyRollup date. The daily GitHub job writes those last, after all
+ * three platforms' files for the day have landed, so the day before has
+ * everything SH will send for it. Never later than yesterday; two days ago
+ * when there are no rollups at all.
+ */
+export async function getLastCompleteStatsDay(
+  now: Date = new Date(),
+): Promise<Date> {
+  if (
+    lastDayCache &&
+    now.getTime() - lastDayCache.fetchedAt < LAST_DAY_TTL_MS
+  ) {
+    return lastDayCache.day;
+  }
+  const today = new Date(now);
+  today.setUTCHours(0, 0, 0, 0);
+  const yesterday = new Date(today.getTime() - DAY_MS);
+  const newest = await prisma.creatorDailyRollup.findFirst({
+    orderBy: { date: "desc" },
+    select: { date: true },
+  });
+  const day = newest
+    ? new Date(Math.min(newest.date.getTime(), yesterday.getTime()))
+    : new Date(today.getTime() - 2 * DAY_MS);
+  lastDayCache = { day, fetchedAt: now.getTime() };
+  return day;
+}
+
+/** The N complete days creator stats cover, ending on the newest complete day. */
+export async function getStatsWindow(days: number): Promise<StatsWindow> {
+  return completeDayWindow(days, await getLastCompleteStatsDay());
 }
 
 type ViewerAccumulator = {
@@ -70,15 +111,17 @@ export async function getStreamingStatsBatch(
   }
 
   const sinceDays = opts.sinceDays ?? 30;
-  // UTC-midnight start so @db.Date rollup rows on the boundary day match.
-  const since = rollupWindowStart(sinceDays);
+  // Same complete-day window as the profile page, so the list and the
+  // profile show one number for one creator.
+  const window = await getStatsWindow(sinceDays);
+  const since = window.start;
 
   const [snapshots, rollups, creatorRollups, twitchAccounts] =
     await Promise.all([
       prisma.metricSnapshot.findMany({
         where: {
           creatorProfileId: { in: creatorProfileIds },
-          snapshotAt: { gte: since },
+          snapshotAt: { gte: since, lt: window.end },
         },
         select: {
           creatorProfileId: true,
@@ -88,7 +131,7 @@ export async function getStreamingStatsBatch(
       prisma.channelDailyRollup.findMany({
         where: {
           creatorProfileId: { in: creatorProfileIds },
-          date: { gte: since },
+          date: { gte: since, lte: window.lastDay },
         },
         select: {
           creatorProfileId: true,
@@ -105,7 +148,7 @@ export async function getStreamingStatsBatch(
       prisma.creatorDailyRollup.findMany({
         where: {
           creatorProfileId: { in: creatorProfileIds },
-          date: { gte: since },
+          date: { gte: since, lte: window.lastDay },
         },
         select: {
           creatorProfileId: true,
@@ -217,37 +260,35 @@ export async function getStreamingStatsBatch(
         startedAfter: since,
         limit: 200,
       });
-      return { creatorProfileId: account.creatorProfileId, videos };
+      const vods = clipVodsToWindow(
+        videos.map((v) => ({
+          startedAt: new Date(v.createdAt),
+          durationSeconds: v.durationSeconds,
+        })),
+        window,
+      );
+      return { creatorProfileId: account.creatorProfileId, vods };
     }),
   );
 
   for (const outcome of airtimeOutcomes) {
     if (outcome.status !== "fulfilled" || outcome.value === null) continue;
-    const { creatorProfileId, videos } = outcome.value;
-    if (videos.length === 0) continue;
+    const { creatorProfileId, vods } = outcome.value;
+    if (vods.length === 0) continue;
     const stats = result.get(creatorProfileId);
     if (!stats) continue;
 
     const merged = creatorRollupsByCreator.get(creatorProfileId);
     if (merged?.length) {
       // Union, not sum: the VOD intervals merge into each day's live blocks.
-      applyAirtime(
-        creatorProfileId,
-        aggregateCreatorRollups(
-          merged,
-          videos.map((v) => ({
-            startedAt: new Date(v.createdAt),
-            durationSeconds: v.durationSeconds,
-          })),
-        ),
-      );
+      applyAirtime(creatorProfileId, aggregateCreatorRollups(merged, vods));
       continue;
     }
 
-    const airTime = videos.reduce((sum, v) => sum + v.durationSeconds, 0);
+    const airTime = vods.reduce((sum, v) => sum + v.durationSeconds, 0);
     stats.airTimeSeconds = (stats.airTimeSeconds ?? 0) + airTime;
     const sh = shTotalsByCreator.get(creatorProfileId);
-    const totalStreams = (sh?.streamCount ?? 0) + videos.length;
+    const totalStreams = (sh?.streamCount ?? 0) + vods.length;
     stats.avgAirTimeSeconds =
       totalStreams > 0
         ? Math.round((stats.airTimeSeconds ?? 0) / totalStreams)

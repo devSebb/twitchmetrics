@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateCreatorRollups,
   aggregateShRollups,
+  clipVodsToWindow,
   combineViewerStats,
+  completeDayWindow,
   extractSnapshotViewerStats,
   rollupWindowStart,
   viewerMetricsFromExtended,
@@ -28,6 +30,47 @@ describe("rollupWindowStart", () => {
     const now = new Date("2026-07-28T00:10:00.000Z");
     expect(rollupWindowStart(7, now).toISOString()).toBe(
       "2026-07-21T00:00:00.000Z",
+    );
+  });
+});
+
+describe("completeDayWindow", () => {
+  it("is N whole days ending on the last complete day", () => {
+    const window = completeDayWindow(30, new Date("2026-10-18T00:00:00Z"));
+    expect(window.start.toISOString()).toBe("2026-09-19T00:00:00.000Z");
+    expect(window.lastDay.toISOString()).toBe("2026-10-18T00:00:00.000Z");
+    expect(window.end.toISOString()).toBe("2026-10-19T00:00:00.000Z");
+  });
+
+  it("truncates a last day given with a time of day", () => {
+    const window = completeDayWindow(7, new Date("2026-10-18T13:45:00Z"));
+    expect(window.start.toISOString()).toBe("2026-10-12T00:00:00.000Z");
+    expect(window.lastDay.toISOString()).toBe("2026-10-18T00:00:00.000Z");
+  });
+});
+
+describe("clipVodsToWindow", () => {
+  const window = completeDayWindow(7, new Date("2026-10-18T00:00:00Z"));
+  const vod = (startedAt: string, hours: number) => ({
+    startedAt: new Date(startedAt),
+    durationSeconds: hours * 3600,
+  });
+
+  it("keeps a VOD inside the window as is", () => {
+    expect(clipVodsToWindow([vod("2026-10-15T18:00:00Z", 4)], window)).toEqual([
+      vod("2026-10-15T18:00:00Z", 4),
+    ]);
+  });
+
+  it("cuts a VOD that runs past the last midnight", () => {
+    expect(clipVodsToWindow([vod("2026-10-18T22:00:00Z", 5)], window)).toEqual([
+      vod("2026-10-18T22:00:00Z", 2),
+    ]);
+  });
+
+  it("drops a VOD after the window", () => {
+    expect(clipVodsToWindow([vod("2026-10-19T10:00:00Z", 3)], window)).toEqual(
+      [],
     );
   });
 });

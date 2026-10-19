@@ -4,15 +4,19 @@ import { useState } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
-import { formatNumber, formatDuration, formatDate } from "@/lib/utils/format";
+import { formatNumber, formatDuration, formatUtcDay } from "@/lib/utils/format";
 import {
-  CREATOR_COMBINED_PEAK_TOOLTIP,
-  CREATOR_PEAK_VIEWERS_TOOLTIP,
   COMBINED_PEAK_SUFFIX,
   CREATOR_STAT_PERIODS,
   creatorStatLabel,
   type CreatorStatPeriod,
 } from "@/lib/constants/metric-labels";
+import {
+  CREATOR_STATS_INFO,
+  withWindow,
+  type MetricInfo,
+} from "@/lib/constants/metric-info";
+import { InfoTip } from "@/components/shared/InfoTip";
 import { trpc } from "@/lib/trpc";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
@@ -71,22 +75,30 @@ function StreamingStatCard({
   label,
   value,
   platforms,
-  tooltip,
+  info,
 }: {
   label: string;
   value: string;
   platforms?: Platform[];
-  tooltip?: string;
+  info: MetricInfo;
 }) {
   return (
     <div className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-lg border border-[#3F4147] bg-[#2B2D31] px-4 py-3">
-      <div className="flex items-center gap-1.5" title={tooltip ?? label}>
-        <span className="truncate text-xs text-[#949BA4]">{label}</span>
-        {platforms?.map((p) => (
-          <PlatformDot key={p} platform={p} />
-        ))}
+      {/* The label wraps rather than truncates: with the "?" beside it,
+          "Best-Platform Peak · 30d" no longer fits one line in a narrow tile. */}
+      <div className="flex items-start gap-1.5">
+        <span className="min-w-0 text-xs leading-4 text-[#949BA4]">
+          {label}
+          {platforms?.map((p) => (
+            <span key={p} className="ml-1.5 inline-flex align-middle">
+              <PlatformDot platform={p} />
+            </span>
+          ))}
+        </span>
+        <InfoTip info={info} className="ml-auto" />
       </div>
-      <p className="text-xl font-bold text-[#F2F3F5]">{value}</p>
+      {/* Bottom-aligned, so values line up across tiles whose labels wrap. */}
+      <p className="mt-auto text-xl font-bold text-[#F2F3F5]">{value}</p>
     </div>
   );
 }
@@ -110,12 +122,19 @@ export function StatsRow({ profile }: StatsRowProps) {
     { staleTime: 300_000 },
   );
 
+  // Every tile's card names the exact days it covers.
+  const range = streamingStats
+    ? `${formatUtcDay(streamingStats.periodStart)} – ${formatUtcDay(streamingStats.periodEnd)}`
+    : null;
+  const info = (entry: MetricInfo) =>
+    range ? withWindow(entry, range) : entry;
+
   // Each tile's dots name only the platforms that fed that metric.
   const streamingStatDefs: {
     label: string;
     value: string;
     platforms?: Platform[] | undefined;
-    tooltip?: string;
+    info: MetricInfo;
   }[] = [
     {
       label: creatorStatLabel("airtime", period),
@@ -124,6 +143,7 @@ export function StatsRow({ profile }: StatsRowProps) {
           ? formatDuration(streamingStats.airTimeSeconds)
           : "—",
       platforms: streamingStats?.airtimePlatforms,
+      info: info(CREATOR_STATS_INFO.airtime),
     },
     {
       label: creatorStatLabel("avgAirtime", period),
@@ -132,6 +152,7 @@ export function StatsRow({ profile }: StatsRowProps) {
           ? formatDuration(streamingStats.avgAirTimeSeconds)
           : "—",
       platforms: streamingStats?.airtimePlatforms,
+      info: info(CREATOR_STATS_INFO.avgAirtime),
     },
     {
       // A combined estimate belongs to no platform, so it says so in words
@@ -146,9 +167,11 @@ export function StatsRow({ profile }: StatsRowProps) {
       platforms: streamingStats?.peakPlatform
         ? [streamingStats.peakPlatform]
         : [],
-      tooltip: streamingStats?.peakCombined
-        ? CREATOR_COMBINED_PEAK_TOOLTIP
-        : CREATOR_PEAK_VIEWERS_TOOLTIP,
+      info: info(
+        streamingStats?.peakCombined
+          ? CREATOR_STATS_INFO.peakViewersCombined
+          : CREATOR_STATS_INFO.peakViewers,
+      ),
     },
     {
       label: creatorStatLabel("avgViewers", period),
@@ -157,6 +180,7 @@ export function StatsRow({ profile }: StatsRowProps) {
           ? formatNumber(streamingStats.avgViewers)
           : "—",
       platforms: streamingStats?.viewerPlatforms,
+      info: info(CREATOR_STATS_INFO.avgViewers),
     },
     {
       label: creatorStatLabel("newFollowers", period),
@@ -169,6 +193,7 @@ export function StatsRow({ profile }: StatsRowProps) {
               : "0"
           : "—",
       platforms: streamingStats?.platforms,
+      info: info(CREATOR_STATS_INFO.newFollowers),
     },
   ];
 
@@ -177,10 +202,11 @@ export function StatsRow({ profile }: StatsRowProps) {
       {/* Period selector header */}
       <div className="flex items-center justify-between">
         <PeriodSelector value={period} onChange={setPeriod} />
-        {streamingStats && (
-          <span className="text-xs text-[#949BA4]">
-            {formatDate(streamingStats.periodStart)} –{" "}
-            {formatDate(streamingStats.periodEnd)}
+        {/* Both days inclusive; the newest complete day of data, not today. */}
+        {range && (
+          <span className="flex items-center gap-1 text-xs text-[#949BA4]">
+            {range}
+            <InfoTip info={CREATOR_STATS_INFO.period} />
           </span>
         )}
       </div>
@@ -193,7 +219,7 @@ export function StatsRow({ profile }: StatsRowProps) {
             label={def.label}
             value={def.value}
             {...(def.platforms ? { platforms: def.platforms } : {})}
-            {...(def.tooltip ? { tooltip: def.tooltip } : {})}
+            info={def.info}
           />
         ))}
       </div>

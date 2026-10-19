@@ -34,6 +34,21 @@ const compactDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
+const utcDayFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/**
+ * A UTC calendar day — a `@db.Date` or a UTC-midnight window boundary. The
+ * local-time formatter shows those as the previous day anywhere west of UTC.
+ */
+export function formatUtcDay(d: Date | string): string {
+  return utcDayFormatter.format(typeof d === "string" ? new Date(d) : d);
+}
+
 /**
  * Format a date in the given style.
  * default: "Feb 28, 2026", compact: "2/28", iso: "2026-02-28"
