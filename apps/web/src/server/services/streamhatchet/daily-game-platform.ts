@@ -19,12 +19,49 @@
  * inflated ~109 %, which would have published roughly double the real audience.
  */
 import { Platform, prisma } from "@twitchmetrics/database";
-import { normalizePopularGameName } from "@/server/services/popular-games";
+// Relative, not "@/": workers/write-yt-game-snapshots.ts imports this file.
+import { normalizePopularGameName } from "../popular-games";
 
 /** A rollup covers a whole day, so a daily total divides down to a concurrent average. */
 const MINUTES_PER_DAY = 1440;
 
 export const DAILY_GAME_SNAPSHOT_SOURCE = "streamhatchet_daily";
+
+/**
+ * YouTube's own video categories. SH files a YouTube stream under one when it
+ * has no game, so these are whole slices of YouTube, not games: "Sports" (every
+ * sports broadcast, ~440k average viewers) landed on the Twitch "Sports"
+ * category and multiplied it 40x (QA 2026-10). Never matched to a game.
+ */
+const YOUTUBE_VIDEO_CATEGORIES = new Set(
+  [
+    "Autos & Vehicles",
+    "Animals",
+    "Pets & Animals",
+    "Comedy",
+    "Education",
+    "Entertainment",
+    "Film & Animation",
+    "Gaming",
+    "Howto & Style",
+    "Movies",
+    "Music",
+    "News & Politics",
+    "Nonprofits & Activism",
+    "People",
+    "People & Blogs",
+    "Science & Technology",
+    "Shows",
+    "Sports",
+    "Trailers",
+    "Travel",
+    "Travel & Events",
+  ].map(normalizePopularGameName),
+);
+
+export function isYouTubeVideoCategory(name: string): boolean {
+  return YOUTUBE_VIDEO_CATEGORIES.has(normalizePopularGameName(name));
+}
 
 export type DailyGameRollupInput = {
   gameName: string;
@@ -54,9 +91,15 @@ export function dailyGameSnapshotValues(
  * Index games by their normalised name, so rollup names (which come from the
  * export, with whatever spacing and case it used) resolve to a game id.
  * The catalog is ~1,200 rows, so one full read beats a query per name.
+ *
+ * `aliases` are names Stream Hatchet's game discovery already tied to a
+ * catalog game: SH files CS2 as "Counter-Strike" and Overwatch 2 as
+ * "Overwatch", which the catalog name alone never matched. A catalog name
+ * always wins over an alias, and an alias claimed by two games is dropped.
  */
 export function indexGamesByName(
   games: { id: string; name: string }[],
+  aliases: { name: string; gameId: string }[] = [],
 ): Map<string, string> {
   const index = new Map<string, string>();
   for (const game of games) {
@@ -65,6 +108,20 @@ export function indexGamesByName(
     // otherwise flip between imports.
     if (!index.has(key)) index.set(key, game.id);
   }
+
+  const aliasIndex = new Map<string, string | null>();
+  for (const alias of aliases) {
+    const key = normalizePopularGameName(alias.name);
+    if (index.has(key)) continue;
+    const existing = aliasIndex.get(key);
+    if (existing === undefined) aliasIndex.set(key, alias.gameId);
+    else if (existing !== alias.gameId) aliasIndex.set(key, null);
+  }
+  for (const [key, gameId] of aliasIndex) {
+    if (gameId) index.set(key, gameId);
+  }
+
+  for (const key of YOUTUBE_VIDEO_CATEGORIES) index.delete(key);
   return index;
 }
 
@@ -73,6 +130,7 @@ export type WriteDailyGamePlatformSnapshotsResult = {
   rollups: number;
   matched: number;
   written: number;
+  removed: number;
 };
 
 /** Upserts run in waves rather than one at a time; the table is tiny. */
@@ -107,31 +165,71 @@ export async function writeDailyGamePlatformSnapshots(input: {
       rollups: 0,
       matched: 0,
       written: 0,
+      removed: 0,
     };
   }
 
-  const games = await prisma.game.findMany({
-    select: { id: true, name: true },
-  });
-  const gameIdByName = indexGamesByName(games);
+  const [games, discoveryMappings] = await Promise.all([
+    prisma.game.findMany({ select: { id: true, name: true } }),
+    prisma.platformGameMapping.findMany({
+      where: { source: "streamhatchet_discovery" },
+      select: { platformGameName: true, gameId: true },
+    }),
+  ]);
+  const gameIdByName = indexGamesByName(
+    games,
+    discoveryMappings.map((mapping) => ({
+      name: mapping.platformGameName,
+      gameId: mapping.gameId,
+    })),
+  );
 
   type PendingSnapshot = {
     gameId: string;
     gameName: string;
   } & DailyGameSnapshotValues;
 
-  const pending: PendingSnapshot[] = [];
-
+  // Several SH names can resolve to one game ("Counter-Strike" and
+  // "Counter-Strike 2"): their minutes add up, and the row is named after the
+  // biggest. One row per game also keeps two upserts off the same key.
+  const byGame = new Map<
+    string,
+    { gameName: string; top: bigint; airtime: number; watched: bigint }
+  >();
   for (const rollup of rollups) {
     const gameId = gameIdByName.get(normalizePopularGameName(rollup.gameName));
     if (!gameId) continue;
+    const watched = BigInt(rollup.minutesWatched);
+    const existing = byGame.get(gameId);
+    if (!existing) {
+      byGame.set(gameId, {
+        gameName: rollup.gameName,
+        top: watched,
+        airtime: rollup.airtimeMinutes,
+        watched,
+      });
+      continue;
+    }
+    existing.airtime += rollup.airtimeMinutes;
+    existing.watched += watched;
+    if (watched > existing.top) {
+      existing.top = watched;
+      existing.gameName = rollup.gameName;
+    }
+  }
 
-    const values = dailyGameSnapshotValues(rollup);
+  const pending: PendingSnapshot[] = [];
+  for (const [gameId, total] of byGame) {
+    const values = dailyGameSnapshotValues({
+      gameName: total.gameName,
+      airtimeMinutes: total.airtime,
+      minutesWatched: total.watched,
+    });
     // A game with a handful of viewer-minutes rounds to zero; the KPI card
     // drops zero rows anyway, so there is nothing to store.
     if (values.viewers <= 0) continue;
 
-    pending.push({ gameId, gameName: rollup.gameName, ...values });
+    pending.push({ gameId, gameName: total.gameName, ...values });
   }
 
   let written = 0;
@@ -172,10 +270,22 @@ export async function writeDailyGamePlatformSnapshots(input: {
     written += wave.length;
   }
 
+  // A rerun after a matching fix must also take back what the old matching
+  // wrote — the 440k-viewer "Sports" rows were only ever wrong.
+  const removed = await prisma.gamePlatformViewerSnapshot.deleteMany({
+    where: {
+      platform: Platform.youtube,
+      source: DAILY_GAME_SNAPSHOT_SOURCE,
+      bucketStartedAt,
+      gameId: { notIn: pending.map((row) => row.gameId) },
+    },
+  });
+
   return {
     date: bucketStartedAt.toISOString().slice(0, 10),
     rollups: rollups.length,
     matched: pending.length,
     written,
+    removed: removed.count,
   };
 }

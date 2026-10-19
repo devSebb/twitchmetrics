@@ -1,6 +1,7 @@
 import type { Platform } from "@twitchmetrics/database";
 import { prisma } from "@twitchmetrics/database";
 import { DAILY_GAME_SNAPSHOT_SOURCE } from "@/server/services/streamhatchet/daily-game-platform";
+import { summarizeViewerSeries } from "@/server/services/game-metrics";
 
 const CURRENT_SNAPSHOT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
@@ -262,4 +263,183 @@ export async function getGamePlatformMetrics(input: {
     latestViewers: group(viewerRows),
     latestChannels: group(channelRows),
   };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+
+export type GameWindowMetrics = {
+  /** 7-day average viewers per platform; the total is their sum. */
+  avgViewers: GamePlatformMetricGroup;
+  /**
+   * 24h peak per platform. No total: the platforms peak at different moments,
+   * and adding their peaks would report an audience nobody measured. YouTube
+   * has no live feed, so it has no peak.
+   */
+  peakViewers: GamePlatformMetricGroup;
+  /** 7-day average live channels per platform; the total is their sum. */
+  avgChannels: GamePlatformMetricGroup;
+};
+
+type TwitchWindow = {
+  avgViewers: number;
+  peakViewers24h: number;
+  avgChannels: number;
+};
+
+type KickReading = { bucketStartedAt: Date; viewers: number; channels: number };
+type YouTubeDay = { bucketStartedAt: Date; viewers: number; channels: number };
+
+function dayLabel(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * Header numbers for the 7 days ending `until`, per platform (QA 2026-10: the
+ * header counted Twitch only, so every game read well under Stream Hatchet's
+ * all-platform figure).
+ *
+ * - Twitch: the page's own 7d series — the same numbers its Twitch charts show.
+ * - Kick: hourly Kick API readings, summed across the game's Kick categories
+ *   per reading, time-weighted like Twitch. When readings start partway into
+ *   the window (a category mapped this week), the row says since when.
+ * - YouTube: Stream Hatchet's daily averages for the days in the window,
+ *   captioned with those days — they trail live data by a day or two.
+ *
+ * Pure, so the arithmetic is testable without a database.
+ */
+export function buildGameWindowMetrics(input: {
+  until: Date;
+  twitch: TwitchWindow;
+  kick: KickReading[];
+  youtube: YouTubeDay[];
+}): GameWindowMetrics {
+  const { until, twitch } = input;
+  const avgViewers: GamePlatformMetricRow[] = [
+    { platform: "twitch", value: twitch.avgViewers, caption: null },
+  ];
+  const peakViewers: GamePlatformMetricRow[] = [
+    { platform: "twitch", value: twitch.peakViewers24h, caption: null },
+  ];
+  const avgChannels: GamePlatformMetricRow[] = [
+    { platform: "twitch", value: twitch.avgChannels, caption: null },
+  ];
+
+  // One point per reading: a game with two Kick categories has two rows per
+  // bucket, and its audience is their sum.
+  const kickByBucket = new Map<number, { viewers: number; channels: number }>();
+  for (const reading of input.kick) {
+    const key = reading.bucketStartedAt.getTime();
+    const point = kickByBucket.get(key) ?? { viewers: 0, channels: 0 };
+    point.viewers += reading.viewers;
+    point.channels += reading.channels;
+    kickByBucket.set(key, point);
+  }
+  if (kickByBucket.size > 0) {
+    const points = [...kickByBucket.entries()].map(([at, point]) => ({
+      snapshotAt: new Date(at),
+      ...point,
+    }));
+    const first = Math.min(...kickByBucket.keys());
+    // A day's slack: a reading or two missed at the window's edge is not a
+    // shorter window worth flagging.
+    const caption =
+      first > until.getTime() - WEEK_MS + DAY_MS
+        ? `since ${dayLabel(new Date(first))}`
+        : null;
+    const viewers = summarizeViewerSeries(
+      points.map((p) => ({
+        snapshotAt: p.snapshotAt,
+        totalViewers: p.viewers,
+      })),
+    );
+    const channels = summarizeViewerSeries(
+      points.map((p) => ({
+        snapshotAt: p.snapshotAt,
+        totalViewers: p.channels,
+      })),
+    );
+    const since24h = until.getTime() - DAY_MS;
+    const peak24h = points
+      .filter((p) => p.snapshotAt.getTime() >= since24h)
+      .reduce((peak, p) => Math.max(peak, p.viewers), 0);
+    avgViewers.push({ platform: "kick", value: viewers.average, caption });
+    avgChannels.push({ platform: "kick", value: channels.average, caption });
+    peakViewers.push({ platform: "kick", value: peak24h, caption: null });
+  }
+
+  if (input.youtube.length > 0) {
+    const days = [...input.youtube].sort(
+      (a, b) => a.bucketStartedAt.getTime() - b.bucketStartedAt.getTime(),
+    );
+    const first = days[0]!.bucketStartedAt;
+    const last = days[days.length - 1]!.bucketStartedAt;
+    const range =
+      first.getTime() === last.getTime()
+        ? dayLabel(first)
+        : `${dayLabel(first)}–${dayLabel(last)}`;
+    const caption = `daily avg · ${range}`;
+    const mean = (values: number[]) =>
+      Math.floor(values.reduce((sum, v) => sum + v, 0) / values.length);
+    avgViewers.push({
+      platform: "youtube",
+      value: mean(days.map((d) => d.viewers)),
+      caption,
+    });
+    avgChannels.push({
+      platform: "youtube",
+      value: mean(days.map((d) => d.channels)),
+      caption,
+    });
+  }
+
+  return {
+    avgViewers: group(avgViewers),
+    peakViewers: group(peakViewers),
+    avgChannels: group(avgChannels),
+  };
+}
+
+export async function getGameWindowMetrics(input: {
+  gameId: string;
+  until: Date;
+  twitch: TwitchWindow;
+}): Promise<GameWindowMetrics> {
+  const since = new Date(input.until.getTime() - WEEK_MS);
+  const [kick, youtube] = await Promise.all([
+    prisma.gamePlatformViewerSnapshot.findMany({
+      where: {
+        gameId: input.gameId,
+        platform: "kick",
+        source: "kick_api",
+        bucketStartedAt: { gt: since, lte: input.until },
+      },
+      select: { bucketStartedAt: true, viewers: true, channels: true },
+    }),
+    prisma.gamePlatformViewerSnapshot.findMany({
+      where: {
+        gameId: input.gameId,
+        platform: "youtube",
+        source: DAILY_GAME_SNAPSHOT_SOURCE,
+        // Whole days inside the window: the day `since` falls in is only
+        // partly covered, so it starts at the next midnight.
+        bucketStartedAt: {
+          gte: new Date(Math.ceil(since.getTime() / DAY_MS) * DAY_MS),
+          lte: input.until,
+        },
+      },
+      select: { bucketStartedAt: true, viewers: true, channels: true },
+    }),
+  ]);
+
+  return buildGameWindowMetrics({
+    until: input.until,
+    twitch: input.twitch,
+    kick: kick.map((row) => ({ ...row, channels: row.channels ?? 0 })),
+    youtube: youtube.map((row) => ({ ...row, channels: row.channels ?? 0 })),
+  });
 }

@@ -319,14 +319,12 @@ export async function fetchKickCategories(
   input: {
     limit?: number;
     cursor?: string | null;
-    search?: string;
   } = {},
 ): Promise<{ categories: KickCategory[]; cursor: string | null }> {
   const params: Record<string, string> = {
     limit: String(Math.min(Math.max(input.limit ?? 100, 1), 100)),
   };
   if (input.cursor) params.cursor = input.cursor;
-  if (input.search) params.search = input.search;
 
   const response = await kickApiFetch<KickCategoriesResponse>(
     "/public/v2/categories",
@@ -351,6 +349,21 @@ export async function fetchKickCategories(
       ("pagination" in response ? response.pagination?.next_cursor : null) ??
       null,
   };
+}
+
+/**
+ * Categories whose name matches `query`. v2 ignores a search parameter and
+ * returns its id-ordered catalog (2026-10: every query came back as Apex
+ * Legends, Modern Warfare II, ...); v1 filters by `q`.
+ */
+export async function searchKickCategories(
+  query: string,
+): Promise<KickCategory[]> {
+  const response = await kickApiFetch<{ data?: KickCategory[] }>(
+    "/public/v1/categories",
+    { q: query },
+  );
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function fetchKickCategoryById(

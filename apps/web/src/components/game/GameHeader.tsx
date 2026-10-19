@@ -35,6 +35,12 @@ type GameHeaderProps = {
       latestViewers: PlatformMetricGroup;
       latestChannels: PlatformMetricGroup;
     };
+    /** Per-platform 7d averages and 24h peaks; null without Twitch history. */
+    windowMetrics: {
+      avgViewers: PlatformMetricGroup;
+      peakViewers: PlatformMetricGroup;
+      avgChannels: PlatformMetricGroup;
+    } | null;
   };
 };
 
@@ -42,11 +48,14 @@ function KpiCard({
   label,
   value,
   platformRows,
+  showTotal = true,
   className,
 }: {
   label: string;
   value: number;
-  platformRows?: PlatformMetricRow[];
+  platformRows?: PlatformMetricRow[] | undefined;
+  /** Off for peaks: platforms peak at different moments, so a sum is no one's peak. */
+  showTotal?: boolean;
   className?: string;
 }) {
   const rows = platformRows?.filter((row) => row.value > 0) ?? [];
@@ -86,7 +95,7 @@ function KpiCard({
           </span>
         )}
       </div>
-      {rows.length > 1 && (
+      {showTotal && rows.length > 1 && (
         <div className="flex items-center justify-between border-t border-[#3F4147] pt-1.5">
           <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
             Total
@@ -181,11 +190,14 @@ export function GameHeader({ game }: GameHeaderProps) {
         {/* Row 1 cols 2–3 */}
         <KpiCard
           label={GAME_KPI_LABELS.avgViewers7d}
-          value={game.avgViewers7d}
+          value={game.windowMetrics?.avgViewers.total ?? game.avgViewers7d}
+          platformRows={game.windowMetrics?.avgViewers.rows}
         />
         <KpiCard
           label={GAME_KPI_LABELS.peakViewers24h}
           value={game.peakViewers24h}
+          platformRows={game.windowMetrics?.peakViewers.rows}
+          showTotal={false}
         />
 
         {/* Pro CTA — col 4, spans rows 1–2 */}
@@ -212,7 +224,8 @@ export function GameHeader({ game }: GameHeaderProps) {
         />
         <KpiCard
           label={GAME_KPI_LABELS.avgLiveChannels}
-          value={game.avgLiveChannels}
+          value={game.windowMetrics?.avgChannels.total ?? game.avgLiveChannels}
+          platformRows={game.windowMetrics?.avgChannels.rows}
         />
       </div>
     </div>

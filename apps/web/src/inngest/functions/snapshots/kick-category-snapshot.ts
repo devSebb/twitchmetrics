@@ -2,6 +2,7 @@ import { inngest } from "../../client";
 import { createLogger } from "@/lib/logger";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 import {
+  discoverKickCategoriesBySearch,
   discoverKickCategoryMappings,
   listKickCategoryMappingIds,
   snapshotKickCategoryMappings,
@@ -74,8 +75,25 @@ export const kickCategoryDiscovery = inngest.createFunction(
           return missingDiscoveryCredentialsResult();
         }
 
-        const result = await discoverKickCategoryMappings();
-        log.info(result, "KICK category discovery completed");
+        const catalog = await discoverKickCategoryMappings();
+        // The catalog walk stops at 2,000 categories; top games it missed are
+        // looked up by name. Skipped when the walk was already rate limited.
+        const search = catalog.rateLimited
+          ? null
+          : await discoverKickCategoriesBySearch();
+        const result = {
+          gamesConsidered: catalog.gamesConsidered,
+          categoriesScanned:
+            catalog.categoriesScanned + (search?.categoriesScanned ?? 0),
+          written: catalog.written + (search?.written ?? 0),
+          skipped: catalog.skipped + (search?.skipped ?? 0),
+          failed: catalog.failed + (search?.failed ?? 0),
+          rateLimited: catalog.rateLimited || (search?.rateLimited ?? false),
+        };
+        log.info(
+          { ...result, searchedGames: search?.gamesConsidered ?? 0 },
+          "KICK category discovery completed",
+        );
 
         return {
           result,
@@ -87,6 +105,8 @@ export const kickCategoryDiscovery = inngest.createFunction(
             partialCount: result.rateLimited ? 1 : 0,
             metadata: {
               gamesConsidered: result.gamesConsidered,
+              searchedGames: search?.gamesConsidered ?? 0,
+              searchMappingsWritten: search?.written ?? 0,
               rateLimited: result.rateLimited,
             },
           },

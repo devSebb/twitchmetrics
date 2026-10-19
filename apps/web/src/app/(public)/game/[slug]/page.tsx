@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
-import { getGamePlatformMetrics } from "@/server/services/game-platform-metrics";
+import {
+  getGamePlatformMetrics,
+  getGameWindowMetrics,
+} from "@/server/services/game-platform-metrics";
 import {
   deriveGameMetrics,
   summarizeViewerSeries,
@@ -149,6 +152,19 @@ export default async function GamePage({ params }: PageProps) {
     until && weekSeries.length > 0
       ? deriveGameMetrics(weekSeries, until)
       : null;
+  // Kick and YouTube for the same 7 days, next to the Twitch figures above.
+  const windowMetrics =
+    until && metrics
+      ? await getGameWindowMetrics({
+          gameId: game.id,
+          until,
+          twitch: {
+            avgViewers: metrics.avgViewers7d,
+            peakViewers24h: metrics.peakViewers24h,
+            avgChannels: metrics.avgLiveChannels,
+          },
+        })
+      : null;
 
   // Shape header data
   const headerData = {
@@ -165,6 +181,7 @@ export default async function GamePage({ params }: PageProps) {
     avgLiveChannels: metrics?.avgLiveChannels ?? game.avgLiveChannels,
     lastUpdatedAt: latestSnapshot ? String(latestSnapshot.snapshotAt) : null,
     platformMetrics,
+    windowMetrics,
   };
 
   const chartUntil = until?.toISOString() ?? null;

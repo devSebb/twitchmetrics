@@ -4,6 +4,7 @@ import {
   fetchKickCategories,
   fetchKickCategoryById,
   fetchKickLivestreams,
+  searchKickCategories,
   type KickCategory,
   type KickLivestream,
 } from "@/server/adapters/kick";
@@ -12,6 +13,10 @@ import { AdapterError } from "@/server/adapters/types";
 const DISCOVERY_PAGE_LIMIT = 100;
 const DISCOVERY_MAX_PAGES = 20;
 const DISCOVERY_GAME_LIMIT = 1_000;
+// Top games (by Twitch 7d average) looked up by name when the catalog walk
+// left them unmapped. Mapped games drop out, so steady state is a few dozen
+// lookups for games Kick has no category for.
+const SEARCH_GAME_LIMIT = 100;
 const REQUEST_DELAY_MS = 750;
 const MAX_TOP_STREAMS = 10;
 const SNAPSHOT_BUCKET_MS = 30 * 60 * 1000;
@@ -54,6 +59,29 @@ function sleep(ms: number): Promise<void> {
 
 function normalizeName(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * The keys a name can match under: as written, and without a trailing
+ * parenthetical. Kick files GTA V as "Grand Theft Auto V (GTA)", which never
+ * equalled the catalog's "Grand Theft Auto V" — the biggest game Kick showed
+ * nothing for (QA 2026-10).
+ */
+export function kickNameKeys(value: string): string[] {
+  const key = normalizeName(value);
+  const stripped = normalizeName(value.replace(/\s*\([^)]*\)\s*$/, ""));
+  return stripped && stripped !== key ? [key, stripped] : [key];
+}
+
+function lookupAlias(
+  aliases: Map<string, GameMatch | null>,
+  name: string,
+): GameMatch | null | undefined {
+  for (const key of kickNameKeys(name)) {
+    const game = aliases.get(key);
+    if (game !== undefined) return game;
+  }
+  return undefined;
 }
 
 function snapshotBucket(date: Date): Date {
@@ -235,7 +263,7 @@ export async function discoverKickCategoryMappings(): Promise<KickCategoryDiscov
 
   for (const category of catalog.categories) {
     const name = category.name?.trim();
-    const game = name ? aliases.get(normalizeName(name)) : undefined;
+    const game = name ? lookupAlias(aliases, name) : undefined;
     if (!game) {
       skipped++;
       continue;
@@ -259,6 +287,79 @@ export async function discoverKickCategoryMappings(): Promise<KickCategoryDiscov
     skipped,
     failed,
     rateLimited: catalog.rateLimited,
+  };
+}
+
+/**
+ * Look up, by name, the top games the catalog walk left without a Kick
+ * category. The walk pages Kick's whole catalog in id order and stops at
+ * DISCOVERY_MAX_PAGES — 2,000 categories, a cap it hit every run — so newer
+ * categories (Marvel Rivals, Deadlock, ARC Raiders) were never reached.
+ */
+export async function discoverKickCategoriesBySearch(): Promise<KickCategoryDiscoveryResult> {
+  const mapped = await prisma.platformGameMapping.findMany({
+    where: { platform: "kick", source: { in: ["kick_api", "manual"] } },
+    select: { gameId: true },
+  });
+  const mappedIds = new Set(mapped.map((mapping) => mapping.gameId));
+  const games = (
+    await prisma.game.findMany({
+      orderBy: [{ avgViewers7d: "desc" }, { currentViewers: "desc" }],
+      take: SEARCH_GAME_LIMIT,
+      select: { id: true, name: true, slug: true },
+    })
+  ).filter((game) => !mappedIds.has(game.id));
+
+  const snapshotAt = new Date();
+  let categoriesScanned = 0;
+  let written = 0;
+  let skipped = 0;
+  let failed = 0;
+  let rateLimited = false;
+
+  for (const [index, game] of games.entries()) {
+    if (index > 0) await sleep(REQUEST_DELAY_MS);
+    let categories: KickCategory[];
+    try {
+      categories = await searchKickCategories(game.name);
+    } catch (error) {
+      if (isRateLimited(error)) {
+        rateLimited = true;
+        break;
+      }
+      failed++;
+      continue;
+    }
+    categoriesScanned += categories.length;
+
+    // Only a name match: search is fuzzy ("Deadlock" also returns
+    // "Battlestar Galactica Deadlock").
+    const gameKeys = new Set(kickNameKeys(game.name));
+    const match = categories.find(
+      (category) =>
+        category.name !== undefined &&
+        kickNameKeys(category.name).some((key) => gameKeys.has(key)),
+    );
+    if (!match) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      if (await persistKickMapping(match, game, snapshotAt)) written++;
+      else skipped++;
+    } catch {
+      failed++;
+    }
+  }
+
+  return {
+    gamesConsidered: games.length,
+    categoriesScanned,
+    written,
+    skipped,
+    failed,
+    rateLimited,
   };
 }
 

@@ -36,11 +36,11 @@ export function topEntitiesLabel(include: "games" | "channels"): string {
  * say "Twitch"; the live tiles show a per-platform breakdown instead.
  */
 export const GAME_KPI_LABELS = {
-  avgViewers7d: "Avg Viewers · Twitch 7d",
-  peakViewers24h: "Peak Viewers · Twitch 24h",
+  avgViewers7d: "Avg Viewers · 7d",
+  peakViewers24h: "Peak Viewers · 24h",
   liveViewers: "Live Viewers",
   liveChannels: "Live Channels",
-  avgLiveChannels: "Avg Live Channels · Twitch 7d",
+  avgLiveChannels: "Avg Live Channels · 7d",
 } as const;
 
 /** Creator stats row periods, in selector order. */

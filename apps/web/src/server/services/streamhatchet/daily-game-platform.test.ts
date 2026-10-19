@@ -78,4 +78,44 @@ describe("indexGamesByName", () => {
 
     expect(index.get("valorant")).toBe("first");
   });
+
+  it("resolves the names SH files games under", () => {
+    const index = indexGamesByName(
+      [{ id: "cs2", name: "Counter-Strike 2" }],
+      [{ name: "Counter-Strike", gameId: "cs2" }],
+    );
+
+    expect(index.get("counter-strike")).toBe("cs2");
+  });
+
+  it("lets a catalog name win over an alias", () => {
+    const index = indexGamesByName(
+      [{ id: "ow", name: "Overwatch" }],
+      [{ name: "Overwatch", gameId: "ow2" }],
+    );
+
+    expect(index.get("overwatch")).toBe("ow");
+  });
+
+  it("drops an alias two games claim", () => {
+    const index = indexGamesByName(
+      [],
+      [
+        { name: "Lineage", gameId: "lineage" },
+        { name: "Lineage", gameId: "lineage-2" },
+      ],
+    );
+
+    expect(index.has("lineage")).toBe(false);
+  });
+
+  it("never matches a YouTube video category", () => {
+    const index = indexGamesByName(
+      [{ id: "sports", name: "Sports" }],
+      [{ name: "Animals", gameId: "animals-zoos" }],
+    );
+
+    expect(index.has("sports")).toBe(false);
+    expect(index.has("animals")).toBe(false);
+  });
 });
