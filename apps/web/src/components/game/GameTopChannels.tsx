@@ -3,7 +3,8 @@ import Link from "next/link";
 import type { Platform } from "@twitchmetrics/database";
 import { TrendUp, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
 import { formatNumber } from "@/lib/utils/format";
-import { PlatformIcon, SyncStatus } from "@/components/shared";
+import { InfoTip, PlatformIcon, SyncStatus } from "@/components/shared";
+import { GAME_INFO } from "@/lib/constants/metric-info";
 
 type TopChannel = {
   id: string;
@@ -117,6 +118,7 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
           <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#F2F3F5]">
             <TrendUp size={16} weight="duotone" className="text-[#53fc18]" />
             Emerging Channels
+            <InfoTip info={GAME_INFO.emerging} />
           </h2>
           <span className="text-xs text-[#949BA4]">
             Started recently or growing
@@ -146,6 +148,7 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
               className="text-[#9146ff]"
             />
             Most Watched Channels
+            <InfoTip info={GAME_INFO.mostWatched} />
           </h2>
           <span className="text-xs text-[#949BA4]">
             Live now, by current viewers

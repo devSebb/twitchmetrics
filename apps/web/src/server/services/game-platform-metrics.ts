@@ -118,13 +118,17 @@ export function preferSnapshot(
   return candidate.snapshotAt > existing.snapshotAt;
 }
 
-/** "daily avg · 2026-09-20" for a rollup-derived figure, nothing for a live one. */
+/**
+ * "daily avg · Sep 20" for a rollup-derived figure, nothing for a live one —
+ * the same short form as the 7d card's YouTube range, and short enough not to
+ * be cut off in the card.
+ */
 export function captionFor(
   source: string,
   bucketStartedAt: Date,
 ): string | null {
   if (!isDailyAverage(source)) return null;
-  return `daily avg · ${bucketStartedAt.toISOString().slice(0, 10)}`;
+  return `daily avg · ${dayLabel(bucketStartedAt)}`;
 }
 
 function group(rows: GamePlatformMetricRow[]): GamePlatformMetricGroup {

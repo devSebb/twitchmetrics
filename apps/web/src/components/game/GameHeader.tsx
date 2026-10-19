@@ -2,7 +2,8 @@ import Image from "next/image";
 import type { Platform } from "@twitchmetrics/database";
 import { formatNumber } from "@/lib/utils/format";
 import { GAME_KPI_LABELS } from "@/lib/constants/metric-labels";
-import { PlatformIcon, SyncStatus } from "@/components/shared";
+import { InfoTip, PlatformIcon, SyncStatus } from "@/components/shared";
+import { GAME_INFO, type MetricInfo } from "@/lib/constants/metric-info";
 import { GameCoverImage } from "@/components/games/GameCoverImage";
 
 type PlatformMetricRow = {
@@ -46,12 +47,14 @@ type GameHeaderProps = {
 
 function KpiCard({
   label,
+  info,
   value,
   platformRows,
   showTotal = true,
   className,
 }: {
   label: string;
+  info: MetricInfo;
   value: number;
   platformRows?: PlatformMetricRow[] | undefined;
   /** Off for peaks: platforms peak at different moments, so a sum is no one's peak. */
@@ -65,8 +68,9 @@ function KpiCard({
       className={`relative flex min-h-[86px] flex-col justify-between gap-2 rounded-xl border border-[#3F4147] bg-[#313338] px-4 py-3 ${className ?? ""}`}
     >
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
+        <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
           {label}
+          <InfoTip info={info} />
         </span>
         {rows.length > 0 ? (
           <div className="space-y-1">
@@ -190,11 +194,13 @@ export function GameHeader({ game }: GameHeaderProps) {
         {/* Row 1 cols 2–3 */}
         <KpiCard
           label={GAME_KPI_LABELS.avgViewers7d}
+          info={GAME_INFO.avgViewers7d}
           value={game.windowMetrics?.avgViewers.total ?? game.avgViewers7d}
           platformRows={game.windowMetrics?.avgViewers.rows}
         />
         <KpiCard
           label={GAME_KPI_LABELS.peakViewers24h}
+          info={GAME_INFO.peakViewers24h}
           value={game.peakViewers24h}
           platformRows={game.windowMetrics?.peakViewers.rows}
           showTotal={false}
@@ -206,6 +212,7 @@ export function GameHeader({ game }: GameHeaderProps) {
         {/* Row 2 cols 1–3 (auto-fill around CTA) */}
         <KpiCard
           label={GAME_KPI_LABELS.liveViewers}
+          info={GAME_INFO.liveViewers}
           value={
             game.platformMetrics.latestViewers.total > 0
               ? game.platformMetrics.latestViewers.total
@@ -215,6 +222,7 @@ export function GameHeader({ game }: GameHeaderProps) {
         />
         <KpiCard
           label={GAME_KPI_LABELS.liveChannels}
+          info={GAME_INFO.liveChannels}
           value={
             game.platformMetrics.latestChannels.total > 0
               ? game.platformMetrics.latestChannels.total
@@ -224,6 +232,7 @@ export function GameHeader({ game }: GameHeaderProps) {
         />
         <KpiCard
           label={GAME_KPI_LABELS.avgLiveChannels}
+          info={GAME_INFO.avgChannels7d}
           value={game.windowMetrics?.avgChannels.total ?? game.avgLiveChannels}
           platformRows={game.windowMetrics?.avgChannels.rows}
         />

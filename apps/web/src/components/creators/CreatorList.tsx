@@ -11,6 +11,11 @@ import {
 import { formatNumber, formatDuration } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import { PlatformIcon, TrendIndicator } from "@/components/shared";
+import { InfoTip } from "@/components/shared/InfoTip";
+import {
+  CREATOR_LIST_INFO,
+  type MetricInfo,
+} from "@/lib/constants/metric-info";
 import { cn } from "@/lib/utils";
 
 export type CreatorListRow = {
@@ -114,9 +119,11 @@ const HEADER_CLASS = "px-3 py-2 text-xs font-medium text-[#949BA4]";
 function SortableHeader({
   label,
   sortValue,
+  info,
 }: {
   label: string;
   sortValue: "followers" | "trending";
+  info: MetricInfo;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -135,17 +142,37 @@ function SortableHeader({
       className={HEADER_CLASS}
       aria-sort={isActive ? "descending" : undefined}
     >
-      <button
-        type="button"
-        onClick={handleSelect}
-        className={cn(
-          "flex items-center gap-1 transition-colors",
-          isActive ? "text-[#F2F3F5]" : "hover:text-[#DBDEE1]",
-        )}
-      >
-        {label}
-        {isActive && <span aria-hidden>↓</span>}
-      </button>
+      {/* The "?" sits beside the sort button, not inside it. */}
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={handleSelect}
+          className={cn(
+            "flex items-center gap-1 transition-colors",
+            isActive ? "text-[#F2F3F5]" : "hover:text-[#DBDEE1]",
+          )}
+        >
+          {label}
+          {isActive && <span aria-hidden>↓</span>}
+        </button>
+        <InfoTip info={info} />
+      </span>
+    </th>
+  );
+}
+
+function InfoHeader({ label, info }: { label: string; info: MetricInfo }) {
+  // Headers may wrap (one line each would push the table into a sideways
+  // scroll), but the "?" stays glued to the last word, never alone on a line.
+  const words = label.split(" ");
+  const last = words.pop();
+  return (
+    <th className={HEADER_CLASS}>
+      {words.length > 0 && `${words.join(" ")} `}
+      <span className="whitespace-nowrap">
+        {last}
+        <InfoTip info={info} className="ml-1 align-middle" />
+      </span>
     </th>
   );
 }
@@ -160,12 +187,29 @@ export function CreatorList({ rows }: Props) {
             <tr className="border-b border-[#3F4147]">
               <th className={HEADER_CLASS}>Channel</th>
               <th className={HEADER_CLASS}>Platforms</th>
-              <SortableHeader label="Followers" sortValue="followers" />
-              <SortableHeader label="7d Trend" sortValue="trending" />
-              <th className={HEADER_CLASS}>Airtime</th>
-              <th className={HEADER_CLASS}>Avg Airtime</th>
-              <th className={HEADER_CLASS}>Peak Viewers</th>
-              <th className={HEADER_CLASS}>Avg Viewers</th>
+              <SortableHeader
+                label="Followers"
+                sortValue="followers"
+                info={CREATOR_LIST_INFO.followers}
+              />
+              <SortableHeader
+                label="7d Trend"
+                sortValue="trending"
+                info={CREATOR_LIST_INFO.trend}
+              />
+              <InfoHeader label="Airtime" info={CREATOR_LIST_INFO.airtime} />
+              <InfoHeader
+                label="Avg Airtime"
+                info={CREATOR_LIST_INFO.avgAirtime}
+              />
+              <InfoHeader
+                label="Peak Viewers"
+                info={CREATOR_LIST_INFO.peakViewers}
+              />
+              <InfoHeader
+                label="Avg Viewers"
+                info={CREATOR_LIST_INFO.avgViewers}
+              />
             </tr>
           </thead>
           <tbody>

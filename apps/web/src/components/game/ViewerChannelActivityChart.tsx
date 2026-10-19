@@ -15,6 +15,8 @@ import {
 import { formatNumber } from "@/lib/utils/format";
 import { THEME } from "@/lib/constants/theme";
 import { cn } from "@/lib/utils";
+import { InfoTip } from "@/components/shared/InfoTip";
+import { GAME_INFO } from "@/lib/constants/metric-info";
 import type { EChartsOption } from "echarts";
 
 type ActivityPoint = {
@@ -166,6 +168,7 @@ export function ViewerChannelActivityChart({
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#F2F3F5]">
           <ChartBar size={16} weight="duotone" className="text-[#949BA4]" />
           Twitch Viewership &amp; Channel Activity
+          <InfoTip info={GAME_INFO.activity} />
         </h2>
         <div className="flex gap-1 rounded-md bg-[#1E1F22] p-0.5">
           {PERIODS.map((p) => (

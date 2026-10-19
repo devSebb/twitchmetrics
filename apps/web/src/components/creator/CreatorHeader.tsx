@@ -7,7 +7,8 @@ import { formatNumber } from "@/lib/utils/format";
 import { getSafeImageSrc } from "@/lib/safeImage";
 import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { sortByPlatformOrder } from "@/lib/constants/platforms";
-import { PlatformIcon, SyncStatus } from "@/components/shared";
+import { InfoTip, PlatformIcon, SyncStatus } from "@/components/shared";
+import { CREATOR_HEADER_INFO } from "@/lib/constants/metric-info";
 
 type PlatformAccountData = {
   platform: Platform;
@@ -254,8 +255,9 @@ export function CreatorHeader({
               <div className="text-3xl font-bold tracking-tight text-[#F2F3F5]">
                 {formatNumber(totalFollowers)}
               </div>
-              <div className="text-xs font-medium tracking-wide text-[#949BA4] uppercase">
+              <div className="flex items-center gap-1 text-xs font-medium tracking-wide text-[#949BA4] uppercase">
                 Total Followers
+                <InfoTip info={CREATOR_HEADER_INFO.totalFollowers} />
               </div>
             </div>
 

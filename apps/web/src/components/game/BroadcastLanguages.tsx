@@ -1,4 +1,6 @@
 import { Translate } from "@phosphor-icons/react/dist/ssr";
+import { InfoTip } from "@/components/shared/InfoTip";
+import { GAME_INFO } from "@/lib/constants/metric-info";
 
 type Language = {
   language: string;
@@ -18,6 +20,7 @@ export function BroadcastLanguages({ languages }: BroadcastLanguagesProps) {
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#F2F3F5]">
         <Translate size={16} weight="duotone" className="text-[#949BA4]" />
         Top Broadcast Languages
+        <InfoTip info={GAME_INFO.broadcastLanguages} />
       </h2>
 
       {sorted.length === 0 ? (

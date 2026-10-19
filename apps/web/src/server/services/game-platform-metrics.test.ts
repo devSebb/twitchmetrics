@@ -74,7 +74,7 @@ describe("captionFor", () => {
   it("labels a daily average with the day it covers", () => {
     expect(
       captionFor(DAILY_GAME_SNAPSHOT_SOURCE, new Date("2026-09-20T00:00:00Z")),
-    ).toBe("daily avg · 2026-09-20");
+    ).toBe("daily avg · Sep 20");
   });
 
   it("leaves live readings uncaptioned", () => {

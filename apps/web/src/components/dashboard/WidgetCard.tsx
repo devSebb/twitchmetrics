@@ -1,4 +1,6 @@
 import { WIDGET_REGISTRY, type WidgetId } from "@/lib/constants/widgets";
+import { CREATOR_WIDGET_INFO } from "@/lib/constants/metric-info";
+import { InfoTip } from "@/components/shared/InfoTip";
 
 type WidgetCardProps = {
   widgetId: WidgetId;
@@ -16,6 +18,9 @@ type WidgetCardProps = {
  */
 export function WidgetCard({ widgetId, children, className }: WidgetCardProps) {
   const def = WIDGET_REGISTRY[widgetId];
+  // Where the widget's data comes from, beside its title. Widgets that are
+  // the creator's own words (rates, interests) have no entry and no "?".
+  const info = CREATOR_WIDGET_INFO[widgetId];
   return (
     <div
       data-widget-id={widgetId}
@@ -25,6 +30,7 @@ export function WidgetCard({ widgetId, children, className }: WidgetCardProps) {
         <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F2F3F5]">
           <def.icon size={16} weight="duotone" className="text-[#949BA4]" />
           {def.label}
+          {info && <InfoTip info={info} />}
         </h3>
       </div>
       {children}
