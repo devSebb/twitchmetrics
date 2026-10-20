@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import {
   WIDGET_REGISTRY,
   getEnabledWidgets,
   type WidgetId,
 } from "@/lib/constants/widgets";
+import {
+  packProfileLayout,
+  type LayoutCell,
+  type ProfileDataAvailability,
+} from "@/lib/profile-layout";
 import {
   EmptyState,
   StatsRow,
@@ -19,6 +24,7 @@ import {
   FeaturedClipsWidget,
   BrandPartnersWidget,
   BrandSafetyWidget,
+  hasPublicDemographics,
 } from "@/components/widgets";
 import { FeaturedPostsSection } from "./sections/FeaturedPostsSection";
 import { InterestsSection } from "./sections/InterestsSection";
@@ -118,31 +124,124 @@ type DashboardGridProps = {
   widgetConfig: unknown;
   isClaimed: boolean;
   isOwner: boolean;
+  /**
+   * Server-checked data availability for client-loaded widgets. Without it
+   * those widgets are assumed present and fall back to self-hiding.
+   */
+  dataAvailability?: ProfileDataAvailability | undefined;
   /** Controlled state for the WidgetToggle drawer. Required for owner mode; ignored otherwise. */
   customizeOpen?: boolean;
   onCustomizeClose?: () => void;
 };
 
 // ----------------------------------------------------------------
+// Which widgets will render
+//
+// The grid packs only widgets that will actually show something, so a
+// missing card never leaves a hole (lib/profile-layout.ts). Owners still
+// see empty states and calls to action for widgets they enabled.
+// ----------------------------------------------------------------
+
+type ContentContext = {
+  profile: SerializedProfile;
+  widgetConfig: unknown;
+  isClaimed: boolean;
+  isOwner: boolean;
+  dataAvailability: ProfileDataAvailability | undefined;
+};
+
+function hasContent(widgetId: WidgetId, ctx: ContentContext): boolean {
+  switch (widgetId) {
+    case "demographics":
+      return ctx.isOwner || hasPublicDemographics(ctx.profile, ctx.isClaimed);
+    case "brand_partners":
+      // Unclaimed: the locked "Claim Required" card. Claimed with no
+      // partners: hidden by default, shown only when the owner kept it in
+      // their saved widget config (an empty config means defaults).
+      return (
+        ctx.isOwner ||
+        !ctx.isClaimed ||
+        ctx.profile.brandPartnerships.length > 0 ||
+        (Array.isArray(ctx.widgetConfig) &&
+          ctx.widgetConfig.includes("brand_partners"))
+      );
+    case "platform_breakdown":
+      return ctx.profile.platformAccounts.some(
+        (account) => Number(account.followerCount ?? 0) > 0,
+      );
+    case "popular_games":
+    case "recent_streams":
+    case "viewer_count":
+    case "follower_growth":
+    case "featured_clips":
+      return ctx.dataAvailability?.[widgetId] ?? true;
+    default:
+      return true;
+  }
+}
+
+// ----------------------------------------------------------------
+// Card sizing
+// ----------------------------------------------------------------
+
+// Static class names so Tailwind keeps them (spans are twelfths).
+const SPAN_BASIS: Record<number, string> = {
+  1: "lg:basis-1/12",
+  2: "lg:basis-2/12",
+  3: "lg:basis-3/12",
+  4: "lg:basis-4/12",
+  5: "lg:basis-5/12",
+  6: "lg:basis-6/12",
+  7: "lg:basis-7/12",
+  8: "lg:basis-8/12",
+  9: "lg:basis-9/12",
+  10: "lg:basis-10/12",
+  11: "lg:basis-11/12",
+  12: "lg:basis-full",
+};
+
+// Scrollable list widgets keep a fixed height; cards sharing their row
+// match it on desktop.
+const FIXED_HEIGHT_WIDGETS = new Set<WidgetId>([
+  "popular_games",
+  "recent_streams",
+]);
+
+// Rows are flex (basis + grow), not fixed grid tracks: if a card still
+// self-hides client-side, its neighbours grow into the space instead of
+// leaving a hole. A row whose cards all hid collapses, so the column gap
+// doesn't double up. Browsers drop :has() nested inside :has(), so the
+// "all cards empty" check is spelled out for 1- and 2-card rows (the
+// packer never builds wider rows).
+const ROW_CLASS = [
+  "flex flex-col gap-4 lg:flex-row",
+  "[&:has(>[data-widget-id]:only-child_[data-widget-empty])]:hidden",
+  "[&:has(>[data-widget-id]:first-child_[data-widget-empty]):has(>[data-widget-id]:nth-child(2):last-child_[data-widget-empty])]:hidden",
+].join(" ");
+
+function cellClassName(cell: LayoutCell, rowHasFixedHeight: boolean): string {
+  const height = FIXED_HEIGHT_WIDGETS.has(cell.id)
+    ? "h-80"
+    : rowHasFixedHeight
+      ? "lg:h-80 lg:overflow-y-auto"
+      : "";
+  return `min-w-0 lg:grow ${SPAN_BASIS[cell.span] ?? ""} ${height}`;
+}
+
+// ----------------------------------------------------------------
 // Access-gated widget renderer
 //
-// Locked widgets (claim/connect required) always render a card so the
-// viewer knows they can unlock it. Unlocked widgets render a regular card
-// whose body includes the widget; widgets that have no data render an
-// `<EmptyWidgetSentinel />` which the card's CSS uses via `:has()` to
-// hide the entire card. The widget stays enabled in config, so it
-// reappears automatically once data arrives.
+// Locked widgets (claim/connect required) render a locked card so the
+// viewer knows they can unlock it. Widgets that turn out empty client-side
+// render `<EmptyWidgetSentinel />`, which hides the card via `:has()`.
 // ----------------------------------------------------------------
 
 function renderGated(
   widgetId: WidgetId,
-  enabledSet: Set<WidgetId>,
   isClaimed: boolean,
   children: React.ReactNode,
   className?: string,
 ): React.ReactNode {
-  if (!enabledSet.has(widgetId)) return null;
-
   const def = WIDGET_REGISTRY[widgetId];
   const cardProps = className ? { widgetId, className } : { widgetId };
 
@@ -156,6 +255,7 @@ function renderGated(
           actionLabel="Claim Profile"
           actionHref="/dashboard/claim"
           compact
+          className="flex-1"
         />
       </WidgetCard>
     );
@@ -171,6 +271,7 @@ function renderGated(
           actionLabel="Connect"
           actionHref="/dashboard/connections"
           compact
+          className="flex-1"
         />
       </WidgetCard>
     );
@@ -183,8 +284,52 @@ function renderGated(
   );
 }
 
+function renderWidget(
+  widgetId: WidgetId,
+  profile: SerializedProfile,
+  isClaimed: boolean,
+  isOwner: boolean,
+): React.ReactNode {
+  switch (widgetId) {
+    case "stats_row":
+      return <StatsRow profile={profile} />;
+    case "demographics":
+      return (
+        <DemographicsWidget
+          profile={profile}
+          isClaimed={isClaimed}
+          isOwner={isOwner}
+        />
+      );
+    case "brand_partners":
+      return <BrandPartnersWidget profile={profile} isOwner={isOwner} />;
+    case "popular_games":
+      return <PopularGamesWidget profile={profile} />;
+    case "recent_streams":
+      return <RecentStreamsWidget profile={profile} />;
+    case "featured_clips":
+      return <FeaturedClipsWidget profile={profile} />;
+    case "featured_posts":
+      return <FeaturedPostsSection />;
+    case "follower_growth":
+      return <FollowerGrowthWidget profile={profile} />;
+    case "viewer_count":
+      return <ViewerCountWidget profile={profile} />;
+    case "interests":
+      return <InterestsSection interests={profile.interests ?? []} />;
+    case "streamer_qualities":
+      return <StreamerQualitiesSection />;
+    case "rates":
+      return <RatesSection />;
+    case "brand_safety":
+      return <BrandSafetyWidget profile={profile} isClaimed={isClaimed} />;
+    case "platform_breakdown":
+      return <PlatformBreakdownWidget profile={profile} isOwner={isOwner} />;
+  }
+}
+
 // ----------------------------------------------------------------
-// Main Grid Component — Figma V7 section layout
+// Main Grid Component
 // ----------------------------------------------------------------
 
 export function DashboardGrid({
@@ -192,6 +337,7 @@ export function DashboardGrid({
   widgetConfig,
   isClaimed,
   isOwner,
+  dataAvailability,
   customizeOpen,
   onCustomizeClose,
 }: DashboardGridProps) {
@@ -199,136 +345,62 @@ export function DashboardGrid({
     getEnabledWidgets(widgetConfig),
   );
 
-  const enabledSet = new Set(enabledWidgets);
-
   const handleWidgetConfigChange = useCallback((newConfig: WidgetId[]) => {
     setEnabledWidgets(newConfig);
   }, []);
 
+  const layout = useMemo(() => {
+    const ctx: ContentContext = {
+      profile,
+      widgetConfig,
+      isClaimed,
+      isOwner,
+      dataAvailability,
+    };
+    return packProfileLayout(
+      enabledWidgets.filter((widgetId) => hasContent(widgetId, ctx)),
+    );
+  }, [
+    enabledWidgets,
+    profile,
+    widgetConfig,
+    isClaimed,
+    isOwner,
+    dataAvailability,
+  ]);
+
   return (
     <div>
-      {/* Content area — flex+gap (not space-y) so hidden/collapsed rows don't leave ghost margins. */}
+      {/* flex+gap (not space-y) so hidden rows don't leave ghost margins. */}
       <div className="flex flex-col gap-4">
-        {/* Row 1: Stats Row — full width */}
-        {renderGated(
-          "stats_row",
-          enabledSet,
-          isClaimed,
-          <StatsRow profile={profile} />,
+        {layout.pinned.map((widgetId) =>
+          renderGated(
+            widgetId,
+            isClaimed,
+            renderWidget(widgetId, profile, isClaimed, isOwner),
+          ),
         )}
 
-        {/* Row 2: Audience Demographics (2/3) | Brand Partners (1/3).
-            Flex basis + grow (not fixed grid tracks) so whichever card is
-            hidden — disabled, or self-hidden when empty — lets the other
-            expand to full width instead of leaving a dead column. */}
-        <div className="flex flex-col gap-4 empty:hidden lg:flex-row">
-          {renderGated(
-            "demographics",
-            enabledSet,
-            isClaimed,
-            <DemographicsWidget
-              profile={profile}
-              isClaimed={isClaimed}
-              isOwner={isOwner}
-            />,
-            "min-w-0 lg:basis-2/3 lg:grow",
-          )}
-          {renderGated(
-            "brand_partners",
-            enabledSet,
-            isClaimed,
-            <BrandPartnersWidget profile={profile} isOwner={isOwner} />,
-            // No grow: when demographics is missing (most catalog profiles)
-            // this card stays a third wide instead of stretching into a
-            // full-width band.
-            "min-w-0 lg:basis-1/3 lg:grow-0",
-          )}
-        </div>
-
-        {/* Row 3: Popular Games (35%) | Recent Streams (65%) — fixed height, scrollable */}
-        <div className="grid grid-cols-1 gap-4 empty:hidden lg:grid-cols-[35fr_65fr]">
-          {renderGated(
-            "popular_games",
-            enabledSet,
-            isClaimed,
-            <PopularGamesWidget profile={profile} />,
-            "h-80",
-          )}
-          {renderGated(
-            "recent_streams",
-            enabledSet,
-            isClaimed,
-            <RecentStreamsWidget profile={profile} />,
-            "h-80",
-          )}
-        </div>
-
-        {/* Row 4: Featured Clips — full width */}
-        {renderGated(
-          "featured_clips",
-          enabledSet,
-          isClaimed,
-          <FeaturedClipsWidget profile={profile} />,
-        )}
-
-        {/* Row 5: Follower Growth (1/2) | Viewer Count (1/2) */}
-        <div className="grid grid-cols-1 gap-4 empty:hidden lg:grid-cols-2">
-          {renderGated(
-            "follower_growth",
-            enabledSet,
-            isClaimed,
-            <FollowerGrowthWidget profile={profile} />,
-          )}
-          {renderGated(
-            "viewer_count",
-            enabledSet,
-            isClaimed,
-            <ViewerCountWidget profile={profile} />,
-          )}
-        </div>
-
-        {/* Row 6: Featured Posts — full width */}
-        {renderGated(
-          "featured_posts",
-          enabledSet,
-          isClaimed,
-          <FeaturedPostsSection />,
-        )}
-
-        {/* Row 7: Interests (1/2) | Streamer Qualities (1/2) */}
-        <div className="grid grid-cols-1 gap-4 empty:hidden md:grid-cols-2">
-          {renderGated(
-            "interests",
-            enabledSet,
-            isClaimed,
-            <InterestsSection interests={profile.interests ?? []} />,
-          )}
-          {renderGated(
-            "streamer_qualities",
-            enabledSet,
-            isClaimed,
-            <StreamerQualitiesSection />,
-          )}
-        </div>
-
-        {/* Row 8: Rates (1/2) | Brand Safety (1/2) */}
-        <div className="grid grid-cols-1 gap-4 empty:hidden md:grid-cols-2">
-          {renderGated("rates", enabledSet, isClaimed, <RatesSection />)}
-          {renderGated(
-            "brand_safety",
-            enabledSet,
-            isClaimed,
-            <BrandSafetyWidget profile={profile} isClaimed={isClaimed} />,
-          )}
-        </div>
-
-        {/* Row 9: Platform Breakdown — full width */}
-        {renderGated(
-          "platform_breakdown",
-          enabledSet,
-          isClaimed,
-          <PlatformBreakdownWidget profile={profile} />,
-        )}
+        {layout.rows.map((row) => {
+          const rowHasFixedHeight = row.some((cell) =>
+            FIXED_HEIGHT_WIDGETS.has(cell.id),
+          );
+          return (
+            <div
+              key={row.map((cell) => cell.id).join("+")}
+              className={ROW_CLASS}
+            >
+              {row.map((cell) =>
+                renderGated(
+                  cell.id,
+                  isClaimed,
+                  renderWidget(cell.id, profile, isClaimed, isOwner),
+                  cellClassName(cell, rowHasFixedHeight),
+                ),
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Widget toggle drawer — controlled by parent in owner mode. */}

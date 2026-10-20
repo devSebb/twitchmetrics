@@ -9,9 +9,10 @@ import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
 
 type Props = {
   profile: SerializedProfile;
+  isOwner?: boolean;
 };
 
-export function PlatformBreakdownWidget({ profile }: Props) {
+export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
   const bars = profile.platformAccounts
     .filter((a) => a.followerCount !== null && Number(a.followerCount) > 0)
     .map((a) => ({
@@ -72,10 +73,11 @@ export function PlatformBreakdownWidget({ profile }: Props) {
     ],
   };
 
+  // Centred so the bars sit mid-card when a taller neighbour stretches it.
   return (
-    <div>
+    <div className="flex flex-1 flex-col justify-center">
       <BaseChart option={option} height={Math.max(bars.length * 48, 120)} />
-      {bars.length === 1 && (
+      {isOwner && bars.length === 1 && (
         <p className="mt-2 text-center text-xs text-[#949BA4]">
           Connect more platforms to compare.
         </p>

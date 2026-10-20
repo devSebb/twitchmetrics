@@ -5,6 +5,7 @@ import type { Platform } from "@twitchmetrics/database";
 import { FollowerGrowthChart } from "@/components/charts";
 import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
+import { getGrowthPlatforms } from "@/lib/follower-growth";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { trpc } from "@/lib/trpc";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
@@ -14,17 +15,12 @@ type FollowerGrowthWidgetProps = {
 };
 
 export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
+  // Link-only social accounts have no snapshot history, so a growth tab for
+  // them would render an empty chart; their follower counts still appear in
+  // the header + the platform-breakdown widget.
   const connectedPlatforms = useMemo(
-    () =>
-      profile.platformAccounts
-        // Link-only social accounts (discoverySource set — e.g. IG/TikTok/X
-        // from StreamHatchet) have no snapshot history, so a growth tab for
-        // them would render an empty chart. Show growth only for tracked
-        // platforms; their follower counts still appear in the header + the
-        // platform-breakdown widget.
-        .filter((a) => a.discoverySource == null)
-        .map((a) => a.platform),
-    [profile.platformAccounts],
+    () => getGrowthPlatforms(profile.platformAccounts, profile.primaryPlatform),
+    [profile.platformAccounts, profile.primaryPlatform],
   );
 
   const [platform, setPlatform] = useState<Platform | "all">(

@@ -13,6 +13,7 @@ type EmptyStateProps = {
   actionHref?: string;
   icon?: React.ReactNode;
   compact?: boolean;
+  className?: string;
 };
 
 const LockIcon = () => (
@@ -55,6 +56,7 @@ export function EmptyState({
   actionHref,
   icon,
   compact = false,
+  className,
 }: EmptyStateProps) {
   const isLocked = variant === "locked";
 
@@ -66,7 +68,7 @@ export function EmptyState({
         isLocked
           ? "rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31]/50"
           : "rounded-lg border border-dashed border-[#3F4147]"
-      }`}
+      } ${className ?? ""}`}
     >
       <div className={`mb-3 text-[#949BA4] ${isLocked ? "opacity-60" : ""}`}>
         {icon ?? (isLocked ? <LockIcon /> : <EmptyIcon />)}

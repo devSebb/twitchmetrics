@@ -16,6 +16,7 @@ import {
 } from "@/server/services/creator-visibility";
 import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 import { selectDisplayableDemographics } from "@/lib/metric-freshness";
+import { getProfileDataAvailability } from "@/server/services/profile-widget-availability";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -229,6 +230,10 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       })),
   };
 
+  // Which client-loaded widgets have data, so the grid packs only cards that
+  // will render. Started here to run alongside the demographics queries.
+  const dataAvailabilityPromise = getProfileDataAvailability(db, creator);
+
   const demographicAnalytics = creator.publicDemographicsEnabled
     ? await db.creatorAnalytics.findMany({
         where: { creatorProfileId: creator.id },
@@ -267,6 +272,8 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       dpUpdatedAt: row.dpUpdatedAt ? row.dpUpdatedAt.toISOString() : null,
     })),
   );
+
+  const dataAvailability = await dataAvailabilityPromise;
 
   // Data for DashboardGrid (same shape as dashboard page)
   const serialized = {
@@ -332,6 +339,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
         widgetConfig={creator.widgetConfig}
         isClaimed={isClaimed}
         isOwner={false}
+        dataAvailability={dataAvailability}
       />
     </div>
   );

@@ -39,6 +39,28 @@ export type WidgetId =
 
 export type WidgetAccess = "public" | "claimed" | "connected";
 
+export type WidgetSpan = 4 | 6 | 8 | 12;
+
+/** chart: tall charts/media · list: fixed-height scroll lists · compact: short cards */
+export type WidgetHeight = "chart" | "list" | "compact";
+
+/** Desktop sizing for the profile grid packer (lib/profile-layout.ts). */
+export type WidgetLayout = {
+  /** Preferred width, in twelfths of the grid. */
+  span: WidgetSpan;
+  /** Widest the widget may grow to fill the rest of its row. */
+  maxSpan: WidgetSpan;
+  /**
+   * Height class. Only widgets of the same class share a row, so a tall
+   * chart never stretches a short card into an empty box. Fillers fit any.
+   */
+  height: WidgetHeight;
+  /** Rendered full width above the packed grid instead of being packed. */
+  pinned?: true;
+  /** No fixed slot: the packer moves it to wherever it closes a gap. */
+  filler?: true;
+};
+
 export type WidgetDefinition = {
   id: WidgetId;
   label: string;
@@ -46,8 +68,7 @@ export type WidgetDefinition = {
   defaultEnabled: boolean;
   priority: "P0" | "P1" | "P2";
   access: WidgetAccess;
-  /** Grid column span at desktop (out of 3) */
-  colSpan: 1 | 2 | 3;
+  layout: WidgetLayout;
   icon: Icon;
 };
 
@@ -59,7 +80,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "public",
-    colSpan: 3,
+    layout: { span: 12, maxSpan: 12, height: "compact", pinned: true },
     icon: ChartBar,
   },
   follower_growth: {
@@ -69,7 +90,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "public",
-    colSpan: 2,
+    layout: { span: 6, maxSpan: 12, height: "chart" },
     icon: TrendUp,
   },
   demographics: {
@@ -83,7 +104,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "public",
-    colSpan: 3,
+    layout: { span: 8, maxSpan: 12, height: "chart" },
     icon: UsersThree,
   },
   popular_games: {
@@ -93,7 +114,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "public",
-    colSpan: 1,
+    layout: { span: 4, maxSpan: 6, height: "list" },
     icon: GameController,
   },
   featured_clips: {
@@ -103,7 +124,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P1",
     access: "public",
-    colSpan: 2,
+    layout: { span: 12, maxSpan: 12, height: "chart" },
     icon: FilmSlate,
   },
   featured_posts: {
@@ -113,7 +134,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: false,
     priority: "P2",
     access: "claimed",
-    colSpan: 3,
+    layout: { span: 12, maxSpan: 12, height: "chart" },
     icon: Article,
   },
   viewer_count: {
@@ -124,7 +145,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P0",
     access: "public",
-    colSpan: 3,
+    layout: { span: 6, maxSpan: 12, height: "chart" },
     icon: Eye,
   },
   recent_streams: {
@@ -135,7 +156,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P1",
     access: "public",
-    colSpan: 3,
+    layout: { span: 8, maxSpan: 12, height: "list" },
     icon: ListBullets,
   },
   platform_breakdown: {
@@ -145,7 +166,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P1",
     access: "public",
-    colSpan: 1,
+    layout: { span: 6, maxSpan: 12, height: "compact" },
     icon: ShareNetwork,
   },
   brand_partners: {
@@ -155,7 +176,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: true,
     priority: "P1",
     access: "claimed",
-    colSpan: 1,
+    layout: { span: 4, maxSpan: 4, height: "compact", filler: true },
     icon: Handshake,
   },
   brand_safety: {
@@ -165,7 +186,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: false,
     priority: "P2",
     access: "claimed",
-    colSpan: 1,
+    layout: { span: 6, maxSpan: 12, height: "compact" },
     icon: ShieldCheck,
   },
   rates: {
@@ -175,7 +196,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: false,
     priority: "P2",
     access: "claimed",
-    colSpan: 1,
+    layout: { span: 6, maxSpan: 12, height: "compact" },
     icon: CurrencyCircleDollar,
   },
   interests: {
@@ -185,7 +206,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: false,
     priority: "P2",
     access: "claimed",
-    colSpan: 1,
+    layout: { span: 6, maxSpan: 12, height: "compact" },
     icon: Sparkle,
   },
   streamer_qualities: {
@@ -195,14 +216,14 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetDefinition> = {
     defaultEnabled: false,
     priority: "P2",
     access: "claimed",
-    colSpan: 1,
+    layout: { span: 6, maxSpan: 12, height: "compact" },
     icon: Star,
   },
 };
 
 /**
- * Widget display order — matches Figma V7 grid layout.
- * Stats row spans full width, then 2/3 + 1/3, etc.
+ * Widget display order (Figma V7). The profile grid packs present widgets
+ * into rows in this order — see lib/profile-layout.ts.
  */
 export const WIDGET_ORDER: WidgetId[] = [
   "stats_row",

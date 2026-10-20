@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { Platform, ProfileState } from "@twitchmetrics/database";
 import { CreatorHeader } from "@/components/creator";
 import { computeProfileCompletion } from "@/lib/profile-completion";
+import type { ProfileDataAvailability } from "@/lib/profile-layout";
 import { DashboardGrid, type SerializedProfile } from "./DashboardGrid";
 
 type PlatformAccountData = {
@@ -45,6 +46,7 @@ type OwnerDashboardViewProps = {
   profile: SerializedProfile;
   widgetConfig: unknown;
   isClaimed: boolean;
+  dataAvailability: ProfileDataAvailability;
 };
 
 function ShareUrlButton({ slug }: { slug: string }) {
@@ -112,6 +114,7 @@ export function OwnerDashboardView({
   profile,
   widgetConfig,
   isClaimed,
+  dataAvailability,
 }: OwnerDashboardViewProps) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
@@ -150,6 +153,7 @@ export function OwnerDashboardView({
         widgetConfig={widgetConfig}
         isClaimed={isClaimed}
         isOwner
+        dataAvailability={dataAvailability}
         customizeOpen={customizeOpen}
         onCustomizeClose={() => setCustomizeOpen(false)}
       />

@@ -9,6 +9,7 @@ import {
   selectDisplayableDemographics,
 } from "@/lib/metric-freshness";
 import { isKnownGrowthRollup } from "@/server/services/creator-growth";
+import { getProfileDataAvailability } from "@/server/services/profile-widget-availability";
 import {
   OwnerDashboardView,
   type SerializedProfile,
@@ -116,6 +117,7 @@ export default async function DashboardPage() {
   }
 
   const isClaimed = profile.state === "claimed" || profile.state === "premium";
+  const dataAvailability = await getProfileDataAvailability(prisma, profile);
   const lastUpdatedAt = getLatestTimestamp(
     profile.platformAccounts.map((account) => account.lastSyncedAt),
   );
@@ -182,6 +184,7 @@ export default async function DashboardPage() {
       profile={serialized}
       widgetConfig={profile.widgetConfig}
       isClaimed={isClaimed}
+      dataAvailability={dataAvailability}
     />
   );
 }

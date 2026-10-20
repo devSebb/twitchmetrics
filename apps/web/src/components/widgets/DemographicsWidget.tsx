@@ -457,6 +457,25 @@ function SocialAudienceContent({
   );
 }
 
+/**
+ * Whether a visitor (non-owner) would see real demographics — the public
+ * profile packs this card only when true. Mirrors DemographicsWidget's
+ * non-owner branches: first-party analytics (claimed + shared publicly)
+ * or a usable social-audience estimate.
+ */
+export function hasPublicDemographics(
+  profile: SerializedProfile,
+  isClaimed: boolean,
+): boolean {
+  if (pickSocialRow(profile.audienceDemographics ?? []) !== null) return true;
+  if (!isClaimed || !profile.publicDemographicsEnabled) return false;
+  return (profile.demographicAnalytics ?? []).some(
+    (entry) =>
+      parseGenderData(entry.ageGenderData) !== null ||
+      parseCountryData(entry.countryData) !== null,
+  );
+}
+
 // ----------------------------------------------------------------
 // Main widget
 // ----------------------------------------------------------------
