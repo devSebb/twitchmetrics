@@ -2,10 +2,11 @@
  * Rebuild the YouTube per-game daily averages (GamePlatformViewerSnapshot,
  * source streamhatchet_daily) from the yt GameDailyRollup for a date range.
  *
- * The daily Inngest import writes these for the days it imports. Run this
- * after a change to how SH game names match catalog games, so the days
- * already written are redone — it also removes rows the old matching wrote
- * for games that no longer match (the 2026-10 "Sports" rows).
+ * The daily GitHub workflow (.github/workflows/sh-daily-sessions.yml) runs
+ * this for its window, after the yt rollups. Run it by hand after a change to
+ * how SH game names match catalog games, so the days already written are
+ * redone — it also removes rows the old matching wrote for games that no
+ * longer match (the 2026-10 "Sports" rows).
  *
  * Options:
  *   --days N                      the N days ending yesterday UTC (default 7)

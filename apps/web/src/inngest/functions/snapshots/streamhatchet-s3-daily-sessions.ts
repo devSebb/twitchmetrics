@@ -48,14 +48,20 @@ const DEFAULT_RETRY_DAYS = 4;
 // YouTube creator feed; `ytg` (YouTube Gaming) is opt-in via env because of its
 // ~10x row volume and is used for game-level data rather than the creator catalog.
 //
-// TWITCH IS NOT HERE. A twitch day is ~85k rows and its rollup recompute ran
-// ~28 min — far past the 300 s a Vercel step gets. From 2026-09-26 every twitch
-// step was killed mid-write and retried, the run never finished, the next day's
-// run queued behind it (concurrency 1), and twitch facts sat 20 % short for two
-// weeks. Twitch now imports on a GitHub runner (.github/workflows/
-// sh-daily-sessions.yml), which has no per-step cap. Kick and yt finish in a
-// few minutes and stay here. STREAMHATCHET_S3_CRON_PLATFORMS can still force
-// twitch back in, but don't.
+// NO LONGER SCHEDULED: every platform imports on a GitHub runner
+// (.github/workflows/sh-daily-sessions.yml), which has no per-step cap. This
+// function only runs when the `streamhatchet/s3-daily-sessions` event is sent
+// by hand.
+//
+// A Vercel step gets 300 s. Twitch (~85k rows a day, ~28 min rollup recompute)
+// moved off in 2026-10 after every step was killed mid-write from 09-26. YouTube
+// followed: SH's yt files grew from ~36k to 51-67k rows on 2026-10-20, and the
+// same thing happened — yt 10-21 "import running, never finished writing" with
+// 0 ChannelDailyRollup rows, yt 10-22 at 89 % of the file, and the 10-22 run
+// stuck `running`. Kick (~15k rows) would still fit, but one runner for all
+// three keeps the import order and the creator rollups in one place.
+// STREAMHATCHET_S3_CRON_PLATFORMS can still force twitch into a manual run,
+// but don't.
 const BASE_TARGETS: CronPlatformTarget[] = [
   { platform: "kick", matchedOnly: false },
   { platform: "yt", matchedOnly: false },
@@ -188,7 +194,8 @@ export const streamHatchetS3DailySessions = inngest.createFunction(
     id: "streamhatchet-s3-daily-sessions",
     concurrency: { limit: 1 },
   },
-  [{ cron: "10 8 * * *" }, { event: "streamhatchet/s3-daily-sessions" }],
+  // Event only — see the note above BASE_TARGETS.
+  [{ event: "streamhatchet/s3-daily-sessions" }],
   async ({ step }) => {
     return executeIngestionRun<StreamHatchetS3CronResult>(
       {

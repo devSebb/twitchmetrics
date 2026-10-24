@@ -1,4 +1,4 @@
-# Daily Stream Hatchet session pipeline — the half that does not fit Vercel.
+# Daily Stream Hatchet session pipeline: every platform's import and rollups.
 #
 # WHY THIS EXISTS. Inngest on Vercel gives each step 300 s. A twitch day is
 # ~85k rows; its import and its rollup rebuild each run several minutes (the
@@ -8,17 +8,28 @@
 # run never finished, and the next day's run queued behind it. The per-creator
 # rollup (~4 min/date) died the same way, 1 day in 9 completing.
 #
-# What stays on Inngest (streamhatchet-s3-daily-sessions, 08:10 UTC): kick and
-# yt import + rollups + the yt game snapshots. A few minutes, well inside 300 s.
+# YouTube followed on 2026-10-20, when SH's yt files grew from ~36k to 51-67k
+# rows: the Inngest yt import of 10-21 never finished writing (0 rollup rows),
+# 10-22 landed at 89 % of the file, and that day's run hung in `running`.
+# Kick (~15k rows) would still fit Inngest, but one runner keeps all three
+# imports, their rollups and the creator rollups in one ordered place. Nothing
+# from this pipeline runs on Inngest any more
+# (streamhatchet-s3-daily-sessions is event-only, for manual use).
 #
-# What runs here, 08:40 UTC, after kick/yt have landed:
-#   1. twitch import for the last N days (completed files are skipped, so
-#      normally only yesterday's file is read), with that day's rollups;
-#   2. twitch rollups for the older days of the window — a new file extends
-#      streams that crossed midnight, which changes the earlier days' totals;
-#   3. CreatorDailyRollup for the window, every platform merged;
-#   4. a read-only health check over what is actually in the database. It does
+# What runs here, for the last N days (completed files are skipped, so normally
+# only yesterday's file per platform is read):
+#   1. kick, yt and twitch imports, each with the imported day's rollups;
+#   2. rollups for the older days of the window, per platform — a new file
+#      extends streams that crossed midnight, which changes earlier days;
+#   3. YouTube per-game daily averages (GamePlatformViewerSnapshot), which read
+#      the yt rollups from step 1–2 — YouTube has no live games feed;
+#   4. CreatorDailyRollup for the window, every platform merged;
+#   5. a read-only health check over what is actually in the database. It does
 #      not trust any run's own status, so a hung job still turns this red.
+#
+# Schedule: SH writes a day's files at ~23:07 UTC that day. GitHub starts
+# scheduled runs hours late (an "08:40" schedule started 12:24-15:51 UTC), so
+# this is set early to land the data in the morning.
 #
 # A failed scheduled run emails the workflow's last committer — that is the
 # alert. Manual runs: Actions tab -> this workflow -> Run workflow.
@@ -30,7 +41,7 @@ name: SH daily sessions
 
 on:
   schedule:
-    - cron: "40 8 * * *"
+    - cron: "15 1 * * *"
   workflow_dispatch:
     inputs:
       days:
@@ -67,20 +78,38 @@ jobs:
         run: pnpm --filter @twitchmetrics/database db:generate
 
       # Empty --profile: the runner authenticates with the AWS_* env vars and
-      # has no profile file for the worker's laptop default.
+      # has no profile file for the worker's laptop default. Smallest first, so
+      # a twitch failure still leaves kick and yt imported.
+      - name: Import kick (last N days)
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts \
+            --platform kick --days "$DAYS" --profile "" --write
+
+      - name: Import yt (last N days)
+        run: |
+          npx tsx workers/streamhatchet-ingest.ts \
+            --platform yt --days "$DAYS" --profile "" --write
+
       - name: Import twitch (last N days)
         run: |
           npx tsx workers/streamhatchet-ingest.ts \
             --platform twitch --days "$DAYS" --profile "" --write
 
-      - name: Rebuild twitch rollups for the older days
+      - name: Rebuild rollups for the older days (kick, yt, twitch)
         if: ${{ env.DAYS != '1' }}
         run: |
           FROM=$(date -u -d "-$DAYS days" +%F)
           TO=$(date -u -d "-2 days" +%F)
-          npx tsx workers/streamhatchet-ingest.ts --recompute-rollups \
-            --platform twitch --start-date "$FROM" --end-date "$TO" \
-            --skip-creator-rollups --write
+          for platform in kick yt twitch; do
+            npx tsx workers/streamhatchet-ingest.ts --recompute-rollups \
+              --platform "$platform" --start-date "$FROM" --end-date "$TO" \
+              --skip-creator-rollups --write
+          done
+
+      # Reads the yt GameDailyRollup rows the steps above just wrote.
+      - name: YouTube game snapshots (last N days)
+        run: |
+          npx tsx workers/write-yt-game-snapshots.ts --days "$DAYS" --write
 
       # Cross-platform; --platform only feeds the worker's date parsing.
       - name: Rebuild creator rollups (all platforms)
