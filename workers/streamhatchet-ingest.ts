@@ -423,6 +423,12 @@ async function recomputeRollups(input: {
   });
 }
 
+/** `aws s3api head-object` on a missing key: "An error occurred (404) ... Not Found". */
+function isS3NotFound(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\(404\)|Not Found|NoSuchKey/.test(message);
+}
+
 async function importOneDate(config: ImportConfig, date: Date) {
   const key = buildDailySessionKey(config.prefix, date, config.platform);
   const mode = importMode(config);
@@ -433,10 +439,32 @@ async function importOneDate(config: ImportConfig, date: Date) {
     matchedOnly: config.matchedOnly,
   });
 
-  const metadata = await headS3Object(config.bucket, key, {
-    profile: config.profile,
-    region: config.region,
-  });
+  // A day SH hasn't delivered yet is not an error to retry for ~17 min: it
+  // just isn't there. Skip it and carry on with the other dates (and, in the
+  // daily workflow, the other platforms); check-ingestion-health reports the
+  // day as "file never imported", so a late file still turns the run red.
+  // 2026-10-24: no kick/yt/twitch file for 10-23 at 03:18 UTC, and the
+  // retries stopped the whole backfill.
+  let metadata: Awaited<ReturnType<typeof headS3Object>>;
+  try {
+    metadata = await headS3Object(config.bucket, key, {
+      profile: config.profile,
+      region: config.region,
+    });
+  } catch (error) {
+    if (isS3NotFound(error)) {
+      log("warn", "S3 object not delivered yet; skipping date", { key });
+      return {
+        scanned: 0,
+        written: 0,
+        skipped: 0,
+        failed: 0,
+        matched: 0,
+        notDelivered: true,
+      };
+    }
+    throw error;
+  }
   const s3RowCount = await countS3CsvRows(config.bucket, key, {
     profile: config.profile,
     region: config.region,
@@ -835,6 +863,7 @@ async function main() {
   // --refresh-regenerated bookkeeping: what was re-read, what was refused.
   const reimported: Date[] = [];
   const refused: string[] = [];
+  const notDelivered: string[] = [];
 
   try {
     for (const date of config.dates) {
@@ -865,7 +894,8 @@ async function main() {
       summary.skipped += result.skipped;
       summary.failed += result.failed;
       summary.matched += result.matched;
-      if ("refusedSmaller" in result) refused.push(formatDate(date));
+      if ("notDelivered" in result) notDelivered.push(formatDate(date));
+      else if ("refusedSmaller" in result) refused.push(formatDate(date));
       else if (config.write && result.scanned > 0) reimported.push(date);
     }
 
@@ -925,7 +955,10 @@ async function main() {
       });
     }
 
-    log("info", "StreamHatchet ingestion finished", summary);
+    log("info", "StreamHatchet ingestion finished", {
+      ...summary,
+      ...(notDelivered.length > 0 ? { notDelivered } : {}),
+    });
   } catch (error) {
     if (runId) {
       await prisma.ingestionRun.update({
