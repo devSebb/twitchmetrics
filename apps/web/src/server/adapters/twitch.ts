@@ -11,6 +11,13 @@ import {
   AdapterError,
 } from "./types";
 import { createLogger } from "@/lib/logger";
+import { currentTwitchPriority, twitchRateLimitedFetch } from "./twitch-rate";
+
+export {
+  withTwitchPriority,
+  getTwitchRateStats,
+  type TwitchPriority,
+} from "./twitch-rate";
 
 const log = createLogger("twitch-adapter");
 
@@ -98,7 +105,9 @@ async function helixFetch<T>(
     }
   }
 
-  const res = await fetch(url.toString(), {
+  // Paced per the caller's priority (twitch-rate.ts): a job scope may wait
+  // for the bucket's reset, a page request never does.
+  const res = await twitchRateLimitedFetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${token}`,
       "Client-Id": clientId,
@@ -109,7 +118,7 @@ async function helixFetch<T>(
     // Invalidate cached token and retry once
     cachedToken = null;
     const freshToken = await getAppAccessToken();
-    const retry = await fetch(url.toString(), {
+    const retry = await twitchRateLimitedFetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${freshToken}`,
         "Client-Id": clientId,
@@ -130,11 +139,19 @@ async function helixFetch<T>(
   }
 
   if (res.status === 429) {
+    // Not retryable in either context. A page request fails fast: a retry
+    // would only hold the page ~7 s and spend more of the shared bucket. A
+    // job scope has already waited for the reset several times
+    // (twitch-rate.ts); withRetry's backoff on top could push an Inngest
+    // step past Vercel's 300 s cap.
+    log.warn(
+      { path, priority: currentTwitchPriority() ?? "web" },
+      "Helix rate limited",
+    );
     throw new AdapterError(
       "twitch",
       "rate_limited",
       `Helix ${path}: rate limited`,
-      true,
     );
   }
 
@@ -342,6 +359,20 @@ export async function fetchUserDetailsByIds(
       }
     }
     return results;
+  });
+}
+
+/**
+ * Follower total for one broadcaster (GET /channels/followers, 1 point).
+ */
+export async function fetchFollowerTotal(
+  broadcasterId: string,
+): Promise<number> {
+  return withRetry(async () => {
+    const res = await helixFetch<
+      PaginatedResponse<unknown> & { total: number }
+    >("/channels/followers", { broadcaster_id: broadcasterId, first: "1" });
+    return res.total ?? 0;
   });
 }
 

@@ -157,6 +157,75 @@ async function youtubeApiFetch<T>(
 }
 
 // ============================================================
+// BATCH LOOKUP
+// ============================================================
+
+export type YouTubeChannelStats = {
+  id: string;
+  title: string;
+  /** The @handle when the channel has one. */
+  customUrl: string | null;
+  avatarUrl: string | null;
+  /** Null when the channel hides its count. */
+  subscriberCount: bigint | null;
+  hiddenSubscriberCount: boolean;
+  viewCount: bigint | null;
+  videoCount: number | null;
+};
+
+/** channels.list takes at most 50 ids per call, for 1 quota unit. */
+export const YOUTUBE_CHANNELS_PER_CALL = 50;
+
+/**
+ * Statistics + snippet for up to 50 channel ids in one call (1 unit, the
+ * same as a single-id lookup). Ids YouTube doesn't return (deleted,
+ * terminated) are simply absent from the map.
+ */
+export async function fetchChannelsByIds(
+  ids: string[],
+): Promise<Map<string, YouTubeChannelStats>> {
+  const unique = [...new Set(ids)];
+  if (unique.length > YOUTUBE_CHANNELS_PER_CALL) {
+    throw new AdapterError(
+      "youtube",
+      "api_error",
+      `fetchChannelsByIds takes at most ${YOUTUBE_CHANNELS_PER_CALL} ids, got ${unique.length}`,
+    );
+  }
+  const out = new Map<string, YouTubeChannelStats>();
+  if (unique.length === 0) return out;
+
+  assertQuotaAvailable(1);
+  const data = await youtubeApiFetch<YouTubeChannelListResponse>("channels", {
+    part: "snippet,statistics",
+    id: unique.join(","),
+    maxResults: String(YOUTUBE_CHANNELS_PER_CALL),
+  });
+  trackQuota(1);
+
+  for (const item of data.items ?? []) {
+    const stats = item.statistics;
+    out.set(item.id, {
+      id: item.id,
+      title: item.snippet.title,
+      customUrl: item.snippet.customUrl ?? null,
+      avatarUrl:
+        item.snippet.thumbnails.high?.url ??
+        item.snippet.thumbnails.default?.url ??
+        null,
+      subscriberCount:
+        stats.hiddenSubscriberCount || !stats.subscriberCount
+          ? null
+          : BigInt(stats.subscriberCount),
+      hiddenSubscriberCount: stats.hiddenSubscriberCount,
+      viewCount: stats.viewCount ? BigInt(stats.viewCount) : null,
+      videoCount: stats.videoCount ? parseInt(stats.videoCount, 10) : null,
+    });
+  }
+  return out;
+}
+
+// ============================================================
 // YOUTUBE ADAPTER IMPLEMENTATION
 // ============================================================
 

@@ -241,6 +241,9 @@ jobs:
         env:
           TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+          # Helix pacing priority (adapters/twitch-rate.ts): a bulk pass, so
+          # it backs off first and leaves the bucket to live jobs and pages.
+          TWITCH_RATE_PRIORITY: sweep
         run: npx tsx workers/enrich-sh-profiles.ts --twitch-avatars --write
       - name: Kick avatars for new SH-born profiles
         if: ${{ vars.HAS_PLATFORM_SECRETS == 'true' }}

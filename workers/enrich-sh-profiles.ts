@@ -36,6 +36,12 @@
  * Usage: pnpm worker:enrich-sh-profiles -- --twitch-avatars --kick-avatars --activity --write
  */
 import { PrismaClient, Prisma } from "@prisma/client";
+// Alias-free on purpose, so this plain-tsx worker can share the app's Helix
+// pacing (priority from TWITCH_RATE_PRIORITY, set by the workflow).
+import {
+  getTwitchRateStats,
+  twitchRateLimitedFetch,
+} from "../apps/web/src/server/adapters/twitch-rate";
 
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
@@ -175,11 +181,15 @@ async function kickToken(): Promise<string> {
 async function fetchJsonWithBackoff<T>(
   url: string,
   headers: Record<string, string>,
+  fetchImpl: (url: string, init: RequestInit) => Promise<Response> = fetch,
 ): Promise<T | null> {
   for (let attempt = 0; attempt < 30; attempt++) {
     let res: Response;
     try {
-      res = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+      res = await fetchImpl(url, {
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      });
     } catch (e) {
       // ECONNRESET / DNS blip / 30s stall — retry like a 5xx.
       const wait = Math.min(60_000, 1_000 * 2 ** attempt);
@@ -344,6 +354,7 @@ async function twitchAvatars() {
         res = await fetchJsonWithBackoff<{ data: TwitchUser[] }>(
           `https://api.twitch.tv/helix/users?${query}`,
           headers,
+          twitchRateLimitedFetch,
         );
       } catch (e) {
         // A 4xx on one batch (bad identifiers etc.) must not kill a 500k pass.
@@ -383,6 +394,7 @@ async function twitchAvatars() {
     found,
     missing,
     calls,
+    rate: getTwitchRateStats(),
   });
 }
 
