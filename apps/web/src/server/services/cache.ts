@@ -67,38 +67,54 @@ export async function cacheSet<T>(
  */
 export async function cacheInvalidate(pattern: string): Promise<number> {
   try {
-    // For exact keys (no wildcard), use del directly
-    if (!pattern.includes("*")) {
-      await redis.del(pattern);
-      return 1;
-    }
-
-    // For patterns, scan and delete in batches
-    let cursor = 0;
-    let deleted = 0;
-    do {
-      const [nextCursor, keys] = await redis.scan(cursor, {
-        match: pattern,
-        count: 100,
-      });
-      cursor =
-        typeof nextCursor === "string" ? parseInt(nextCursor, 10) : nextCursor;
-      if (keys.length > 0) {
-        const pipeline = redis.pipeline();
-        for (const key of keys) {
-          pipeline.del(key);
-        }
-        await pipeline.exec();
-        deleted += keys.length;
-      }
-    } while (cursor !== 0);
-
-    if (deleted > 0) {
-      log.info({ pattern, deleted }, "Cache invalidated");
-    }
-    return deleted;
+    return await cacheInvalidateOrThrow(pattern);
   } catch (err) {
     log.warn({ err, pattern }, "Cache invalidation failed — non-blocking");
     return 0;
   }
+}
+
+/**
+ * cacheInvalidate that throws on a Redis error instead of logging it, for
+ * batch jobs that stop invalidating after the first failure rather than
+ * logging (and paying for) one failed call per creator.
+ */
+export async function cacheInvalidateOrThrow(pattern: string): Promise<number> {
+  // For exact keys (no wildcard), use del directly
+  if (!pattern.includes("*")) {
+    await redis.del(pattern);
+    return 1;
+  }
+
+  // For patterns, scan and delete in batches
+  let cursor = 0;
+  let deleted = 0;
+  do {
+    const [nextCursor, keys] = await redis.scan(cursor, {
+      match: pattern,
+      count: 100,
+    });
+    cursor =
+      typeof nextCursor === "string" ? parseInt(nextCursor, 10) : nextCursor;
+    if (keys.length > 0) {
+      const pipeline = redis.pipeline();
+      for (const key of keys) {
+        pipeline.del(key);
+      }
+      await pipeline.exec();
+      deleted += keys.length;
+    }
+  } while (cursor !== 0);
+
+  if (deleted > 0) {
+    log.info({ pattern, deleted }, "Cache invalidated");
+  }
+  return deleted;
+}
+
+/** False when the Upstash env vars are missing (e.g. a GitHub runner without them). */
+export function isCacheConfigured(): boolean {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+  );
 }

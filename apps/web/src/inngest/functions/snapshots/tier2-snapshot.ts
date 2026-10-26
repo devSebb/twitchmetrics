@@ -1,5 +1,5 @@
 import { inngest } from "../../client";
-import { runTierSnapshot } from "./shared";
+import { runTierSnapshot, tierRunSummary } from "./shared";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 // Cron: daily at 2am UTC — Tier 2 creators (10K-100K followers).
@@ -18,11 +18,7 @@ export const tier2Snapshot = inngest.createFunction(
         const result = await runTierSnapshot("tier2", step);
         return {
           result,
-          summary: {
-            recordsScanned: result.processed + result.errors,
-            recordsWritten: result.processed,
-            recordsFailed: result.errors,
-          },
+          summary: tierRunSummary(result, { runner: "inngest" }),
         };
       },
       step,

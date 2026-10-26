@@ -1,4 +1,7 @@
-import { cacheInvalidate } from "@/server/services/cache";
+import {
+  cacheInvalidate,
+  cacheInvalidateOrThrow,
+} from "@/server/services/cache";
 
 // Single source for public creator API cache keys. Writers (the API routes)
 // and invalidators (snapshot jobs) must both build keys here, otherwise a
@@ -25,4 +28,12 @@ export function creatorSnapshotsCacheKey(
 export async function invalidateCreatorCache(slug: string): Promise<void> {
   await cacheInvalidate(creatorDetailCacheKey(slug));
   await cacheInvalidate(`${SNAPSHOTS_PREFIX}:${slug}:snapshots:*`);
+}
+
+/** invalidateCreatorCache that throws on a Redis error (see cacheInvalidateOrThrow). */
+export async function invalidateCreatorCacheOrThrow(
+  slug: string,
+): Promise<void> {
+  await cacheInvalidateOrThrow(creatorDetailCacheKey(slug));
+  await cacheInvalidateOrThrow(`${SNAPSHOTS_PREFIX}:${slug}:snapshots:*`);
 }

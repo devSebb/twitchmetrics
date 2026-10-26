@@ -3,12 +3,26 @@ import {
   type SnapshotTier,
   type Platform,
 } from "@twitchmetrics/database";
-import { AdapterError } from "@/server/adapters/types";
+import {
+  AdapterError,
+  type CreatorSnapshotData,
+} from "@/server/adapters/types";
 import { decryptToken } from "@/lib/encryption";
 import { createLogger } from "@/lib/logger";
 import { getAdapter } from "@/server/adapters";
-import { cacheInvalidate } from "@/server/services/cache";
-import { invalidateCreatorCache } from "@/server/services/creator-cache";
+import { withTwitchPriority } from "@/server/adapters/twitch-rate";
+import {
+  fetchChannelsByIds,
+  youtubeSnapshotFromStats,
+  YOUTUBE_CHANNELS_PER_CALL,
+  type YouTubeChannelStats,
+} from "@/server/adapters/youtube";
+import {
+  cacheInvalidateOrThrow,
+  isCacheConfigured,
+} from "@/server/services/cache";
+import { invalidateCreatorCacheOrThrow } from "@/server/services/creator-cache";
+import type { IngestionRunSummary } from "@/server/services/ingestion/runs";
 import { recomputeCreatorAggregates } from "@twitchmetrics/core/creator-aggregates";
 import { recomputeCreatorGrowthRollups } from "@/server/services/creator-growth";
 import { supportsCreatorSnapshots } from "@/server/services/ingestion/constants";
@@ -54,40 +68,154 @@ type StepTools = {
   sleep: (name: string, duration: string) => Promise<unknown>;
 };
 
+export type TierSnapshotOptions = {
+  /** Poll only one shard of the tier (GitHub runs tier3 as 2 shards). */
+  shard?: { index: number; count: number };
+  /**
+   * Skip accounts that already have a MetricSnapshot at or after this time,
+   * so re-running after a partial or failed run doesn't write a second one.
+   */
+  resumeSince?: Date;
+  /**
+   * Stop starting new batches after this long. GitHub only: under Inngest
+   * each step is a fresh request, so a wall clock differs per replay.
+   */
+  timeBudgetMs?: number;
+};
+
+export type TierSnapshotResult = {
+  tier: SnapshotTier;
+  processed: number;
+  errors: number;
+  /** Accounts skipped by resumeSince (already snapshotted). */
+  resumed: number;
+  profilesTotal: number;
+  profilesReached: number;
+  stoppedByTimeBudget: boolean;
+  /** "on", or why invalidation was switched off during the run. */
+  cacheInvalidation: string;
+};
+
+const DAY_MS = 86_400_000;
+
+/** Stable shard of a profile id: UUIDs end in random hex. */
+export function profileShard(id: string, count: number): number {
+  const tail = Number.parseInt(id.replace(/-/g, "").slice(-6), 16);
+  if (!Number.isNaN(tail)) return tail % count;
+  let hash = 0;
+  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return hash % count;
+}
+
+/**
+ * Cache invalidation that can never fail a run. The first Redis error (the
+ * Upstash request cap is exhausted as of 2026-10) or missing Upstash env
+ * switches it off for the rest of the run: one log line instead of one
+ * failed call per creator. Cached entries expire within 5 minutes anyway
+ * (CACHE_TTL), so a skipped invalidation only delays freshness that long.
+ */
+function createRunCacheInvalidator() {
+  let off: string | null = isCacheConfigured() ? null : "not configured";
+  let skipped = 0;
+
+  async function guard(what: string, fn: () => Promise<unknown>) {
+    if (off) {
+      skipped++;
+      return;
+    }
+    try {
+      await fn();
+    } catch (err) {
+      off = err instanceof Error ? err.message.slice(0, 120) : String(err);
+      skipped++;
+      log.warn(
+        { err, what },
+        "Cache invalidation failed — off for the rest of this run",
+      );
+    }
+  }
+
+  return {
+    creator: (slug: string) =>
+      guard(`creator:${slug}`, () => invalidateCreatorCacheOrThrow(slug)),
+    pattern: (pattern: string) =>
+      guard(pattern, () => cacheInvalidateOrThrow(pattern)),
+    status: () => (off ? `off (${off}); skipped ${skipped}` : "on"),
+  };
+}
+
+type RunCacheInvalidator = ReturnType<typeof createRunCacheInvalidator>;
+
+/**
+ * The profile ids a tier run polls, in polling order. It starts at a
+ * different batch each UTC day, so a run cut short by its time budget leaves
+ * a different tail unpolled, never the same one.
+ */
+export async function loadTierProfileIds(
+  tier: SnapshotTier,
+  shard?: TierSnapshotOptions["shard"],
+  now: number = Date.now(),
+): Promise<string[]> {
+  const rows = await prisma.creatorProfile.findMany({
+    where: {
+      snapshotTier: tier,
+      mergedIntoId: null,
+      // Unclaimed StreamHatchet-catalog profiles get sessions/viewers from
+      // the SH S3 pipeline; polling ~1M of them here can never fit API
+      // quotas or Inngest step caps. API-poll only API-born profiles plus
+      // anything claimed or OAuth-connected.
+      OR: [
+        { catalogSource: { not: "streamhatchet" } },
+        { catalogSource: null },
+        { state: { in: ["claimed", "premium"] } },
+        { userId: { not: null } },
+        { platformAccounts: { some: { isOAuthConnected: true } } },
+      ],
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  const ids = rows
+    .map((row) => row.id)
+    .filter((id) => !shard || profileShard(id, shard.count) === shard.index);
+  const batches = Math.ceil(ids.length / BATCH_SIZE);
+  const offset =
+    batches > 0 ? (Math.floor(now / DAY_MS) % batches) * BATCH_SIZE : 0;
+  return [...ids.slice(offset), ...ids.slice(0, offset)];
+}
+
 export async function runTierSnapshot(
   tier: SnapshotTier,
   step: StepTools,
-): Promise<{ processed: number; errors: number; tier: SnapshotTier }> {
+  options: TierSnapshotOptions = {},
+): Promise<TierSnapshotResult> {
+  const startedAt = Date.now();
+  const shard = options.shard;
+  const resumeSince = options.resumeSince?.toISOString() ?? null;
+
   // Only profile ids go through the step output: full rows (accounts + tokens)
   // for a whole tier blow Inngest's 4MB step-output cap — tier3 died this way
   // for months once the catalog passed ~30k profiles.
-  const profileIds = (await step.run(`fetch-${tier}-profiles`, async () => {
-    const rows = await prisma.creatorProfile.findMany({
-      where: {
-        snapshotTier: tier,
-        mergedIntoId: null,
-        // Unclaimed StreamHatchet-catalog profiles get sessions/viewers from
-        // the SH S3 pipeline; polling ~1M of them here can never fit API
-        // quotas or Inngest step caps. API-poll only API-born profiles plus
-        // anything claimed or OAuth-connected.
-        OR: [
-          { catalogSource: { not: "streamhatchet" } },
-          { catalogSource: null },
-          { state: { in: ["claimed", "premium"] } },
-          { userId: { not: null } },
-          { platformAccounts: { some: { isOAuthConnected: true } } },
-        ],
-      },
-      select: { id: true },
-      orderBy: { id: "asc" },
-    });
-    return rows.map((row) => row.id);
-  })) as string[];
+  const profileIds = (await step.run(`fetch-${tier}-profiles`, () =>
+    loadTierProfileIds(tier, shard, startedAt),
+  )) as string[];
 
+  const cache = createRunCacheInvalidator();
   let processed = 0;
   let errors = 0;
+  let resumed = 0;
+  let profilesReached = 0;
+  let stoppedByTimeBudget = false;
+  const shardTag = shard ? `-s${shard.index}of${shard.count}` : "";
 
   for (let i = 0; i < profileIds.length; i += BATCH_SIZE) {
+    if (
+      options.timeBudgetMs != null &&
+      Date.now() - startedAt > options.timeBudgetMs
+    ) {
+      stoppedByTimeBudget = true;
+      break;
+    }
     const batchIds = profileIds.slice(i, i + BATCH_SIZE);
     const batchIndex = Math.floor(i / BATCH_SIZE);
 
@@ -97,32 +225,107 @@ export async function runTierSnapshot(
     // Inngest's 1000-step cap, and a batch already takes long enough to
     // pace the platform APIs.
     const batchResult = (await step.run(
-      `snapshot-batch-${tier}-${batchIndex}`,
-      () => snapshotProfileBatch(batchIds),
-    )) as { processed: number; errors: number };
+      `snapshot-batch-${tier}${shardTag}-${batchIndex}`,
+      () =>
+        withTwitchPriority("tier", () =>
+          snapshotProfileBatch(batchIds, cache, resumeSince),
+        ),
+    )) as { processed: number; errors: number; resumed: number };
 
     processed += batchResult.processed;
     errors += batchResult.errors;
+    resumed += batchResult.resumed ?? 0;
+    profilesReached += batchIds.length;
   }
 
   // Invalidate trending/landing cache after a full tier batch
+  await cache.pattern("trending:landing*");
+
+  const result: TierSnapshotResult = {
+    tier,
+    processed,
+    errors,
+    resumed,
+    profilesTotal: profileIds.length,
+    profilesReached,
+    stoppedByTimeBudget,
+    cacheInvalidation: cache.status(),
+  };
+  log.info({ ...result, shard }, "Tier snapshot completed");
+  return result;
+}
+
+/**
+ * The IngestionRun summary for a tier run, the same for both runners so the
+ * health checks read one shape. A run cut short by its time budget is
+ * `degraded`, with the profiles it never reached as partialCount.
+ */
+export function tierRunSummary(
+  result: TierSnapshotResult,
+  meta: { runner: "inngest" | "github"; shard?: TierSnapshotOptions["shard"] },
+): IngestionRunSummary {
+  const unreached = result.profilesTotal - result.profilesReached;
+  return {
+    ...(result.stoppedByTimeBudget
+      ? {
+          status: "degraded" as const,
+          errorSummary: `time budget reached: ${unreached} of ${result.profilesTotal} profiles not polled`,
+        }
+      : {}),
+    recordsScanned: result.processed + result.errors,
+    recordsWritten: result.processed,
+    recordsFailed: result.errors,
+    recordsSkipped: result.resumed,
+    partialCount: unreached,
+    metadata: {
+      runner: meta.runner,
+      ...(meta.shard
+        ? { shard: `${meta.shard.index}/${meta.shard.count}` }
+        : {}),
+      profilesTotal: result.profilesTotal,
+      profilesReached: result.profilesReached,
+      cacheInvalidation: result.cacheInvalidation,
+    },
+  };
+}
+
+/** A YouTube channel the batch lookup didn't return (deleted/terminated). */
+const YOUTUBE_MISSING = Symbol("youtube-missing");
+
+type PrefetchedSnapshot = CreatorSnapshotData | typeof YOUTUBE_MISSING;
+
+/**
+ * One channels.list call per 50 YouTube accounts (1 quota unit each) instead
+ * of one per account. Null when the lookup failed: each account then goes
+ * through the adapter on its own, as before.
+ */
+async function prefetchYouTube(
+  channelIds: string[],
+): Promise<Map<string, YouTubeChannelStats> | null> {
+  if (channelIds.length === 0) return null;
   try {
-    await cacheInvalidate("trending:landing*");
-  } catch {
-    // Non-blocking
+    const out = new Map<string, YouTubeChannelStats>();
+    for (let i = 0; i < channelIds.length; i += YOUTUBE_CHANNELS_PER_CALL) {
+      const found = await fetchChannelsByIds(
+        channelIds.slice(i, i + YOUTUBE_CHANNELS_PER_CALL),
+      );
+      for (const [id, stats] of found) out.set(id, stats);
+    }
+    return out;
+  } catch (err) {
+    log.warn(
+      { err, accounts: channelIds.length },
+      "YouTube batch lookup failed — falling back to one call per account",
+    );
+    return null;
   }
-
-  log.info(
-    { tier, total: profileIds.length, processed, errors },
-    "Tier snapshot completed",
-  );
-
-  return { processed, errors, tier };
 }
 
 async function snapshotProfileBatch(
   profileIds: string[],
-): Promise<{ processed: number; errors: number }> {
+  cache: RunCacheInvalidator,
+  resumeSince: string | null,
+): Promise<{ processed: number; errors: number; resumed: number }> {
   const profiles: SnapshotableProfile[] = await prisma.creatorProfile.findMany({
     where: { id: { in: profileIds } },
     select: {
@@ -153,13 +356,58 @@ async function snapshotProfileBatch(
     },
   });
 
+  // Accounts a previous attempt of this run already snapshotted.
+  const done = new Set<string>();
+  if (resumeSince) {
+    const existing = await prisma.metricSnapshot.findMany({
+      where: {
+        creatorProfileId: { in: profileIds },
+        snapshotAt: { gte: new Date(resumeSince) },
+      },
+      select: { creatorProfileId: true, platform: true },
+      distinct: ["creatorProfileId", "platform"],
+    });
+    for (const row of existing) {
+      done.add(`${row.creatorProfileId}:${row.platform}`);
+    }
+  }
+  const isDone = (profileId: string, platform: Platform) =>
+    done.has(`${profileId}:${platform}`);
+
+  const youtube = await prefetchYouTube(
+    profiles.flatMap((profile) =>
+      profile.platformAccounts
+        .filter(
+          (account) =>
+            account.platform === "youtube" &&
+            !isDone(profile.id, account.platform),
+        )
+        .map((account) => account.platformUserId),
+    ),
+  );
+  const youtubeSnapshotAt = new Date();
+
   let processed = 0;
   let errors = 0;
+  let resumed = 0;
 
   for (const profile of profiles) {
+    let polled = 0;
     for (const account of profile.platformAccounts) {
+      if (isDone(profile.id, account.platform)) {
+        resumed++;
+        continue;
+      }
+      polled++;
+      let prefetched: PrefetchedSnapshot | undefined;
+      if (account.platform === "youtube" && youtube) {
+        const stats = youtube.get(account.platformUserId);
+        prefetched = stats
+          ? youtubeSnapshotFromStats(stats, youtubeSnapshotAt)
+          : YOUTUBE_MISSING;
+      }
       try {
-        await snapshotPlatformAccount(profile.id, account);
+        await snapshotPlatformAccount(profile.id, account, prefetched);
         processed++;
       } catch (err) {
         if (isNotFoundError(err)) {
@@ -196,6 +444,8 @@ async function snapshotProfileBatch(
         );
       }
     }
+    // Fully resumed profile: its aggregates were updated by the first attempt.
+    if (polled === 0 && profile.platformAccounts.length > 0) continue;
 
     // Update aggregate totals and evaluate tier changes
     try {
@@ -211,12 +461,10 @@ async function snapshotProfileBatch(
       );
     }
 
-    // Invalidate cache for this creator (non-blocking)
+    // Never fails the run (see createRunCacheInvalidator).
     try {
       const slug = await getCreatorSlug(profile.id);
-      if (slug) {
-        await invalidateCreatorCache(slug);
-      }
+      if (slug) await cache.creator(slug);
     } catch (err) {
       log.warn(
         { err, creatorProfileId: profile.id },
@@ -225,7 +473,7 @@ async function snapshotProfileBatch(
     }
   }
 
-  return { processed, errors };
+  return { processed, errors, resumed };
 }
 
 export async function snapshotPlatformAccount(
@@ -237,28 +485,41 @@ export async function snapshotPlatformAccount(
     isOAuthConnected: boolean;
     accessToken: string | null;
   },
+  /** Already fetched by a batch lookup (tier jobs, YouTube). */
+  prefetched?: PrefetchedSnapshot,
 ): Promise<void> {
   if (!supportsCreatorSnapshots(account.platform, account.isOAuthConnected)) {
     return;
   }
 
-  const adapter = getAdapter(account.platform);
-  if (!adapter) {
-    // Platform adapter not yet implemented — skip silently
-    return;
-  }
+  let snapshotData: CreatorSnapshotData;
+  if (prefetched === YOUTUBE_MISSING) {
+    throw new AdapterError(
+      "youtube",
+      "not_found",
+      `YouTube channel ID '${account.platformUserId}' not found`,
+    );
+  } else if (prefetched) {
+    snapshotData = prefetched;
+  } else {
+    const adapter = getAdapter(account.platform);
+    if (!adapter) {
+      // Platform adapter not yet implemented — skip silently
+      return;
+    }
 
-  const fetchOptions: { isOAuthConnected: boolean; accessToken?: string } = {
-    isOAuthConnected: account.isOAuthConnected,
-  };
-  if (account.accessToken) {
-    fetchOptions.accessToken = await decryptToken(account.accessToken);
-  }
+    const fetchOptions: { isOAuthConnected: boolean; accessToken?: string } = {
+      isOAuthConnected: account.isOAuthConnected,
+    };
+    if (account.accessToken) {
+      fetchOptions.accessToken = await decryptToken(account.accessToken);
+    }
 
-  const snapshotData = await adapter.fetchSnapshot(
-    account.platformUserId,
-    fetchOptions,
-  );
+    snapshotData = await adapter.fetchSnapshot(
+      account.platformUserId,
+      fetchOptions,
+    );
+  }
 
   // Strip internal transport fields (prefixed with _) before persisting metrics
   const persistableMetrics = Object.fromEntries(

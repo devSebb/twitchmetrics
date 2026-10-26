@@ -44,9 +44,12 @@ vi.mock("@twitchmetrics/database", async () => {
   return { ...actual, prisma };
 });
 vi.mock("@/server/adapters", () => ({ getAdapter }));
-vi.mock("@/server/services/cache", () => ({ cacheInvalidate: vi.fn() }));
+vi.mock("@/server/services/cache", () => ({
+  cacheInvalidateOrThrow: vi.fn(),
+  isCacheConfigured: () => true,
+}));
 vi.mock("@/server/services/creator-cache", () => ({
-  invalidateCreatorCache: vi.fn(),
+  invalidateCreatorCacheOrThrow: vi.fn(),
 }));
 vi.mock("@twitchmetrics/core/creator-aggregates", () => ({
   recomputeCreatorAggregates: vi.fn(),

@@ -1,0 +1,144 @@
+# Tier 1/2/3 creator snapshots (PLAN-infra step 3).
+#
+# WHY THIS EXISTS. These ran on Inngest, where they were ~32K of the ~85K
+# executions a month (Hobby allows 50K), and tier3 took ~6 h as ~520 steps.
+# Here each job is one process running the same code as the Inngest
+# functions (workers/run-job.ts -> shared.ts runTierSnapshot), writing the
+# same IngestionRun rows with metadata.runner = "github".
+#
+# Tier3 is ~29K profiles, too long for GitHub's 6 h job limit as one job, so
+# it runs as 2 shards one after the other (profiles split by id, stable).
+# Every job has a time budget below its timeout: when it runs out the job
+# stops starting batches and the run is recorded as `degraded` with the
+# number of profiles it didn't reach, instead of being killed mid-write.
+# A partial/failed run can be finished with resume_since (skips accounts
+# already snapshotted since then, so nothing is written twice).
+#
+# Cache invalidation is best-effort and off when the Upstash secrets aren't
+# set: the cached entries it would clear expire within 5 minutes anyway, and
+# the Upstash request cap is exhausted (2026-10).
+#
+# Manual runs: Actions tab -> this workflow -> Run workflow.
+#
+# Required repository secrets: DATABASE_URL, DIRECT_URL, TWITCH_CLIENT_ID,
+# TWITCH_CLIENT_SECRET (exist); YOUTUBE_API_KEY, TWITTER_BEARER_TOKEN,
+# ENCRYPTION_KEY (OAuth-connected accounts' tokens).
+
+name: Creator snapshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Tier to snapshot (tier3 runs both shards in turn)"
+        required: true
+        type: choice
+        options: [tier1, tier2, tier3]
+      resume_since:
+        description: "Optional ISO time: skip accounts snapshotted since then"
+        required: false
+        default: ""
+        type: string
+      dry_run:
+        description: "Only count what would be polled (no API calls, no writes)"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  DIRECT_URL: ${{ secrets.DIRECT_URL }}
+  TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+  TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+  YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+  TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+  ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+  # Helix pacing priority (adapters/twitch-rate.ts): keeps 150 points of the
+  # shared bucket free for game snapshots and page requests.
+  TWITCH_RATE_PRIORITY: tier
+  RESUME_SINCE: ${{ inputs.resume_since }}
+  # Not `&& ''`: an empty string is falsy here and would always pick --write.
+  WRITE_FLAG: ${{ inputs.dry_run && '--dry-run' || '--write' }}
+
+jobs:
+  tier1:
+    if: ${{ inputs.tier == 'tier1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: snap-tier1
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+      - name: Snapshot tier1
+        run: |
+          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier \
+            --tier tier1 --time-budget-min 100 \
+            ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG
+
+  tier2:
+    if: ${{ inputs.tier == 'tier2' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    concurrency:
+      group: snap-tier2
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+      - name: Snapshot tier2
+        run: |
+          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier \
+            --tier tier2 --time-budget-min 215 \
+            ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG
+
+  # Two shards, one after the other (max-parallel 1): together they'd hit the
+  # Twitch bucket twice as hard. fail-fast off, so shard 1 still runs when
+  # shard 0 fails.
+  tier3:
+    if: ${{ inputs.tier == 'tier3' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    # One group per shard: in a shared group, a second run's shard 0 could
+    # replace this run's pending shard 1.
+    concurrency:
+      group: snap-tier3-${{ strategy.job-index }}
+      cancel-in-progress: false
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        shard: ["0/2", "1/2"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+      - name: Snapshot tier3 shard ${{ matrix.shard }}
+        run: |
+          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier \
+            --tier tier3 --shard "${{ matrix.shard }}" --time-budget-min 195 \
+            ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG

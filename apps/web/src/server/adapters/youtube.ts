@@ -225,6 +225,24 @@ export async function fetchChannelsByIds(
   return out;
 }
 
+/** The snapshot youtubeAdapter.fetchSnapshot returns, from a batch result. */
+export function youtubeSnapshotFromStats(
+  stats: YouTubeChannelStats,
+  snapshotAt: Date = new Date(),
+): CreatorSnapshotData {
+  return {
+    platform: "youtube" as Platform,
+    platformUserId: stats.id,
+    snapshotAt,
+    followerCount: stats.subscriberCount,
+    followingCount: null,
+    totalViews: stats.viewCount,
+    subscriberCount: stats.subscriberCount,
+    postCount: stats.videoCount,
+    extendedMetrics: {},
+  };
+}
+
 // ============================================================
 // YOUTUBE ADAPTER IMPLEMENTATION
 // ============================================================
