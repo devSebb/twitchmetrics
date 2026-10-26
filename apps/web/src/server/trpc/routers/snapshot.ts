@@ -10,11 +10,14 @@ import {
   aggregateShRollups,
   clipVodsToWindow,
   combineViewerStats,
+  computeFollowerGain,
   extractSnapshotViewerStats,
+  FOLLOWER_VERIFY_TOLERANCE_DAYS,
   type ShRollupTotals,
   type VodAirtime,
 } from "@/server/services/streaming-stats";
 import { getStatsWindow } from "@/server/services/creator-streaming-stats";
+import { CREATOR_STAT_PERIOD_DAYS } from "@/lib/stats-period";
 import {
   getStreamHatchetAccounts,
   internalPlatformForStreamHatchet,
@@ -483,14 +486,7 @@ export const snapshotRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const periodDays: Record<string, number> = {
-        "7d": 7,
-        "30d": 30,
-        "3m": 90,
-        "6m": 180,
-        "1y": 365,
-      };
-      const days = periodDays[input.period] ?? 30;
+      const days = CREATOR_STAT_PERIOD_DAYS[input.period];
       // N whole UTC days ending on the newest day SH data is complete for.
       // Every source below is held to it, so the dates the tiles print are
       // the dates every number covers.
@@ -518,33 +514,31 @@ export const snapshotRouter = router({
         snapshotViewer.platforms,
       );
 
-      // Followers gain: per-platform first/last followerCount diff
-      const platformFirstLast = new Map<
-        Platform,
-        { first: bigint | null; last: bigint | null }
-      >();
-
-      for (const snap of snapshots) {
-        if (snap.followerCount === null) continue;
-        const existing = platformFirstLast.get(snap.platform);
-        if (!existing) {
-          platformFirstLast.set(snap.platform, {
-            first: snap.followerCount,
-            last: snap.followerCount,
-          });
-        } else {
-          existing.last = snap.followerCount;
-        }
-      }
-
-      let followersGain = 0;
-      const platformsWithFollowerData: Platform[] = [];
-      for (const [platform, { first, last }] of platformFirstLast) {
-        if (first !== null && last !== null) {
-          followersGain += Number(last - first);
-          platformsWithFollowerData.push(platform);
-        }
-      }
+      // Followers gain, only where a reading sits near both window edges
+      // (computeFollowerGain). The start reading comes from just before the
+      // window, so fetch the tolerance span ahead of it too.
+      const baselineSnapshots = await ctx.prisma.metricSnapshot.findMany({
+        where: {
+          creatorProfileId: input.creatorProfileId,
+          snapshotAt: {
+            gte: new Date(
+              since.getTime() - FOLLOWER_VERIFY_TOLERANCE_DAYS * 86_400_000,
+            ),
+            lt: since,
+          },
+          followerCount: { not: null },
+        },
+        select: { platform: true, snapshotAt: true, followerCount: true },
+      });
+      // 6M / 1Y may fall back to a labelled "since <date>" gain: most
+      // tracking is younger than those windows.
+      const {
+        gain: followersGain,
+        platforms: platformsWithFollowerData,
+        since: followersSince,
+      } = computeFollowerGain([...baselineSnapshots, ...snapshots], window, {
+        partial: days >= 180,
+      });
 
       // Airtime from Twitch Videos API
       let airTimeSeconds: number | null = null;
@@ -743,7 +737,11 @@ export const snapshotRouter = router({
         streamCount,
         peakViewers,
         avgViewers,
+        // Null when no platform has a reading near both window edges.
         followersGain,
+        followerPlatforms: platformsWithFollowerData,
+        // Set when the gain starts after the period does (tracking began later).
+        followersSince: followersSince?.toISOString() ?? null,
         // UTC midnights of the first and last day, both inclusive.
         periodStart: since.toISOString(),
         periodEnd: window.lastDay.toISOString(),

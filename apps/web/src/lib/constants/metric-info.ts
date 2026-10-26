@@ -53,7 +53,7 @@ export const CREATOR_STATS_INFO = {
   },
   newFollowers: {
     title: "New Followers",
-    body: "Change in followers between the first and last reading in the period, added up across platforms.",
+    body: "Change in followers between a reading at the start of the period and one at its end, added up across platforms. Shows “—” when we don't have a recent enough reading at both ends to measure it.",
     source:
       "Platform APIs (Twitch, YouTube) and Stream Hatchet follower counts",
   },

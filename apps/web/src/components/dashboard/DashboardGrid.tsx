@@ -12,6 +12,7 @@ import {
   type LayoutCell,
   type ProfileDataAvailability,
 } from "@/lib/profile-layout";
+import type { StatsContext } from "@/lib/stats-period";
 import {
   EmptyState,
   StatsRow,
@@ -129,6 +130,8 @@ type DashboardGridProps = {
    * those widgets are assumed present and fall back to self-hiding.
    */
   dataAvailability?: ProfileDataAvailability | undefined;
+  /** Server-picked Stats Row period; without it the row opens on 30D. */
+  statsContext?: StatsContext | undefined;
   /** Controlled state for the WidgetToggle drawer. Required for owner mode; ignored otherwise. */
   customizeOpen?: boolean;
   onCustomizeClose?: () => void;
@@ -289,10 +292,11 @@ function renderWidget(
   profile: SerializedProfile,
   isClaimed: boolean,
   isOwner: boolean,
+  statsContext: StatsContext | undefined,
 ): React.ReactNode {
   switch (widgetId) {
     case "stats_row":
-      return <StatsRow profile={profile} />;
+      return <StatsRow profile={profile} statsContext={statsContext} />;
     case "demographics":
       return (
         <DemographicsWidget
@@ -338,6 +342,7 @@ export function DashboardGrid({
   isClaimed,
   isOwner,
   dataAvailability,
+  statsContext,
   customizeOpen,
   onCustomizeClose,
 }: DashboardGridProps) {
@@ -377,7 +382,7 @@ export function DashboardGrid({
           renderGated(
             widgetId,
             isClaimed,
-            renderWidget(widgetId, profile, isClaimed, isOwner),
+            renderWidget(widgetId, profile, isClaimed, isOwner, statsContext),
           ),
         )}
 
@@ -394,7 +399,13 @@ export function DashboardGrid({
                 renderGated(
                   cell.id,
                   isClaimed,
-                  renderWidget(cell.id, profile, isClaimed, isOwner),
+                  renderWidget(
+                    cell.id,
+                    profile,
+                    isClaimed,
+                    isOwner,
+                    statsContext,
+                  ),
                   cellClassName(cell, rowHasFixedHeight),
                 ),
               )}

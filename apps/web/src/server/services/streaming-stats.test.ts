@@ -3,6 +3,7 @@ import {
   aggregateCreatorRollups,
   aggregateShRollups,
   clipVodsToWindow,
+  computeFollowerGain,
   combineViewerStats,
   completeDayWindow,
   extractSnapshotViewerStats,
@@ -445,5 +446,265 @@ describe("aggregateCreatorRollups", () => {
     expect(totals.peak).toBe(21_000);
     expect(totals.peakPlatform).toBe("kick");
     expect(totals.streamCount).toBe(2);
+  });
+});
+
+describe("computeFollowerGain", () => {
+  // 30 whole days: Sep 25 – Oct 24 (end = Oct 25 00:00, exclusive).
+  const window = completeDayWindow(30, new Date("2026-10-24T00:00:00Z"));
+  const at = (iso: string) => new Date(iso);
+  const twitch = (iso: string, count: number | null) => ({
+    platform: "twitch" as const,
+    snapshotAt: at(iso),
+    followerCount: count === null ? null : BigInt(count),
+  });
+
+  it("measures a polled series from the reading before the window start", () => {
+    const result = computeFollowerGain(
+      [
+        twitch("2026-09-24T18:00:00Z", 1_000),
+        twitch("2026-10-05T18:00:00Z", 1_040),
+        twitch("2026-10-24T18:00:00Z", 1_100),
+      ],
+      window,
+    );
+    expect(result).toEqual({ gain: 100, platforms: ["twitch"], since: null });
+  });
+
+  it("is unmeasurable with no reading in the window (change-only data)", () => {
+    // One catalog reading months ago: "no new snapshot" is not "no change".
+    expect(
+      computeFollowerGain([twitch("2026-03-01T00:00:00Z", 1_000)], window),
+    ).toEqual({ gain: null, platforms: [], since: null });
+  });
+
+  it("rejects a months-old baseline against a fresh change", () => {
+    // Would credit seven months of growth to this window.
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-03-01T00:00:00Z", 100),
+          twitch("2026-10-20T00:00:00Z", 150),
+        ],
+        window,
+      ),
+    ).toEqual({ gain: null, platforms: [], since: null });
+  });
+
+  it("rejects an end reading too far before the window end", () => {
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-09-24T00:00:00Z", 100),
+          twitch("2026-10-10T00:00:00Z", 150),
+        ],
+        window,
+      ).gain,
+    ).toBeNull();
+  });
+
+  it("does not count readings after the window", () => {
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-09-24T00:00:00Z", 100),
+          twitch("2026-10-23T00:00:00Z", 120),
+          twitch("2026-10-26T00:00:00Z", 999),
+        ],
+        window,
+      ).gain,
+    ).toBe(20);
+  });
+
+  it("measures an honest zero when polls confirm an unchanged count", () => {
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-09-24T12:00:00Z", 500),
+          twitch("2026-10-24T12:00:00Z", 500),
+        ],
+        window,
+      ),
+    ).toEqual({ gain: 0, platforms: ["twitch"], since: null });
+  });
+
+  it("skips null-count readings instead of reading them as 0", () => {
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-09-24T12:00:00Z", 500),
+          twitch("2026-10-24T06:00:00Z", 510),
+          twitch("2026-10-24T12:00:00Z", null),
+        ],
+        window,
+      ).gain,
+    ).toBe(10);
+  });
+
+  it("sums measurable platforms and leaves out the rest", () => {
+    const result = computeFollowerGain(
+      [
+        twitch("2026-09-24T12:00:00Z", 500),
+        twitch("2026-10-24T12:00:00Z", 530),
+        {
+          platform: "youtube",
+          snapshotAt: at("2026-09-20T00:00:00Z"),
+          followerCount: 10_000n,
+        },
+        {
+          platform: "youtube",
+          snapshotAt: at("2026-10-23T00:00:00Z"),
+          followerCount: 10_200n,
+        },
+        // Kick: only an old reading, not measurable.
+        {
+          platform: "kick",
+          snapshotAt: at("2026-06-01T00:00:00Z"),
+          followerCount: 300n,
+        },
+      ],
+      window,
+    );
+    expect(result.gain).toBe(230);
+    expect(result.platforms.sort()).toEqual(["twitch", "youtube"]);
+  });
+
+  it("tightens the tolerance on short windows", () => {
+    const week = completeDayWindow(7, new Date("2026-10-24T00:00:00Z"));
+    // Start reading 3 days before a 7-day window: over 25 % of it.
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-10-15T00:00:00Z", 100),
+          twitch("2026-10-24T12:00:00Z", 110),
+        ],
+        week,
+      ).gain,
+    ).toBeNull();
+    expect(
+      computeFollowerGain(
+        [
+          twitch("2026-10-17T12:00:00Z", 100),
+          twitch("2026-10-24T12:00:00Z", 110),
+        ],
+        week,
+      ).gain,
+    ).toBe(10);
+  });
+});
+
+describe("computeFollowerGain, partial (6M / 1Y)", () => {
+  // 1Y: Oct 25, 2025 – Oct 24, 2026.
+  const year = completeDayWindow(365, new Date("2026-10-24T00:00:00Z"));
+  const reading = (
+    platform: "twitch" | "youtube",
+    iso: string,
+    count: number,
+  ) => ({ platform, snapshotAt: new Date(iso), followerCount: BigInt(count) });
+
+  it("covers the tracked span and says where it starts", () => {
+    const result = computeFollowerGain(
+      [
+        reading("twitch", "2026-04-22T06:00:00Z", 1_000),
+        reading("twitch", "2026-07-01T06:00:00Z", 1_500),
+        reading("twitch", "2026-10-24T06:00:00Z", 2_000),
+      ],
+      year,
+      { partial: true },
+    );
+    expect(result).toEqual({
+      gain: 1_000,
+      platforms: ["twitch"],
+      since: new Date("2026-04-22T06:00:00Z"),
+    });
+  });
+
+  it("starts every platform at the same, later first reading", () => {
+    const result = computeFollowerGain(
+      [
+        reading("twitch", "2026-04-22T06:00:00Z", 1_000),
+        reading("twitch", "2026-07-19T00:00:00Z", 1_400),
+        reading("twitch", "2026-10-24T06:00:00Z", 2_000),
+        reading("youtube", "2026-07-19T06:00:00Z", 50_000),
+        reading("youtube", "2026-10-24T06:00:00Z", 51_000),
+      ],
+      year,
+      { partial: true },
+    );
+    // Twitch from its Jul 19 reading, not Apr 22: one shared start date.
+    expect(result.gain).toBe(600 + 1_000);
+    expect(result.platforms.sort()).toEqual(["twitch", "youtube"]);
+    expect(result.since).toEqual(new Date("2026-07-19T06:00:00Z"));
+  });
+
+  it("leaves out a platform with no reading near the shared start", () => {
+    const result = computeFollowerGain(
+      [
+        // Twitch: change-only, nothing between March and October.
+        reading("twitch", "2026-03-01T00:00:00Z", 100),
+        reading("twitch", "2026-10-24T00:00:00Z", 900),
+        reading("youtube", "2026-06-01T00:00:00Z", 5_000),
+        reading("youtube", "2026-10-23T00:00:00Z", 5_500),
+      ],
+      year,
+      { partial: true },
+    );
+    expect(result).toEqual({
+      gain: 500,
+      platforms: ["youtube"],
+      since: new Date("2026-06-01T00:00:00Z"),
+    });
+  });
+
+  it("needs at least 30 days of tracking", () => {
+    expect(
+      computeFollowerGain(
+        [
+          reading("twitch", "2026-10-01T00:00:00Z", 100),
+          reading("twitch", "2026-10-24T00:00:00Z", 150),
+        ],
+        year,
+        { partial: true },
+      ).gain,
+    ).toBeNull();
+  });
+
+  it("needs a recent end reading", () => {
+    expect(
+      computeFollowerGain(
+        [
+          reading("twitch", "2026-04-22T00:00:00Z", 100),
+          reading("twitch", "2026-08-01T00:00:00Z", 150),
+        ],
+        year,
+        { partial: true },
+      ).gain,
+    ).toBeNull();
+  });
+
+  it("prefers the full window when a platform covers it", () => {
+    const result = computeFollowerGain(
+      [
+        reading("twitch", "2025-10-20T00:00:00Z", 100),
+        reading("twitch", "2026-10-24T00:00:00Z", 400),
+        reading("youtube", "2026-07-19T00:00:00Z", 5_000),
+        reading("youtube", "2026-10-24T00:00:00Z", 6_000),
+      ],
+      year,
+      { partial: true },
+    );
+    expect(result).toEqual({ gain: 300, platforms: ["twitch"], since: null });
+  });
+
+  it("stays strict without the partial option", () => {
+    expect(
+      computeFollowerGain(
+        [
+          reading("twitch", "2026-04-22T06:00:00Z", 1_000),
+          reading("twitch", "2026-10-24T06:00:00Z", 2_000),
+        ],
+        year,
+      ).gain,
+    ).toBeNull();
   });
 });

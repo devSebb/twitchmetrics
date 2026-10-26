@@ -1,4 +1,13 @@
-import { prisma, type Platform } from "@twitchmetrics/database";
+import {
+  prisma,
+  type Platform,
+  type PrismaClient,
+} from "@twitchmetrics/database";
+import { pickStatsPeriod, type StatsContext } from "@/lib/stats-period";
+import {
+  getStreamHatchetAccounts,
+  streamHatchetRollupIdentityWhere,
+} from "@/server/services/streamhatchet-identity";
 import { fetchVideos } from "@/server/adapters/twitch";
 import {
   aggregateCreatorRollups,
@@ -68,6 +77,73 @@ export async function getLastCompleteStatsDay(
 /** The N complete days creator stats cover, ending on the newest complete day. */
 export async function getStatsWindow(days: number): Promise<StatsWindow> {
   return completeDayWindow(days, await getLastCompleteStatsDay());
+}
+
+/**
+ * The newest day (UTC midnight) with live time in the creator's rollups, no
+ * later than `lastCompleteDay`: their own CreatorDailyRollup, else SH channel
+ * rollups matched by identity (the same fallback getStreamingStats uses).
+ * Twitch VOD-only airtime isn't seen here; those profiles keep 30D.
+ */
+export async function getLastStreamDay(
+  db: PrismaClient,
+  creatorProfileId: string,
+  lastCompleteDay: Date,
+): Promise<Date | null> {
+  const [creatorDay, accounts] = await Promise.all([
+    db.creatorDailyRollup.findFirst({
+      where: {
+        creatorProfileId,
+        date: { lte: lastCompleteDay },
+        uniqueAirtimeMinutes: { gt: 0 },
+      },
+      orderBy: { date: "desc" },
+      select: { date: true },
+    }),
+    getStreamHatchetAccounts(db, creatorProfileId),
+  ]);
+  const identity = streamHatchetRollupIdentityWhere(accounts);
+  const channelDay =
+    identity.length > 0
+      ? await db.channelDailyRollup.findFirst({
+          where: {
+            OR: identity,
+            date: { lte: lastCompleteDay },
+            airtimeMinutes: { gt: 0 },
+          },
+          orderBy: { date: "desc" },
+          select: { date: true },
+        })
+      : null;
+  const days = [creatorDay?.date, channelDay?.date].filter(
+    (d): d is Date => d != null,
+  );
+  if (days.length === 0) return null;
+  return new Date(Math.max(...days.map((d) => d.getTime())));
+}
+
+/**
+ * Server-decided Stats Row defaults (lib/stats-period.ts). On any failure
+ * the Stats Row falls back to its own 30D default.
+ */
+export async function getStatsContext(
+  db: PrismaClient,
+  creatorProfileId: string,
+): Promise<StatsContext | undefined> {
+  try {
+    const lastCompleteDay = await getLastCompleteStatsDay();
+    const lastStreamDay = await getLastStreamDay(
+      db,
+      creatorProfileId,
+      lastCompleteDay,
+    );
+    return {
+      initialPeriod: pickStatsPeriod(lastStreamDay, lastCompleteDay),
+      lastStreamDay: lastStreamDay?.toISOString() ?? null,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 type ViewerAccumulator = {

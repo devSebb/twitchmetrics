@@ -439,3 +439,163 @@ export function combineViewerStats(
     viewerPlatforms,
   };
 }
+
+// ============================================================
+// FOLLOWER GAIN
+// ============================================================
+
+/**
+ * Longest gap allowed between a follower reading and the window edge it
+ * stands for. Shared with the data pipeline's follower-verification rule
+ * (PLAN-infra R4): weekly re-checks plus late GitHub starts fit inside it.
+ */
+export const FOLLOWER_VERIFY_TOLERANCE_DAYS = 10;
+
+/** Share of the window a reading may sit away from its edge (7D → 1.75 days). */
+const FOLLOWER_EDGE_SHARE = 0.25;
+
+/** Shortest tracked span a "since <date>" partial gain may cover. */
+export const FOLLOWER_PARTIAL_MIN_DAYS = 30;
+
+export type FollowerReading = {
+  platform: Platform;
+  snapshotAt: Date;
+  followerCount: bigint | null;
+};
+
+export type FollowerGain = {
+  /** Summed over measurable platforms; null when none is measurable. */
+  gain: number | null;
+  /** The platforms the gain covers. */
+  platforms: Platform[];
+  /**
+   * Set when the gain covers only part of the window: tracking started
+   * after the window did, so it runs from this reading to the window end.
+   */
+  since: Date | null;
+};
+
+/**
+ * Follower change over a window, only where both ends are actually measured.
+ *
+ * Per platform: the start is the latest reading at or before the window
+ * start, the end the latest reading before the window end. Each must sit
+ * within min(10 days, 25 % of the window) of its edge, and the end must fall
+ * inside the window. Anything looser invents a number: Stream Hatchet writes
+ * a snapshot only when the count changes, so a months-old baseline against a
+ * fresh change would credit months of growth to one window, and "no reading"
+ * is not "no change". Null-count readings (Kick polls) are skipped.
+ *
+ * With `partial` (6M / 1Y, where most tracking is younger than the window):
+ * when no platform covers the whole window, the gain may instead run from a
+ * later common start `since`, at least 30 days before the end, and says so.
+ */
+export function computeFollowerGain(
+  readings: FollowerReading[],
+  window: Pick<StatsWindow, "start" | "end">,
+  options: { partial?: boolean } = {},
+): FollowerGain {
+  const windowMs = window.end.getTime() - window.start.getTime();
+  const toleranceMs = Math.min(
+    FOLLOWER_VERIFY_TOLERANCE_DAYS * DAY_MS,
+    windowMs * FOLLOWER_EDGE_SHARE,
+  );
+  const startMs = window.start.getTime();
+  const endMs = window.end.getTime();
+
+  const byPlatform = new Map<
+    Platform,
+    { start?: FollowerReading; end?: FollowerReading }
+  >();
+  for (const reading of readings) {
+    if (reading.followerCount === null) continue;
+    const at = reading.snapshotAt.getTime();
+    const edges = byPlatform.get(reading.platform) ?? {};
+    if (
+      at <= startMs &&
+      (!edges.start || at > edges.start.snapshotAt.getTime())
+    ) {
+      edges.start = reading;
+    }
+    if (
+      at >= startMs &&
+      at < endMs &&
+      (!edges.end || at > edges.end.snapshotAt.getTime())
+    ) {
+      edges.end = reading;
+    }
+    byPlatform.set(reading.platform, edges);
+  }
+
+  let gain = 0;
+  const platforms: Platform[] = [];
+  for (const [platform, { start, end }] of byPlatform) {
+    if (!start || !end) continue;
+    if (startMs - start.snapshotAt.getTime() > toleranceMs) continue;
+    if (endMs - end.snapshotAt.getTime() > toleranceMs) continue;
+    gain += Number(end.followerCount! - start.followerCount!);
+    platforms.push(platform);
+  }
+  if (platforms.length > 0 || !options.partial) {
+    return { gain: platforms.length > 0 ? gain : null, platforms, since: null };
+  }
+  return partialFollowerGain(readings, window, toleranceMs);
+}
+
+/**
+ * The partial gain: platforms whose end is measured share one start, the
+ * latest of their first in-window readings, so every platform in the sum
+ * covers the same days. A platform without a reading near that start is
+ * left out.
+ */
+function partialFollowerGain(
+  readings: FollowerReading[],
+  window: Pick<StatsWindow, "start" | "end">,
+  toleranceMs: number,
+): FollowerGain {
+  const startMs = window.start.getTime();
+  const endMs = window.end.getTime();
+  const inWindow = readings
+    .filter(
+      (r) =>
+        r.followerCount !== null &&
+        r.snapshotAt.getTime() >= startMs &&
+        r.snapshotAt.getTime() < endMs,
+    )
+    .sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime());
+
+  const series = new Map<Platform, FollowerReading[]>();
+  for (const r of inWindow) {
+    const list = series.get(r.platform) ?? [];
+    list.push(r);
+    series.set(r.platform, list);
+  }
+  const candidates = [...series].filter(
+    ([, list]) =>
+      endMs - list[list.length - 1]!.snapshotAt.getTime() <= toleranceMs,
+  );
+  if (candidates.length === 0)
+    return { gain: null, platforms: [], since: null };
+
+  const sinceMs = Math.max(
+    ...candidates.map(([, list]) => list[0]!.snapshotAt.getTime()),
+  );
+  let gain = 0;
+  const platforms: Platform[] = [];
+  let latestEndMs = 0;
+  for (const [platform, list] of candidates) {
+    const start = list.filter((r) => r.snapshotAt.getTime() <= sinceMs).pop();
+    if (!start || sinceMs - start.snapshotAt.getTime() > toleranceMs) continue;
+    const end = list[list.length - 1]!;
+    gain += Number(end.followerCount! - start.followerCount!);
+    platforms.push(platform);
+    latestEndMs = Math.max(latestEndMs, end.snapshotAt.getTime());
+  }
+  if (
+    platforms.length === 0 ||
+    latestEndMs - sinceMs < FOLLOWER_PARTIAL_MIN_DAYS * DAY_MS
+  ) {
+    return { gain: null, platforms: [], since: null };
+  }
+  return { gain, platforms, since: new Date(sinceMs) };
+}
