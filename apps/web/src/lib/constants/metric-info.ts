@@ -153,7 +153,7 @@ export const GAME_INFO = {
   },
   peakViewers24h: {
     title: "Peak Viewers · 24h",
-    body: "The highest reading in the last 24 hours, per platform. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube has no peak: its figures here come from daily averages.",
+    body: "The highest reading in the last 24 hours, per platform. Readings come every 30 minutes on Twitch and hourly on Kick, so a shorter spike between two readings isn't caught. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube has no peak: its figures here come from daily averages.",
     source: `${TWITCH_GAME_READING} Kick API, hourly.`,
   },
   liveViewers: {
@@ -175,7 +175,7 @@ export const GAME_INFO = {
   },
   viewershipHistory: {
     title: "Twitch Viewership History",
-    body: "Viewers watching the game on Twitch over time. The average line is weighted by time, the same way as the Twitch figure in the header. Kick and YouTube aren't in this chart.",
+    body: "Viewers watching the game on Twitch over time, one reading every 30 minutes. A spike shorter than that can fall between two readings, so peaks can look lower than in tools that measure more often. The average line is weighted by time, the same way as the Twitch figure in the header. Kick and YouTube aren't in this chart.",
     source: TWITCH_GAME_READING,
   },
   activity: {
