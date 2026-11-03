@@ -25,6 +25,10 @@ const LIVE_CHANNEL_GAME_LIMIT = 5;
 const LIVE_CHANNEL_TARGET_POOL = 100;
 const LIVE_CHANNEL_LIMIT = 15;
 const LIVE_BUCKET_MS = 30 * 60 * 1000;
+// Stream Hatchet's API limit is one call every 10 s (confirmed by SH,
+// 2026-11). The second of slack keeps a slow response from landing two
+// calls inside one window.
+const STREAMHATCHET_CALL_GAP_SECONDS = 11;
 // The live games fetch was rate limited on 417 of 418 runs from 2026-09-18,
 // each time with Retry-After ~11 s, and the run gave up instead of waiting —
 // so YouTube game viewership stopped. Wait out the window and try again.
@@ -768,7 +772,10 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
 
         for (const [index, game] of games.entries()) {
           if (index > 0) {
-            await step.sleep(`streamhatchet-live-channel-pause-${index}`, "5s");
+            await step.sleep(
+              `streamhatchet-live-channel-pause-${index}`,
+              `${STREAMHATCHET_CALL_GAP_SECONDS}s`,
+            );
           }
 
           const fetchResult = (await step.run(
@@ -860,14 +867,14 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
   },
 );
 
-// NO CRON. /live/games has answered 429 to every call since the job first ran
-// (2026-05-18): 3,451 hourly runs, not one row. The retries above did not help
-// either — three attempts 13 s apart, all 429 — so this is our key's access to
-// the endpoint, not a burst limit. Event-only until Stream Hatchet confirms the
-// endpoint is in our plan; send `snapshots/streamhatchet-live-games` to test.
+// /live/games answered 429 to every call from 2026-05-18 to 2026-10-16
+// (3,647 runs, not one row): our key's access was misconfigured on Stream
+// Hatchet's side. Restored 2026-11. Hourly at :25, clear of discovery (:35)
+// and live channels (:45), so the three never share a 10 s window. Live rows
+// go stale after 2 h, so hourly keeps one on the page between runs.
 export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
   { id: "streamhatchet-live-games-snapshot", concurrency: { limit: 1 } },
-  [{ event: "snapshots/streamhatchet-live-games" }],
+  [{ cron: "25 */1 * * *" }, { event: "snapshots/streamhatchet-live-games" }],
   async ({ step }) => {
     return executeIngestionRun(
       {
@@ -903,7 +910,10 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         ) {
           const waitSeconds = Math.min(
             LIVE_GAMES_MAX_WAIT_SECONDS,
-            (fetchResult.retryAfterSeconds ?? 15) + 2,
+            Math.max(
+              STREAMHATCHET_CALL_GAP_SECONDS,
+              (fetchResult.retryAfterSeconds ?? 15) + 2,
+            ),
           );
           await step.sleep(`live-games-backoff-${attempt}`, `${waitSeconds}s`);
           fetchResult = (await step.run(

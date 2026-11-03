@@ -153,19 +153,19 @@ export const GAME_INFO = {
   },
   peakViewers24h: {
     title: "Peak Viewers · 24h",
-    body: "The highest reading in the last 24 hours, per platform. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube has no live feed, so it has no peak.",
+    body: "The highest reading in the last 24 hours, per platform. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube has no peak: its figures here come from daily averages.",
     source: `${TWITCH_GAME_READING} Kick API, hourly.`,
   },
   liveViewers: {
     title: "Live Viewers",
-    body: "People watching the game right now, per platform, from each platform's latest reading (no older than 2 hours). YouTube has no live feed: its row is the latest daily average, dated.",
-    source: `${TWITCH_GAME_READING} Kick API, hourly. YouTube: Stream Hatchet's daily averages.`,
+    body: "People watching the game right now, per platform, from each platform's latest reading (no older than 2 hours). When there's no recent YouTube reading, its row is the latest daily average, dated.",
+    source: `${TWITCH_GAME_READING} Kick API, hourly. YouTube: Stream Hatchet live data, hourly, or its daily averages.`,
   },
   liveChannels: {
     title: "Live Channels",
-    body: "Channels streaming the game right now, per platform, from each platform's latest reading. YouTube's row is a daily average of channels live at once, dated.",
+    body: "Channels streaming the game right now, per platform, from each platform's latest reading (no older than 2 hours). When there's no recent YouTube reading, its row is a daily average of channels live at once, dated.",
     source:
-      "Twitch API, every 30 minutes. Kick API, hourly. YouTube: Stream Hatchet's daily averages.",
+      "Twitch API, every 30 minutes. Kick API, hourly. YouTube: Stream Hatchet live data, hourly, or its daily averages.",
   },
   avgChannels7d: {
     title: "Avg Live Channels · 7d",

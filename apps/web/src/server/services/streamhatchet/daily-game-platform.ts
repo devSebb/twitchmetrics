@@ -2,11 +2,11 @@
  * Interim YouTube game viewership, derived from the Stream Hatchet daily
  * rollups (C23).
  *
- * `streamhatchet-live-games-snapshot` has never returned a row — the quota
- * rejects it — so every game page shows Twitch and Kick viewership and nothing
- * for YouTube. `GameDailyRollup` already holds a per-game daily total for
- * platform `yt`, which is enough for a daily average while the live feed stays
- * unavailable.
+ * `streamhatchet-live-games-snapshot` returned no rows until 2026-11 — our key
+ * was misconfigured on Stream Hatchet's side — so game pages had Twitch and
+ * Kick viewership and nothing for YouTube. `GameDailyRollup` already holds a
+ * per-game daily total for platform `yt`, which is enough for a daily average
+ * whenever the live feed has nothing fresh for a game.
  *
  * These numbers are a DAY'S AVERAGE, not a live reading: a rollup covers 1440
  * minutes, so `minutesWatched / 1440` is the average concurrent audience and

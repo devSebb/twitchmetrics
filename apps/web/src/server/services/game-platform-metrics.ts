@@ -278,7 +278,7 @@ export type GameWindowMetrics = {
   /**
    * 24h peak per platform. No total: the platforms peak at different moments,
    * and adding their peaks would report an audience nobody measured. YouTube
-   * has no live feed, so it has no peak.
+   * has no peak: its figures here are daily averages.
    */
   peakViewers: GamePlatformMetricGroup;
   /** 7-day average live channels per platform; the total is their sum. */
