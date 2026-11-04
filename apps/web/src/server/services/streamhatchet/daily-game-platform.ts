@@ -20,48 +20,16 @@
  */
 import { Platform, prisma } from "@twitchmetrics/database";
 // Relative, not "@/": workers/write-yt-game-snapshots.ts imports this file.
-import { normalizePopularGameName } from "../popular-games";
+import {
+  gameIdForName,
+  indexGamesByName,
+  loadGameNameSources,
+} from "./game-names";
 
 /** A rollup covers a whole day, so a daily total divides down to a concurrent average. */
 const MINUTES_PER_DAY = 1440;
 
 export const DAILY_GAME_SNAPSHOT_SOURCE = "streamhatchet_daily";
-
-/**
- * YouTube's own video categories. SH files a YouTube stream under one when it
- * has no game, so these are whole slices of YouTube, not games: "Sports" (every
- * sports broadcast, ~440k average viewers) landed on the Twitch "Sports"
- * category and multiplied it 40x (QA 2026-10). Never matched to a game.
- */
-const YOUTUBE_VIDEO_CATEGORIES = new Set(
-  [
-    "Autos & Vehicles",
-    "Animals",
-    "Pets & Animals",
-    "Comedy",
-    "Education",
-    "Entertainment",
-    "Film & Animation",
-    "Gaming",
-    "Howto & Style",
-    "Movies",
-    "Music",
-    "News & Politics",
-    "Nonprofits & Activism",
-    "People",
-    "People & Blogs",
-    "Science & Technology",
-    "Shows",
-    "Sports",
-    "Trailers",
-    "Travel",
-    "Travel & Events",
-  ].map(normalizePopularGameName),
-);
-
-export function isYouTubeVideoCategory(name: string): boolean {
-  return YOUTUBE_VIDEO_CATEGORIES.has(normalizePopularGameName(name));
-}
 
 export type DailyGameRollupInput = {
   gameName: string;
@@ -85,44 +53,6 @@ export function dailyGameSnapshotValues(
     viewers: Math.round(Number(rollup.minutesWatched) / MINUTES_PER_DAY),
     channels: Math.round(rollup.airtimeMinutes / MINUTES_PER_DAY),
   };
-}
-
-/**
- * Index games by their normalised name, so rollup names (which come from the
- * export, with whatever spacing and case it used) resolve to a game id.
- * The catalog is ~1,200 rows, so one full read beats a query per name.
- *
- * `aliases` are names Stream Hatchet's game discovery already tied to a
- * catalog game: SH files CS2 as "Counter-Strike" and Overwatch 2 as
- * "Overwatch", which the catalog name alone never matched. A catalog name
- * always wins over an alias, and an alias claimed by two games is dropped.
- */
-export function indexGamesByName(
-  games: { id: string; name: string }[],
-  aliases: { name: string; gameId: string }[] = [],
-): Map<string, string> {
-  const index = new Map<string, string>();
-  for (const game of games) {
-    const key = normalizePopularGameName(game.name);
-    // First writer wins: two catalog rows normalising to one name would
-    // otherwise flip between imports.
-    if (!index.has(key)) index.set(key, game.id);
-  }
-
-  const aliasIndex = new Map<string, string | null>();
-  for (const alias of aliases) {
-    const key = normalizePopularGameName(alias.name);
-    if (index.has(key)) continue;
-    const existing = aliasIndex.get(key);
-    if (existing === undefined) aliasIndex.set(key, alias.gameId);
-    else if (existing !== alias.gameId) aliasIndex.set(key, null);
-  }
-  for (const [key, gameId] of aliasIndex) {
-    if (gameId) index.set(key, gameId);
-  }
-
-  for (const key of YOUTUBE_VIDEO_CATEGORIES) index.delete(key);
-  return index;
 }
 
 export type WriteDailyGamePlatformSnapshotsResult = {
@@ -169,20 +99,8 @@ export async function writeDailyGamePlatformSnapshots(input: {
     };
   }
 
-  const [games, discoveryMappings] = await Promise.all([
-    prisma.game.findMany({ select: { id: true, name: true } }),
-    prisma.platformGameMapping.findMany({
-      where: { source: "streamhatchet_discovery" },
-      select: { platformGameName: true, gameId: true },
-    }),
-  ]);
-  const gameIdByName = indexGamesByName(
-    games,
-    discoveryMappings.map((mapping) => ({
-      name: mapping.platformGameName,
-      gameId: mapping.gameId,
-    })),
-  );
+  const sources = await loadGameNameSources(prisma);
+  const gameIdByName = indexGamesByName(sources.games, sources.aliases);
 
   type PendingSnapshot = {
     gameId: string;
@@ -197,7 +115,7 @@ export async function writeDailyGamePlatformSnapshots(input: {
     { gameName: string; top: bigint; airtime: number; watched: bigint }
   >();
   for (const rollup of rollups) {
-    const gameId = gameIdByName.get(normalizePopularGameName(rollup.gameName));
+    const gameId = gameIdForName(gameIdByName, rollup.gameName, "yt");
     if (!gameId) continue;
     const watched = BigInt(rollup.minutesWatched);
     const existing = byGame.get(gameId);

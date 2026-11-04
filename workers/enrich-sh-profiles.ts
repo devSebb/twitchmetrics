@@ -42,6 +42,7 @@ import {
   getTwitchRateStats,
   twitchRateLimitedFetch,
 } from "../apps/web/src/server/adapters/twitch-rate";
+import { STREAMHATCHET_GAME_NAME_OVERRIDES } from "../apps/web/src/server/services/streamhatchet/game-names";
 
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
@@ -493,6 +494,17 @@ async function kickAvatars() {
 // Activity + primary game from SH rollups
 // ---------------------------------------------------------------------------
 
+/** normalizedGameNameSql (game-names.ts), for this file's plain SQL strings. */
+const NORM_SQL = (column: string) =>
+  `lower(regexp_replace(btrim(${column}), '\\s+', ' ', 'g'))`;
+
+function overrideValues(): string {
+  const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+  return Object.entries(STREAMHATCHET_GAME_NAME_OVERRIDES)
+    .map(([name, slug]) => `(${quote(name)}, ${quote(slug)})`)
+    .join(", ");
+}
+
 async function activity() {
   await prisma.$executeRawUnsafe(`SET statement_timeout = '20min'`);
   log(
@@ -523,23 +535,50 @@ async function activity() {
       WHERE r.date >= CURRENT_DATE - 90
       GROUP BY 1
     ),
-    g AS (
-      SELECT r."creatorProfileId" AS id, r."gameName", SUM(r."minutesWatched") AS mw
-      FROM "ChannelGameDailyRollup" r
-      JOIN owned o ON o.id = r."creatorProfileId"
-      WHERE r.date >= CURRENT_DATE - 30 AND r."gameName" IS NOT NULL AND r."gameName" <> ''
-      GROUP BY 1, 2
+    -- SH's names for catalog games, by the rule in game-names.ts: catalog
+    -- name first, then discovery's aliases and the hand-checked overrides;
+    -- an alias two games claim is dropped. SH renamed games in October, so
+    -- a 30-day window holds both spellings ("Helldivers II", "Helldivers 2").
+    names AS (
+      SELECT ${NORM_SQL("name")} AS lname, slug, 0 AS prio FROM "Game"
+      UNION ALL
+      SELECT ${NORM_SQL('m."platformGameName"')}, gm.slug, 1
+      FROM "PlatformGameMapping" m JOIN "Game" gm ON gm.id = m."gameId"
+      WHERE m.source = 'streamhatchet_discovery' AND m."platformGameName" IS NOT NULL
+      UNION ALL
+      SELECT ${NORM_SQL("v.name")}, v.slug, 1 FROM (VALUES ${overrideValues()}) AS v(name, slug)
     ),
-    top AS (
-      SELECT DISTINCT ON (id) id, "gameName" FROM g ORDER BY id, mw DESC
+    ranked_names AS (
+      SELECT lname, slug, prio, MIN(prio) OVER (PARTITION BY lname) AS best FROM names
     ),
     game_slug AS (
-      SELECT DISTINCT ON (LOWER(name)) LOWER(name) AS lname, slug FROM "Game" ORDER BY LOWER(name), slug
+      SELECT lname, MIN(slug) AS slug FROM ranked_names
+      WHERE prio = best
+      GROUP BY lname, best
+      HAVING best = 0 OR COUNT(DISTINCT slug) = 1
+    ),
+    g AS (
+      SELECT r."creatorProfileId" AS id, r."gameName", gs.slug, SUM(r."minutesWatched") AS mw
+      FROM "ChannelGameDailyRollup" r
+      JOIN owned o ON o.id = r."creatorProfileId"
+      LEFT JOIN game_slug gs ON gs.lname = ${NORM_SQL('r."gameName"')}
+      WHERE r.date >= CURRENT_DATE - 30 AND r."gameName" IS NOT NULL AND r."gameName" <> ''
+      GROUP BY 1, 2, 3
+    ),
+    -- One game's spellings add up before the top game is picked.
+    per_game AS (
+      SELECT id, slug, SUM(mw) AS mw, (ARRAY_AGG("gameName" ORDER BY mw DESC))[1] AS raw_name
+      FROM g
+      GROUP BY id, slug, COALESCE(slug, ${NORM_SQL('"gameName"')})
+    ),
+    top AS (
+      SELECT DISTINCT ON (pg.id) pg.id, COALESCE(BTRIM(gm.name), pg.raw_name) AS "gameName", pg.slug
+      FROM per_game pg LEFT JOIN "Game" gm ON gm.slug = pg.slug
+      ORDER BY pg.id, pg.mw DESC
     )
-    SELECT a.id, a.last_stream_at, a.active30, t."gameName" AS game_name, gs.slug AS game_slug
+    SELECT a.id, a.last_stream_at, a.active30, t."gameName" AS game_name, t.slug AS game_slug
     FROM act a
     LEFT JOIN top t ON t.id = a.id
-    LEFT JOIN game_slug gs ON gs.lname = LOWER(t."gameName")
   `);
   const stats = await prisma.$queryRawUnsafe<
     { n: bigint; with_game: bigint; with_slug: bigint; active30: bigint }[]
@@ -557,14 +596,16 @@ async function activity() {
       SET "lastStreamAt" = t.last_stream_at,
           "isActiveLast30d" = t.active30,
           "primaryGameName" = COALESCE(t.game_name, cp."primaryGameName"),
-          "primaryGameSlug" = COALESCE(t.game_slug, cp."primaryGameSlug"),
+          -- A top game outside the catalog clears the slug: keeping the old
+          -- one listed Counter-Strike players under PUBG (2026-11).
+          "primaryGameSlug" = CASE WHEN t.game_name IS NULL THEN cp."primaryGameSlug" ELSE t.game_slug END,
           "lastEnrichedAt" = NOW()
       FROM tmp_sh_activity t
       WHERE t.id = cp.id AND cp.id::text LIKE '${h}%'
         AND (cp."lastStreamAt" IS DISTINCT FROM t.last_stream_at
           OR cp."isActiveLast30d" IS DISTINCT FROM t.active30
           OR (t.game_name IS NOT NULL AND cp."primaryGameName" IS DISTINCT FROM t.game_name)
-          OR (t.game_slug IS NOT NULL AND cp."primaryGameSlug" IS DISTINCT FROM t.game_slug))
+          OR (t.game_name IS NOT NULL AND cp."primaryGameSlug" IS DISTINCT FROM t.game_slug))
     `);
     updated += n;
     log(`activity chunk ${h}`, { updated: n });

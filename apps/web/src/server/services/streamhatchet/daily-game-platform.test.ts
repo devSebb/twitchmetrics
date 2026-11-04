@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
-import {
-  dailyGameSnapshotValues,
-  indexGamesByName,
-} from "./daily-game-platform";
+import { dailyGameSnapshotValues } from "./daily-game-platform";
 
 /**
  * C23 publishes YouTube game viewership from the daily rollups. The arithmetic
  * that matters is the 1440-minute division — a rollup is a day's total, and the
- * card shows a concurrent average — plus the name match, because the export
- * spells game names however it likes.
+ * card shows a concurrent average. The name match is in game-names.test.ts.
  */
 
 describe("dailyGameSnapshotValues", () => {
@@ -56,66 +52,5 @@ describe("dailyGameSnapshotValues", () => {
         minutesWatched: BigInt(60),
       }),
     ).toEqual({ viewers: 0, channels: 0 });
-  });
-});
-
-describe("indexGamesByName", () => {
-  it("matches regardless of case and spacing", () => {
-    const index = indexGamesByName([
-      { id: "game-1", name: "Counter-Strike 2" },
-      { id: "game-2", name: "Dead by Daylight" },
-    ]);
-
-    expect(index.get("counter-strike 2")).toBe("game-1");
-    expect(index.get("dead by daylight")).toBe("game-2");
-  });
-
-  it("keeps the first game when two names normalise alike", () => {
-    const index = indexGamesByName([
-      { id: "first", name: "VALORANT" },
-      { id: "second", name: "Valorant" },
-    ]);
-
-    expect(index.get("valorant")).toBe("first");
-  });
-
-  it("resolves the names SH files games under", () => {
-    const index = indexGamesByName(
-      [{ id: "cs2", name: "Counter-Strike 2" }],
-      [{ name: "Counter-Strike", gameId: "cs2" }],
-    );
-
-    expect(index.get("counter-strike")).toBe("cs2");
-  });
-
-  it("lets a catalog name win over an alias", () => {
-    const index = indexGamesByName(
-      [{ id: "ow", name: "Overwatch" }],
-      [{ name: "Overwatch", gameId: "ow2" }],
-    );
-
-    expect(index.get("overwatch")).toBe("ow");
-  });
-
-  it("drops an alias two games claim", () => {
-    const index = indexGamesByName(
-      [],
-      [
-        { name: "Lineage", gameId: "lineage" },
-        { name: "Lineage", gameId: "lineage-2" },
-      ],
-    );
-
-    expect(index.has("lineage")).toBe(false);
-  });
-
-  it("never matches a YouTube video category", () => {
-    const index = indexGamesByName(
-      [{ id: "sports", name: "Sports" }],
-      [{ name: "Animals", gameId: "animals-zoos" }],
-    );
-
-    expect(index.has("sports")).toBe(false);
-    expect(index.has("animals")).toBe(false);
   });
 });

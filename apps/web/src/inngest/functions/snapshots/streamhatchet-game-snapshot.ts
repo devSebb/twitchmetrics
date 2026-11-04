@@ -16,6 +16,14 @@ import {
   type StreamHatchetLiveChannel,
   type StreamHatchetLiveGame,
 } from "@/server/adapters/streamhatchet";
+import {
+  type GameNameSources,
+  gameIdForName,
+  indexGamesByName,
+  isYouTubeVideoCategory,
+  loadGameNameSources,
+  normalizePopularGameName,
+} from "@/server/services/streamhatchet/game-names";
 
 const log = createLogger("streamhatchet-game-snapshot");
 
@@ -92,10 +100,6 @@ function missingCredentialsResult() {
   };
 }
 
-function normalizeName(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
 function snapshotBucket(date: Date): Date {
   return new Date(Math.floor(date.getTime() / LIVE_BUCKET_MS) * LIVE_BUCKET_MS);
 }
@@ -136,19 +140,58 @@ function streamViewerHours(
   return BigInt(Math.max(0, Math.round((viewers * airtimeSeconds) / 3600)));
 }
 
-function buildGameLookup(games: GameMatch[]): Map<string, GameMatch> {
-  return new Map(games.map((game) => [normalizeName(game.name), game]));
+/**
+ * Games by normalised name: catalog names, then the aliases (discovery's
+ * earlier names and the hand-checked overrides, see game-names.ts). Live
+ * rows name a game "Counter-Strike" where the catalog says
+ * "Counter-Strike 2", so the catalog alone skipped some of the biggest games.
+ */
+type GameLookup = {
+  byName: Map<string, GameMatch>;
+  index: Map<string, string>;
+  byId: Map<string, GameMatch>;
+};
+
+function buildGameLookup(
+  games: GameMatch[],
+  aliases: GameNameSources["aliases"] = [],
+): GameLookup {
+  return {
+    byName: new Map(
+      games.map((game) => [normalizePopularGameName(game.name), game]),
+    ),
+    index: indexGamesByName(games, aliases),
+    byId: new Map(games.map((game) => [game.id, game])),
+  };
+}
+
+function lookupGame(
+  lookup: GameLookup,
+  name: string,
+  platform: string,
+): GameMatch | null {
+  const gameId = gameIdForName(lookup.index, name, platform);
+  return gameId ? (lookup.byId.get(gameId) ?? null) : null;
+}
+
+async function loadGameLookup(games: GameMatch[]): Promise<GameLookup> {
+  const sources = await loadGameNameSources(prisma);
+  return buildGameLookup(games, sources.aliases);
 }
 
 function matchDiscoveryGame(
   row: StreamHatchetGameAggregate,
-  byName: Map<string, GameMatch>,
+  lookup: GameLookup,
 ): { game: GameMatch; confidence: string } | null {
-  const direct = byName.get(normalizeName(row.game));
+  // Discovery excludes SH's "Non Gaming" genre, so no video categories here.
+  const direct = lookup.byName.get(normalizePopularGameName(row.game));
   if (direct) return { game: direct, confidence: "exact_name" };
 
+  const aliased = lookupGame(lookup, row.game, "twitch");
+  if (aliased) return { game: aliased, confidence: "alias" };
+
   for (const alias of row.metadata?.names ?? []) {
-    const game = byName.get(normalizeName(alias));
+    const game = lookupGame(lookup, alias, "twitch");
     if (game) return { game, confidence: "metadata_alias" };
   }
 
@@ -157,10 +200,10 @@ function matchDiscoveryGame(
 
 function matchLiveGame(
   row: StreamHatchetLiveGame,
-  byName: Map<string, GameMatch>,
+  lookup: GameLookup,
 ): GameMatch | null {
   const name = typeof row.game === "string" ? row.game : null;
-  return name ? (byName.get(normalizeName(name)) ?? null) : null;
+  return name ? lookupGame(lookup, name, "twitch") : null;
 }
 
 async function loadGames() {
@@ -608,62 +651,99 @@ async function persistLiveGameRows(
   games: GameMatch[],
   snapshotAt: Date,
 ) {
-  const byName = buildGameLookup(games);
+  const lookup = await loadGameLookup(games);
   const bucketStartedAt = snapshotBucket(snapshotAt);
-  let written = 0;
   let skipped = 0;
 
+  // Two SH names can resolve to one game; their viewers add up into one row
+  // per platform, named after the bigger one, instead of the second upsert
+  // overwriting the first.
+  type Pending = {
+    gameId: string;
+    platform: ReturnType<typeof liveGamePlatformRows>[number]["platform"];
+    viewers: number;
+    channels: number;
+    top: StreamHatchetLiveGame;
+    topViewers: number;
+  };
+  const pending = new Map<string, Pending>();
   for (const row of rows) {
-    const game = matchLiveGame(row, byName);
+    const game = matchLiveGame(row, lookup);
     if (!game) {
       skipped++;
       continue;
     }
+    const name = typeof row.game === "string" ? row.game : "";
 
     for (const platformRow of liveGamePlatformRows(row)) {
       if (platformRow.viewers === 0 && platformRow.channels === 0) continue;
+      // YouTube's video categories ("Sports", "Music") aren't games.
+      if (platformRow.platform === "youtube" && isYouTubeVideoCategory(name)) {
+        continue;
+      }
 
-      await prisma.gamePlatformViewerSnapshot.upsert({
-        where: {
-          gameId_platform_source_bucketStartedAt: {
-            gameId: game.id,
-            platform: platformRow.platform,
-            source: "streamhatchet_live",
-            bucketStartedAt,
-          },
-        },
-        update: {
-          platformGameId:
-            row.game_id === null || row.game_id === undefined
-              ? null
-              : `${STREAMHATCHET_MAPPING_PREFIX}${String(row.game_id)}`,
-          platformGameName: typeof row.game === "string" ? row.game : null,
-          snapshotAt,
-          viewers: platformRow.viewers,
-          channels: platformRow.channels,
-          metadata: row as Prisma.InputJsonValue,
-        },
-        create: {
+      const key = `${game.id}:${platformRow.platform}`;
+      const existing = pending.get(key);
+      if (!existing) {
+        pending.set(key, {
           gameId: game.id,
           platform: platformRow.platform,
-          platformGameId:
-            row.game_id === null || row.game_id === undefined
-              ? null
-              : `${STREAMHATCHET_MAPPING_PREFIX}${String(row.game_id)}`,
-          platformGameName: typeof row.game === "string" ? row.game : null,
-          snapshotAt,
-          bucketStartedAt,
           viewers: platformRow.viewers,
           channels: platformRow.channels,
-          source: "streamhatchet_live",
-          metadata: row as Prisma.InputJsonValue,
-        },
-      });
-      written++;
+          top: row,
+          topViewers: platformRow.viewers,
+        });
+        continue;
+      }
+      existing.viewers += platformRow.viewers;
+      existing.channels += platformRow.channels;
+      if (platformRow.viewers > existing.topViewers) {
+        existing.top = row;
+        existing.topViewers = platformRow.viewers;
+      }
     }
   }
 
-  return { written, skipped };
+  for (const entry of pending.values()) {
+    const row = entry.top;
+    const platformGameId =
+      row.game_id === null || row.game_id === undefined
+        ? null
+        : `${STREAMHATCHET_MAPPING_PREFIX}${String(row.game_id)}`;
+    const platformGameName = typeof row.game === "string" ? row.game : null;
+    await prisma.gamePlatformViewerSnapshot.upsert({
+      where: {
+        gameId_platform_source_bucketStartedAt: {
+          gameId: entry.gameId,
+          platform: entry.platform,
+          source: "streamhatchet_live",
+          bucketStartedAt,
+        },
+      },
+      update: {
+        platformGameId,
+        platformGameName,
+        snapshotAt,
+        viewers: entry.viewers,
+        channels: entry.channels,
+        metadata: row as Prisma.InputJsonValue,
+      },
+      create: {
+        gameId: entry.gameId,
+        platform: entry.platform,
+        platformGameId,
+        platformGameName,
+        snapshotAt,
+        bucketStartedAt,
+        viewers: entry.viewers,
+        channels: entry.channels,
+        source: "streamhatchet_live",
+        metadata: row as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  return { written: pending.size, skipped };
 }
 
 async function invalidateGames(games: Pick<GameMatch, "slug">[]) {
@@ -700,7 +780,6 @@ export const streamHatchetGameDiscoverySnapshot = inngest.createFunction(
         }
 
         const games = (await step.run("load-games", loadGames)) as GameMatch[];
-        const byName = buildGameLookup(games);
         const rows = (await step.run("fetch-game-discovery", () =>
           fetchStreamHatchetGameDiscovery({
             platforms: [...PLATFORMS],
@@ -720,8 +799,9 @@ export const streamHatchetGameDiscoverySnapshot = inngest.createFunction(
             let written = 0;
             let skipped = 0;
 
+            const lookup = await loadGameLookup(games);
             for (const row of rows) {
-              const match = matchDiscoveryGame(row, byName);
+              const match = matchDiscoveryGame(row, lookup);
               if (!match) {
                 skipped++;
                 continue;
@@ -1000,10 +1080,10 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         // 25 games, 19 matched, 0 rows). Keep a trimmed sample in the run's
         // metadata so the parser can be fixed against the real payload.
         const unparsed = rows.length > skipped && written === 0;
-        const byName = buildGameLookup(games);
+        const lookup = buildGameLookup(games);
         const sample = unparsed
           ? JSON.stringify(
-              rows.find((row) => matchLiveGame(row, byName)) ?? rows[0],
+              rows.find((row) => matchLiveGame(row, lookup)) ?? rows[0],
             ).slice(0, 2_000)
           : undefined;
 

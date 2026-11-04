@@ -177,6 +177,7 @@ describe("popular game ranking", () => {
       streamSessionFact: { findMany: sessionFindMany },
       metricSnapshot: { findMany: snapshotFindMany },
       game: { findMany: gameFindMany },
+      platformGameMapping: { findMany: vi.fn().mockResolvedValue([]) },
     } as unknown as PrismaClient;
 
     const games = await getPopularGames(prisma, {
@@ -207,6 +208,60 @@ describe("popular game ranking", () => {
         streamCount: 0,
         observationCount: 1,
         measurement: "observed",
+      }),
+    ]);
+  });
+  it("ranks SH's names for one game as one row, linked to the catalog game", async () => {
+    const rollup = (gameName: string, minutesWatched: bigint) => ({
+      platform: "twitch",
+      gameName,
+      sessionCount: 1,
+      airtimeMinutes: 60,
+      minutesWatched,
+    });
+    const catalog = [
+      { id: "cs2", name: "Counter-Strike 2", slug: "counter-strike-2" },
+    ];
+    const prisma = {
+      platformAccount: { findMany: vi.fn().mockResolvedValue([]) },
+      channelGameDailyRollup: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            rollup("Counter-Strike", 6_000n),
+            rollup("counter-strike 2", 3_000n),
+          ]),
+      },
+      streamSessionFact: { findMany: vi.fn().mockResolvedValue([]) },
+      metricSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
+      game: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce(catalog)
+          .mockResolvedValue([
+            { ...catalog[0], coverImageUrl: null, twitchGameId: null },
+          ]),
+      },
+      platformGameMapping: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { platformGameName: "Counter-Strike", gameId: "cs2" },
+          ]),
+      },
+    } as unknown as PrismaClient;
+
+    const games = await getPopularGames(prisma, {
+      creatorProfileId: "creator-id",
+      limit: 6,
+    });
+
+    expect(games).toEqual([
+      expect.objectContaining({
+        gameName: "Counter-Strike 2",
+        slug: "counter-strike-2",
+        streamCount: 2,
+        airtimeMinutes: 120,
       }),
     ]);
   });

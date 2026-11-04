@@ -294,7 +294,7 @@ async function queryPublicCreators(
       ? getViewershipRankedIds({
           sort,
           platform: platform ?? undefined,
-          gameName: game?.name ?? null,
+          gameId: game?.id ?? null,
           take: limit,
           skip,
         }).then((ids) => ids.map((id) => ({ id })))

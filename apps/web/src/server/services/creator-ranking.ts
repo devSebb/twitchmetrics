@@ -1,6 +1,7 @@
 import { Prisma, type Platform } from "@twitchmetrics/database";
 import { db } from "@/server/db";
 import { DISCOVERABLE_CREATOR_SQL } from "@/server/services/creator-visibility";
+import { streamHatchetNamesForGame } from "@/server/services/streamhatchet/game-names";
 
 /**
  * Viewership ranking for /creators (sort=viewership | sort=peak).
@@ -21,8 +22,9 @@ import { DISCOVERABLE_CREATOR_SQL } from "@/server/services/creator-visibility";
  * Scores over the window (last 7 ingested days):
  *   viewership -> MAX(daily averageViewers)  (candidates by minutesWatched)
  *   peak       -> MAX(daily peakViewers)     (candidates by peakViewers)
- * Game-filtered rankings use ChannelGameDailyRollup (SH gameName matches
- * Game.name), i.e. "creators who streamed this game recently".
+ * Game-filtered rankings use ChannelGameDailyRollup, one branch per spelling
+ * SH used for the game (streamHatchetNamesForGame), i.e. "creators who
+ * streamed this game recently".
  */
 
 export type ViewershipSort = "viewership" | "peak";
@@ -62,7 +64,7 @@ async function latestRollupDate(): Promise<Date | null> {
 export async function getViewershipRankedIds(opts: {
   sort: ViewershipSort;
   platform?: Platform | undefined;
-  gameName?: string | null;
+  gameId?: string | null;
   take: number;
   skip: number;
 }): Promise<string[]> {
@@ -84,23 +86,34 @@ export async function getViewershipRankedIds(opts: {
   }
 
   const perBranchLimit = opts.skip + opts.take + CANDIDATE_SLACK;
-  const gameName = opts.gameName ?? null;
-  const table = gameName
+  const gameNames = opts.gameId
+    ? await streamHatchetNamesForGame(
+        db,
+        opts.gameId,
+        new Date(`${dates[dates.length - 1]}T00:00:00Z`),
+      )
+    : null;
+  const table = gameNames
     ? Prisma.sql`"ChannelGameDailyRollup"`
     : Prisma.sql`"ChannelDailyRollup"`;
   // ChannelGameDailyRollup's only ranking index leads with minutesWatched, so
   // game-filtered peak candidates come from the watch-time index too.
-  const fetchByPeak = !gameName && opts.sort === "peak";
-  const gameCondition = gameName
-    ? Prisma.sql`AND "gameName" = ${gameName}`
-    : Prisma.empty;
+  const fetchByPeak = !gameNames && opts.sort === "peak";
 
   const branches: Prisma.Sql[] = [];
   for (const shPlatform of shPlatforms) {
+    // No game filter: one unfiltered branch. A game: one per spelling, each
+    // a short read of the (platform, date, gameName, minutesWatched) index.
+    const gameConditions = gameNames
+      ? (shPlatform === "yt" ? gameNames.youtube : gameNames.all).map(
+          (name) => Prisma.sql`AND "gameName" = ${name}`,
+        )
+      : [Prisma.empty];
     for (const date of dates) {
-      branches.push(
-        fetchByPeak
-          ? Prisma.sql`(
+      for (const gameCondition of gameConditions) {
+        branches.push(
+          fetchByPeak
+            ? Prisma.sql`(
               SELECT "creatorProfileId", "minutesWatched" AS mw,
                      "averageViewers" AS av, "peakViewers" AS pk
               FROM ${table}
@@ -111,7 +124,7 @@ export async function getViewershipRankedIds(opts: {
               ORDER BY "peakViewers" DESC
               LIMIT ${perBranchLimit}
             )`
-          : Prisma.sql`(
+            : Prisma.sql`(
               SELECT "creatorProfileId", "minutesWatched" AS mw,
                      "averageViewers" AS av, "peakViewers" AS pk
               FROM ${table}
@@ -122,9 +135,11 @@ export async function getViewershipRankedIds(opts: {
               ORDER BY "minutesWatched" DESC
               LIMIT ${perBranchLimit}
             )`,
-      );
+        );
+      }
     }
   }
+  if (branches.length === 0) return [];
 
   const scoreExpr =
     opts.sort === "peak" ? Prisma.sql`MAX(c.pk)` : Prisma.sql`MAX(c.av)`;
@@ -149,7 +164,7 @@ export async function getViewershipRankedIds(opts: {
   return rows.map((row) => row.id);
 }
 
-export type GameFilter = { slug: string; name: string };
+export type GameFilter = { id: string; slug: string; name: string };
 
 /** Validate a ?game= slug against the Game table; unknown slugs are ignored. */
 export async function resolveGameFilter(
@@ -160,13 +175,15 @@ export async function resolveGameFilter(
   if (!slug || slug.length > 100 || !/^[a-z0-9-]+$/.test(slug)) return null;
   const game = await db.game.findUnique({
     where: { slug },
-    select: { slug: true, name: true },
+    select: { id: true, slug: true, name: true },
   });
   return game;
 }
 
 /** Top games offered in the /creators game filter dropdown. */
-export async function getTopGameFilters(limit = 24): Promise<GameFilter[]> {
+export async function getTopGameFilters(
+  limit = 24,
+): Promise<Pick<GameFilter, "slug" | "name">[]> {
   return db.game.findMany({
     orderBy: { currentViewers: "desc" },
     take: limit,

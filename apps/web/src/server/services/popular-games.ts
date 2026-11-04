@@ -1,5 +1,13 @@
 import type { Platform, PrismaClient } from "@twitchmetrics/database";
 import { Prisma } from "@twitchmetrics/database";
+import {
+  gameIdForName,
+  indexGamesByName,
+  loadGameNameSources,
+  normalizePopularGameName,
+} from "./streamhatchet/game-names";
+
+export { normalizePopularGameName };
 
 export const POPULAR_GAMES_WINDOW_DAYS = 30;
 
@@ -81,11 +89,6 @@ function internalPlatform(platform: string): Platform | null {
     default:
       return null;
   }
-}
-
-/** Canonical identity used by every popular-game data source. */
-export function normalizePopularGameName(value: string): string {
-  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function asPositiveNumber(value: unknown): number | null {
@@ -388,6 +391,22 @@ export async function getPopularGames(
     }
     const contribution = snapshotToPopularGameContribution(snapshot);
     if (contribution) contributions.push(contribution);
+  }
+
+  // SH files one game under several names (its own, the catalog's, the
+  // spelling before a rename): name each contribution after the catalog game
+  // it resolves to, so they rank as one row and link to the game page.
+  const sources = await loadGameNameSources(prisma);
+  const index = indexGamesByName(sources.games, sources.aliases);
+  const catalogNameById = new Map(sources.games.map((g) => [g.id, g.name]));
+  for (const contribution of contributions) {
+    const gameId = gameIdForName(
+      index,
+      contribution.gameName,
+      contribution.platform ?? "",
+    );
+    const catalogName = gameId ? catalogNameById.get(gameId) : undefined;
+    if (catalogName) contribution.gameName = catalogName.trim();
   }
 
   const ranked = rankPopularGameContributions(contributions, options.limit);

@@ -1,8 +1,7 @@
 import { Prisma, type PrismaClient } from "@twitchmetrics/database";
 import type { Platform } from "@twitchmetrics/database";
-import { normalizePopularGameName } from "@/server/services/popular-games";
 import { internalPlatformForStreamHatchet } from "@/server/services/streamhatchet-identity";
-import { indexGamesByName } from "@/server/services/streamhatchet/daily-game-platform";
+import { streamHatchetNamesForGame } from "@/server/services/streamhatchet/game-names";
 import {
   completeDayWindow,
   type StatsWindow,
@@ -37,25 +36,6 @@ export type GameMostWatched = {
   lastDay: string;
 };
 
-/**
- * Stream Hatchet's names for a game: its catalog name plus the names SH's game
- * discovery tied to it, kept only where the shared name index resolves them
- * to this game (the same rules that place YouTube's daily figures).
- */
-export function streamHatchetNamesFor(
-  gameId: string,
-  candidates: string[],
-  index: Map<string, string>,
-): string[] {
-  return [
-    ...new Set(
-      candidates.filter(
-        (name) => index.get(normalizePopularGameName(name)) === gameId,
-      ),
-    ),
-  ];
-}
-
 type RankedRow = {
   platform: string;
   platformUserId: string;
@@ -84,29 +64,15 @@ export async function getGameMostWatched(
     lastDay: window.lastDay.toISOString().slice(0, 10),
   };
 
-  const [games, mappings] = await Promise.all([
-    prisma.game.findMany({ select: { id: true, name: true } }),
-    prisma.platformGameMapping.findMany({
-      where: { source: "streamhatchet_discovery" },
-      select: { platformGameName: true, gameId: true },
-    }),
-  ]);
-  const aliases = mappings.flatMap((mapping) =>
-    mapping.platformGameName
-      ? [{ name: mapping.platformGameName, gameId: mapping.gameId }]
-      : [],
+  const names = await streamHatchetNamesForGame(prisma, game.id, window.start);
+  const reads = SH_PLATFORMS.flatMap((platform) =>
+    (platform === "yt" || platform === "ytg" ? names.youtube : names.all).map(
+      (name) => ({ platform, name }),
+    ),
   );
-  const names = streamHatchetNamesFor(
-    game.id,
-    [
-      game.name,
-      ...aliases.filter((a) => a.gameId === game.id).map((a) => a.name),
-    ],
-    indexGamesByName(games, aliases),
-  );
-  if (names.length === 0) return { channels: [], ...days };
+  if (reads.length === 0) return { channels: [], ...days };
 
-  const rows = await prisma.$queryRaw<RankedRow[]>(rankQuery(names, window));
+  const rows = await prisma.$queryRaw<RankedRow[]>(rankQuery(reads, window));
   const ranked = mergeYouTubeFeeds(rows).slice(0, MOST_WATCHED_LIMIT);
 
   const profileIds = [
@@ -146,7 +112,11 @@ export async function getGameMostWatched(
   };
 }
 
-function rankQuery(names: string[], window: StatsWindow): Prisma.Sql {
+/** One index read per (platform, name) and day. */
+function rankQuery(
+  reads: { platform: string; name: string }[],
+  window: StatsWindow,
+): Prisma.Sql {
   return Prisma.sql`
     SELECT
       t.platform,
@@ -157,8 +127,10 @@ function rankQuery(names: string[], window: StatsWindow): Prisma.Sql {
         FILTER (WHERE t."creatorProfileId" IS NOT NULL))[1] AS "creatorProfileId",
       (array_agg(coalesce(t."platformDisplayName", t."platformUsername")
         ORDER BY t.date DESC))[1] AS name
-    FROM unnest(${SH_PLATFORMS}::text[]) AS p(platform)
-    CROSS JOIN unnest(${names}::text[]) AS g(name)
+    FROM unnest(
+      ${reads.map((read) => read.platform)}::text[],
+      ${reads.map((read) => read.name)}::text[]
+    ) AS r(platform, name)
     CROSS JOIN generate_series(
       ${window.start}::date,
       ${window.lastDay}::date,
@@ -169,9 +141,9 @@ function rankQuery(names: string[], window: StatsWindow): Prisma.Sql {
         "platformDisplayName", "creatorProfileId", "minutesWatched",
         "airtimeMinutes"
       FROM "ChannelGameDailyRollup"
-      WHERE platform = p.platform
+      WHERE platform = r.platform
         AND date = d.day::date
-        AND "gameName" = g.name
+        AND "gameName" = r.name
       ORDER BY "minutesWatched" DESC
       LIMIT ${ROWS_PER_DAY}
     ) AS t
