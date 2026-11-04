@@ -381,12 +381,13 @@ export function aggregateCreatorRollups(
 
 /**
  * Combine snapshot-derived and SH-derived viewer stats into the displayed
- * peak/avg pair. Peak is the best single platform-day reading across both
- * sources (not a combined simulcast peak); `peakPlatform` names where it came
- * from, ties going to SH. Average prefers the SH watch-time-weighted figure
- * and falls back to the mean of snapshot samples only when SH has no airtime
- * for the period; `viewerPlatforms` lists the platforms behind whichever
- * average was used.
+ * peak/avg pair. Both come from Stream Hatchet whenever it has them, and from
+ * our own snapshots only for creators it doesn't cover: the two sources are
+ * never mixed (QA 2026-11, Stream Hatchet: every number SH has should be
+ * SH's). Before this, a snapshot peak above SH's replaced it, so the tile
+ * could show a figure SH's own pages never would. `peakPlatform` names where
+ * the peak came from; `viewerPlatforms` lists the platforms behind the
+ * average.
  */
 export function combineViewerStats(
   snapshot: {
@@ -404,8 +405,7 @@ export function combineViewerStats(
   viewerPlatforms: Platform[];
 } {
   const shPeak = sh?.peak ?? null;
-  const snapshotWins =
-    snapshot.peak !== null && (shPeak === null || snapshot.peak > shPeak);
+  const snapshotWins = snapshot.peak !== null && shPeak === null;
   const peakViewers = snapshotWins ? snapshot.peak : shPeak;
   const peakPlatform =
     peakViewers === null

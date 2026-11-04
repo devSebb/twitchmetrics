@@ -219,7 +219,7 @@ describe("combineViewerStats", () => {
     expect(result.viewerPlatforms).toEqual(["twitch", "youtube"]);
   });
 
-  it("marks the peak combined only when the SH estimate wins", () => {
+  it("keeps SH's peak even when one of our readings was higher", () => {
     const combined = shTotals({
       airtimeSeconds: 60 * 60,
       minutesWatched: 6_000,
@@ -228,20 +228,15 @@ describe("combineViewerStats", () => {
       peakCombined: true,
     });
 
-    // SH's combined estimate is the higher figure, so it is what is shown.
-    expect(
-      combineViewerStats({ peak: 300, avgSamples: [] }, combined).peakCombined,
-    ).toBe(true);
-
-    // A snapshot reading beats it: that number is one platform's, so the
-    // label must not claim it combines platforms.
-    const snapshotWins = combineViewerStats(
+    // QA 2026-11: every number SH has comes from SH, so a snapshot reading
+    // above SH's peak no longer replaces it.
+    const result = combineViewerStats(
       { peak: 900, avgSamples: [], peakPlatform: "twitch" },
       combined,
     );
-    expect(snapshotWins.peakViewers).toBe(900);
-    expect(snapshotWins.peakCombined).toBe(false);
-    expect(snapshotWins.peakPlatform).toBe("twitch");
+    expect(result.peakViewers).toBe(500);
+    expect(result.peakCombined).toBe(true);
+    expect(result.peakPlatform).toBeNull();
   });
 
   it("falls back to the snapshot mean when SH has no airtime", () => {
@@ -260,19 +255,15 @@ describe("combineViewerStats", () => {
     expect(result.viewerPlatforms).toEqual(["kick"]);
   });
 
-  it("gives a peak tie to SH and reports the winning side's platform", () => {
-    expect(
-      combineViewerStats(
-        { peak: 500, avgSamples: [], peakPlatform: "twitch" },
-        shTotals({ peak: 500, peakPlatform: "youtube" }),
-      ).peakPlatform,
-    ).toBe("youtube");
-    expect(
-      combineViewerStats(
-        { peak: 800, avgSamples: [], peakPlatform: "twitch" },
-        shTotals({ peak: 500, peakPlatform: "youtube" }),
-      ).peakPlatform,
-    ).toBe("twitch");
+  it("reports SH's platform whenever SH has a peak", () => {
+    for (const snapshotPeak of [500, 800]) {
+      expect(
+        combineViewerStats(
+          { peak: snapshotPeak, avgSamples: [], peakPlatform: "twitch" },
+          shTotals({ peak: 500, peakPlatform: "youtube" }),
+        ).peakPlatform,
+      ).toBe("youtube");
+    }
   });
 
   it("reports no peak platform when the inputs carry none", () => {

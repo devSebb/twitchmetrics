@@ -39,7 +39,7 @@ export const CREATOR_STATS_INFO = {
   peakViewers: {
     title: "Peak Viewers",
     body: "The highest audience on a single platform in the period.",
-    source: `${SH_DAILY} (daily peak per channel), or our own Twitch / YouTube readings when they saw a higher one.`,
+    source: `${SH_DAILY} (daily peak per channel). Creators Stream Hatchet doesn't cover: the highest of our own live readings.`,
   },
   peakViewersCombined: {
     title: "Peak Viewers · estimated combined",
