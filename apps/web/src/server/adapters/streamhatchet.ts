@@ -187,12 +187,13 @@ function retryAfter(response: Response): number | undefined {
 async function streamHatchetFetch<T>(
   path: string,
   params: Record<string, string | number | undefined> = {},
+  timeoutMs = 15_000,
 ): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url(path, params), {
       headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     if (error instanceof Error && error.name === "TimeoutError") {
@@ -279,14 +280,21 @@ export async function fetchStreamHatchetLiveChannels(input: {
 export async function fetchStreamHatchetLiveGames(input: {
   platforms: StreamHatchetPlatform[];
   sortBy?: "viewers" | "channels";
+  limit?: number;
+  timeoutMs?: number;
 }): Promise<StreamHatchetLiveGame[]> {
   const response = await streamHatchetFetch<{
     data?: StreamHatchetLiveGame[];
     games?: StreamHatchetLiveGame[];
-  }>("/live/games", {
-    platforms: input.platforms.join(","),
-    sort_by: input.sortBy,
-  });
+  }>(
+    "/live/games",
+    {
+      platforms: input.platforms.join(","),
+      sort_by: input.sortBy,
+      limit: input.limit,
+    },
+    input.timeoutMs,
+  );
 
   return asArray(response?.data) ?? asArray(response?.games) ?? [];
 }

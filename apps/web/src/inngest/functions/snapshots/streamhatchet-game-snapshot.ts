@@ -34,6 +34,12 @@ const STREAMHATCHET_CALL_GAP_SECONDS = 11;
 // so YouTube game viewership stopped. Wait out the window and try again.
 const LIVE_GAMES_ATTEMPTS = 3;
 const LIVE_GAMES_MAX_WAIT_SECONDS = 60;
+// SH says /live/games covers the top 10k games (2026-11-04). Without a limit
+// it returned 25. Ask for all of them, and record what comes back and how
+// fast, to size a more frequent poller; keep rows for the top 100 for now.
+const LIVE_GAMES_REQUEST_LIMIT = 10_000;
+const LIVE_GAMES_PERSIST_LIMIT = 100;
+const LIVE_GAMES_TIMEOUT_MS = 45_000;
 const STREAMHATCHET_MAPPING_PREFIX = "streamhatchet:";
 
 type GameMatch = {
@@ -57,7 +63,15 @@ type LiveChannelsFetchResult =
     };
 
 type LiveGamesFetchResult =
-  | { ok: true; rows: StreamHatchetLiveGame[] }
+  | {
+      ok: true;
+      /** The biggest LIVE_GAMES_PERSIST_LIMIT games, by total viewers. */
+      rows: StreamHatchetLiveGame[];
+      /** What the whole response held, before trimming. */
+      returned: number;
+      bytes: number;
+      fetchMs: number;
+    }
   | {
       ok: false;
       code: "rate_limited" | "timeout" | "api_error";
@@ -229,12 +243,33 @@ async function safeFetchLiveChannels(
   }
 }
 
+function liveGameTotalViewers(row: StreamHatchetLiveGame): number {
+  return typeof row.total_viewers === "number"
+    ? row.total_viewers
+    : liveGamePlatformRows(row).reduce((sum, p) => sum + p.viewers, 0);
+}
+
 async function safeFetchLiveGames(): Promise<LiveGamesFetchResult> {
   try {
-    const rows = await fetchStreamHatchetLiveGames({
+    const startedAt = Date.now();
+    const all = await fetchStreamHatchetLiveGames({
       platforms: [...PLATFORMS],
+      limit: LIVE_GAMES_REQUEST_LIMIT,
+      timeoutMs: LIVE_GAMES_TIMEOUT_MS,
     });
-    return { ok: true, rows };
+    const fetchMs = Date.now() - startedAt;
+    // Inngest stores a step's return value (a few MB at most), so the full
+    // response is measured here and only the top games leave the step.
+    const rows = [...all]
+      .sort((a, b) => liveGameTotalViewers(b) - liveGameTotalViewers(a))
+      .slice(0, LIVE_GAMES_PERSIST_LIMIT);
+    return {
+      ok: true,
+      rows,
+      returned: all.length,
+      bytes: JSON.stringify(all).length,
+      fetchMs,
+    };
   } catch (error) {
     if (error instanceof StreamHatchetError) {
       return {
@@ -901,6 +936,8 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
         let rateLimited = false;
         let timedOut = false;
         let retryAfterSeconds: number | null = null;
+        let probe: { returned: number; bytes: number; fetchMs: number } | null =
+          null;
 
         let fetchResult = (await step.run(
           "fetch-live-games",
@@ -943,6 +980,11 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
           }
         } else {
           rows = fetchResult.rows;
+          probe = {
+            returned: fetchResult.returned,
+            bytes: fetchResult.bytes,
+            fetchMs: fetchResult.fetchMs,
+          };
         }
 
         const snapshotAt = new Date();
@@ -998,6 +1040,8 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
               rateLimited,
               timedOut,
               retryAfterSeconds,
+              requestedLimit: LIVE_GAMES_REQUEST_LIMIT,
+              ...(probe ? probe : {}),
               ...(sample !== undefined ? { sample } : {}),
             },
           },
