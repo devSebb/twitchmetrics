@@ -15,6 +15,8 @@ import {
   liveTopChannelWhere,
   selectDisplayTopChannels,
 } from "@/server/services/game-top-channels";
+import { getGameMostWatched } from "@/server/services/game-most-watched";
+import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-stats";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
   GameHeader,
@@ -144,9 +146,13 @@ export default async function GamePage({ params }: PageProps) {
   const until = latestSnapshot
     ? new Date(String(latestSnapshot.snapshotAt))
     : null;
-  const [platformMetrics, weekSeries] = await Promise.all([
+  const [platformMetrics, weekSeries, mostWatched] = await Promise.all([
     getGamePlatformMetrics({ gameId: game.id }),
     getWeekSeries(game.id, until),
+    // One card's data: a failure empties the card, not the page.
+    getLastCompleteStatsDay()
+      .then((lastDay) => getGameMostWatched(db, game, lastDay))
+      .catch(() => null),
   ]);
   const metrics =
     until && weekSeries.length > 0
@@ -265,7 +271,10 @@ export default async function GamePage({ params }: PageProps) {
         initialSummary={summarizeViewerSeries(weekSeries)}
       />
 
-      <GameTopChannels channels={selectDisplayTopChannels(game.topChannels)} />
+      <GameTopChannels
+        channels={selectDisplayTopChannels(game.topChannels)}
+        mostWatched={mostWatched}
+      />
 
       <GameClips clips={game.clips} />
     </div>

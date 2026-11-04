@@ -2,9 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Platform } from "@twitchmetrics/database";
 import { TrendUp, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
-import { formatNumber } from "@/lib/utils/format";
+import { formatNumber, formatUtcDay } from "@/lib/utils/format";
 import { InfoTip, PlatformIcon, SyncStatus } from "@/components/shared";
-import { GAME_INFO } from "@/lib/constants/metric-info";
+import { GAME_INFO, withWindow } from "@/lib/constants/metric-info";
+import type {
+  GameMostWatched,
+  MostWatchedChannel,
+} from "@/server/services/game-most-watched";
 
 type TopChannel = {
   id: string;
@@ -21,7 +25,10 @@ type TopChannel = {
 };
 
 type GameTopChannelsProps = {
+  /** Live rows; only the Emerging card uses them. */
   channels: TopChannel[];
+  /** Null when the ranking couldn't be loaded. */
+  mostWatched: GameMostWatched | null;
 };
 
 function Avatar({
@@ -52,9 +59,9 @@ function Avatar({
   );
 }
 
-// Both cards render the same line and are sorted by the number it shows
-// (viewers now), so every list reads monotonically (QA: a 39.2K row above a
-// 1.6M row when one card showed viewer-hours but sorted by viewers).
+// Each card is sorted by the number its rows show (here: viewers now), so
+// every list reads monotonically (QA: a 39.2K row above a 1.6M row when one
+// card showed viewer-hours but sorted by viewers).
 function ChannelRow({ channel }: { channel: TopChannel }) {
   const inner = (
     <div className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-[#383A40]">
@@ -91,6 +98,38 @@ function ChannelRow({ channel }: { channel: TopChannel }) {
   return inner;
 }
 
+// Hours watched on this game over the card's 7 days, the number it's sorted by.
+function MostWatchedRow({ channel }: { channel: MostWatchedChannel }) {
+  const inner = (
+    <div className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-[#383A40]">
+      <Avatar name={channel.name} avatarUrl={channel.avatarUrl} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-[#DBDEE1]">
+          {channel.name}
+        </p>
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-[#949BA4]">
+          <PlatformIcon platform={channel.platform} size="xs" rounded="lg" />
+          <span className="truncate">
+            {formatNumber(channel.hoursWatched)} hours watched
+            {channel.airtimeMinutes > 0 && (
+              <>
+                {" "}
+                &middot; {Math.max(1, Math.round(channel.airtimeMinutes / 60))}h
+                streamed
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (channel.slug) {
+    return <Link href={`/creator/${channel.slug}`}>{inner}</Link>;
+  }
+  return inner;
+}
+
 function latestUpdate(channels: TopChannel[]): string | null {
   let latest: number | null = null;
   for (const channel of channels) {
@@ -103,12 +142,18 @@ function latestUpdate(channels: TopChannel[]): string | null {
   return latest === null ? null : new Date(latest).toISOString();
 }
 
-export function GameTopChannels({ channels }: GameTopChannelsProps) {
-  // Callers pass each group already sorted by viewers now (desc).
+export function GameTopChannels({
+  channels,
+  mostWatched,
+}: GameTopChannelsProps) {
+  // Callers pass emerging already sorted by viewers now (desc).
   const emerging = channels.filter(
     (c) => c.category === "emerging" || c.category === "fastest_growing",
   );
-  const mostWatched = channels.filter((c) => c.category === "most_watched");
+  const mostWatchedChannels = mostWatched?.channels ?? [];
+  const mostWatchedRange = mostWatched
+    ? `${formatUtcDay(mostWatched.firstDay)} – ${formatUtcDay(mostWatched.lastDay)}`
+    : null;
 
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -148,23 +193,32 @@ export function GameTopChannels({ channels }: GameTopChannelsProps) {
               className="text-[#9146ff]"
             />
             Most Watched Channels
-            <InfoTip info={GAME_INFO.mostWatched} />
+            <InfoTip
+              info={
+                mostWatchedRange
+                  ? withWindow(GAME_INFO.mostWatched, mostWatchedRange)
+                  : GAME_INFO.mostWatched
+              }
+            />
           </h2>
           <span className="text-xs text-[#949BA4]">
-            Live now, by current viewers
+            Last 7 days, by hours watched
           </span>
         </div>
         <div className="space-y-0.5">
-          {mostWatched.length === 0 ? (
+          {mostWatchedChannels.length === 0 ? (
             <p className="text-sm text-[#949BA4]">No data available</p>
           ) : (
-            mostWatched.map((ch) => <ChannelRow key={ch.id} channel={ch} />)
+            mostWatchedChannels.map((ch) => (
+              <MostWatchedRow
+                key={`${ch.platform}:${ch.platformUserId}`}
+                channel={ch}
+              />
+            ))
           )}
         </div>
-        {mostWatched.length > 0 && (
-          <div className="mt-3">
-            <SyncStatus lastSyncedAt={latestUpdate(mostWatched)} />
-          </div>
+        {mostWatchedChannels.length > 0 && mostWatchedRange && (
+          <p className="mt-3 text-xs text-[#8B8E94]">{mostWatchedRange}</p>
         )}
       </div>
     </div>

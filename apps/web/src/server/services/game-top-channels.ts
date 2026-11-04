@@ -70,9 +70,13 @@ function topChannelSourcePriority(source: string | null | undefined): number {
 }
 
 /**
- * The two cards on the game page: six Most Watched, five Emerging, each sorted
+ * Live rows for the game page: six most_watched and five emerging, each sorted
  * by viewers now. Stale rows are dropped first; one row per channel per
  * platform, the platform's own API beating Stream Hatchet's live feed.
+ *
+ * Only Emerging Channels is drawn from these since 2026-11: Most Watched
+ * ranks by hours watched over 7 days (game-most-watched.ts), as Stream
+ * Hatchet does.
  */
 export function selectDisplayTopChannels<T extends TopChannelLike>(
   channels: T[],

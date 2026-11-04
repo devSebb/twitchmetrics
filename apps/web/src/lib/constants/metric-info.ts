@@ -184,13 +184,12 @@ export const GAME_INFO = {
   },
   mostWatched: {
     title: "Most Watched Channels",
-    body: "Channels streaming the game right now, ranked by their current viewers. A channel drops off once its platform's reading is more than 1–2 hours old, so streams that ended hours ago don't linger.",
-    source:
-      "Twitch API (top 6, every 30 minutes) and Kick API (top 10, hourly), plus Stream Hatchet live data when this game is in its hourly rotation.",
+    body: "Channels with the most hours watched on this game over the last 7 days with complete data (UTC), across Twitch, Kick and YouTube. A stream that played several games has its time split equally between them, so a channel that switched games can be over- or under-counted for each.",
+    source: SH_DAILY,
   },
   emerging: {
     title: "Emerging Channels",
-    body: "Twitch channels that went live in the last 12 hours and aren't already in Most Watched, by current viewers. When there are fewer than five, the next-biggest live channels fill in.",
+    body: "Twitch channels that went live in the last 12 hours, by current viewers, leaving out the six biggest live channels on the game right now. When there are fewer than five, the next-biggest live channels fill in.",
     source: "Twitch API, every 30 minutes.",
   },
   broadcastLanguages: {
