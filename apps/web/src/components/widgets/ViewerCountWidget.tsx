@@ -22,9 +22,8 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
   // mid-interaction. The chart shows its own inline empty state instead.
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  // Server-side viewer extraction: MetricSnapshots when available, with a
-  // StreamHatchet daily-rollup fallback for platforms that aren't API-polled
-  // (e.g. the SH kick catalog).
+  // Server-side viewer extraction: StreamHatchet daily rollups when the
+  // creator has them, else our own MetricSnapshots (see viewer-history.ts).
   const { data, isLoading } = trpc.snapshot.getViewerHistory.useQuery({
     creatorProfileId: profile.id,
     platform: primaryPlatform,

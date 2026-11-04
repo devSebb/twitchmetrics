@@ -90,9 +90,8 @@ export const CREATOR_WIDGET_INFO: Partial<Record<string, MetricInfo>> = {
   },
   viewer_count: {
     title: "Viewer Count",
-    body: "The creator's average viewers over time on the selected platform.",
-    source:
-      "Our own live readings of the creator's streams. Platforms we don't read live (most Kick channels) use Stream Hatchet's daily averages, one point per day streamed.",
+    body: "The creator's average viewers on each day they streamed, on their main platform, with that day's peak. A day's data arrives the next morning (UTC), so today's stream shows up tomorrow.",
+    source: `${SH_DAILY}, the same streams as Recent Streams. Creators Stream Hatchet doesn't cover: our own live readings every 6–24 hours, which can miss a stream's peak.`,
   },
   recent_streams: {
     title: "Recent Streams",
