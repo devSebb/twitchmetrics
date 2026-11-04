@@ -103,6 +103,8 @@ export type StreamHatchetLiveGame = {
   channels?: number | null;
   live_channels?: number | null;
   platform?: StreamHatchetPlatform | string | null;
+  /** What /live/games actually sends (first successful call, 2026-11-04). */
+  platforms?: StreamHatchetPlatformAggregate[];
   platform_data?: StreamHatchetPlatformAggregate[];
   [key: string]: unknown;
 };

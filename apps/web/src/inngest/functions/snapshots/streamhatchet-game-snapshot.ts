@@ -528,9 +528,14 @@ async function persistLiveChannels(
   }
 }
 
-function liveGamePlatformRows(row: StreamHatchetLiveGame) {
-  if (Array.isArray(row.platform_data) && row.platform_data.length > 0) {
-    return row.platform_data
+export function liveGamePlatformRows(row: StreamHatchetLiveGame) {
+  // /live/games names the per-platform list `platforms`; `platform_data` is
+  // the discovery endpoints' name, kept in case either is reused.
+  const perPlatform = Array.isArray(row.platforms)
+    ? row.platforms
+    : row.platform_data;
+  if (Array.isArray(perPlatform) && perPlatform.length > 0) {
+    return perPlatform
       .map((platformRow) => {
         const platform = internalPlatformForStreamHatchet(platformRow.platform);
         if (!platform) return null;
