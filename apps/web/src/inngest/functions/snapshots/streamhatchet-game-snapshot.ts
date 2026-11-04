@@ -948,10 +948,22 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
                 persistLiveGameRows(rows, games, snapshotAt),
               );
 
+        // Games came back but none produced a row: the response isn't shaped
+        // the way liveGamePlatformRows reads it (first real run, 2026-11-04:
+        // 25 games, 19 matched, 0 rows). Keep a trimmed sample in the run's
+        // metadata so the parser can be fixed against the real payload.
+        const unparsed = rows.length > skipped && written === 0;
+        const byName = buildGameLookup(games);
+        const sample = unparsed
+          ? JSON.stringify(
+              rows.find((row) => matchLiveGame(row, byName)) ?? rows[0],
+            ).slice(0, 2_000)
+          : undefined;
+
         // The single fetch is the whole run: rate-limited or timed out means
         // nothing was written, which must not read as `completed`.
         const status = resolveRunStatus({
-          wholeFetchFailed: rateLimited || timedOut,
+          wholeFetchFailed: rateLimited || timedOut || unparsed,
         });
 
         return {
@@ -968,14 +980,21 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
               ? {
                   errorSummary: rateLimited
                     ? "StreamHatchet live games rate limited"
-                    : "StreamHatchet live games timed out",
+                    : timedOut
+                      ? "StreamHatchet live games timed out"
+                      : "StreamHatchet live games: no platform rows in the response",
                 }
               : {}),
             recordsScanned: rows.length,
             recordsWritten: written,
             recordsSkipped: skipped,
             recordsFailed: 0,
-            metadata: { rateLimited, timedOut, retryAfterSeconds },
+            metadata: {
+              rateLimited,
+              timedOut,
+              retryAfterSeconds,
+              ...(sample !== undefined ? { sample } : {}),
+            },
           },
         };
       },
