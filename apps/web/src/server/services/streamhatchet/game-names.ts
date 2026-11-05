@@ -60,7 +60,7 @@ export const STREAMHATCHET_GAME_NAME_OVERRIDES: Readonly<
  * category and multiplied it 40x (QA 2026-10). On YouTube they never match a
  * game; on Twitch and Kick the same names are real categories.
  */
-const YOUTUBE_VIDEO_CATEGORIES = new Set(
+export const YOUTUBE_VIDEO_CATEGORIES: ReadonlySet<string> = new Set(
   [
     "Autos & Vehicles",
     "Animals",

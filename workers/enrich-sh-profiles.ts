@@ -25,7 +25,8 @@
  *                     `enrich-creators` job reads MetricSnapshot 500 profiles
  *                     at a time and cannot keep up (see the comment on the
  *                     `owned` CTE). Claimed profiles are left to
- *                     enrich-claimed-profiles.
+ *                     enrich-claimed-profiles. A profile with no game in that
+ *                     window keeps its saved game, re-matched by the same rule.
  *
  * All modes are idempotent and safe to re-run weekly. Dry-run by default.
  *
@@ -42,7 +43,10 @@ import {
   getTwitchRateStats,
   twitchRateLimitedFetch,
 } from "../apps/web/src/server/adapters/twitch-rate";
-import { STREAMHATCHET_GAME_NAME_OVERRIDES } from "../apps/web/src/server/services/streamhatchet/game-names";
+import {
+  STREAMHATCHET_GAME_NAME_OVERRIDES,
+  YOUTUBE_VIDEO_CATEGORIES,
+} from "../apps/web/src/server/services/streamhatchet/game-names";
 
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
@@ -498,11 +502,48 @@ async function kickAvatars() {
 const NORM_SQL = (column: string) =>
   `lower(regexp_replace(btrim(${column}), '\\s+', ' ', 'g'))`;
 
+const quoteSql = (value: string) => `'${value.replaceAll("'", "''")}'`;
+
+/** STREAMHATCHET_GAME_NAME_OVERRIDES as a VALUES list. */
 function overrideValues(): string {
-  const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
   return Object.entries(STREAMHATCHET_GAME_NAME_OVERRIDES)
-    .map(([name, slug]) => `(${quote(name)}, ${quote(slug)})`)
+    .map(([name, slug]) => `(${quoteSql(name)}, ${quoteSql(slug)})`)
     .join(", ");
+}
+
+/** isYouTubeVideoCategory (game-names.ts), for this file's plain SQL strings. */
+const IS_YOUTUBE_CATEGORY_SQL = (column: string) =>
+  `${NORM_SQL(column)} IN (${[...YOUTUBE_VIDEO_CATEGORIES].map(quoteSql).join(", ")})`;
+
+const UNCLAIMED_SQL = `cp."mergedIntoId" IS NULL AND cp.state = 'unclaimed' AND cp."userId" IS NULL`;
+
+/**
+ * SH's names for catalog games, by the rule in game-names.ts, ending in
+ * game_slug(lname, slug): catalog name first, then discovery's aliases and
+ * the hand-checked overrides; an alias two games claim is dropped. SH renamed
+ * games in October, so a 30-day window holds both spellings ("Helldivers II",
+ * "Helldivers 2").
+ */
+function gameSlugCtes(): string {
+  return `
+    names AS (
+      SELECT ${NORM_SQL("name")} AS lname, slug, 0 AS prio FROM "Game"
+      UNION ALL
+      SELECT ${NORM_SQL('m."platformGameName"')}, gm.slug, 1
+      FROM "PlatformGameMapping" m JOIN "Game" gm ON gm.id = m."gameId"
+      WHERE m.source = 'streamhatchet_discovery' AND m."platformGameName" IS NOT NULL
+      UNION ALL
+      SELECT ${NORM_SQL("v.name")}, v.slug, 1 FROM (VALUES ${overrideValues()}) AS v(name, slug)
+    ),
+    ranked_names AS (
+      SELECT lname, slug, prio, MIN(prio) OVER (PARTITION BY lname) AS best FROM names
+    ),
+    game_slug AS (
+      SELECT lname, MIN(slug) AS slug FROM ranked_names
+      WHERE prio = best
+      GROUP BY lname, best
+      HAVING best = 0 OR COUNT(DISTINCT slug) = 1
+    )`;
 }
 
 async function activity() {
@@ -522,9 +563,7 @@ async function activity() {
   await prisma.$executeRawUnsafe(`
     CREATE TEMP TABLE tmp_sh_activity AS
     WITH owned AS (
-      SELECT id FROM "CreatorProfile"
-      WHERE "mergedIntoId" IS NULL
-        AND state = 'unclaimed' AND "userId" IS NULL
+      SELECT cp.id FROM "CreatorProfile" cp WHERE ${UNCLAIMED_SQL}
     ),
     act AS (
       SELECT r."creatorProfileId" AS id,
@@ -535,33 +574,13 @@ async function activity() {
       WHERE r.date >= CURRENT_DATE - 90
       GROUP BY 1
     ),
-    -- SH's names for catalog games, by the rule in game-names.ts: catalog
-    -- name first, then discovery's aliases and the hand-checked overrides;
-    -- an alias two games claim is dropped. SH renamed games in October, so
-    -- a 30-day window holds both spellings ("Helldivers II", "Helldivers 2").
-    names AS (
-      SELECT ${NORM_SQL("name")} AS lname, slug, 0 AS prio FROM "Game"
-      UNION ALL
-      SELECT ${NORM_SQL('m."platformGameName"')}, gm.slug, 1
-      FROM "PlatformGameMapping" m JOIN "Game" gm ON gm.id = m."gameId"
-      WHERE m.source = 'streamhatchet_discovery' AND m."platformGameName" IS NOT NULL
-      UNION ALL
-      SELECT ${NORM_SQL("v.name")}, v.slug, 1 FROM (VALUES ${overrideValues()}) AS v(name, slug)
-    ),
-    ranked_names AS (
-      SELECT lname, slug, prio, MIN(prio) OVER (PARTITION BY lname) AS best FROM names
-    ),
-    game_slug AS (
-      SELECT lname, MIN(slug) AS slug FROM ranked_names
-      WHERE prio = best
-      GROUP BY lname, best
-      HAVING best = 0 OR COUNT(DISTINCT slug) = 1
-    ),
+    ${gameSlugCtes()},
     g AS (
       SELECT r."creatorProfileId" AS id, r."gameName", gs.slug, SUM(r."minutesWatched") AS mw
       FROM "ChannelGameDailyRollup" r
       JOIN owned o ON o.id = r."creatorProfileId"
       LEFT JOIN game_slug gs ON gs.lname = ${NORM_SQL('r."gameName"')}
+        AND NOT (r.platform IN ('yt', 'ytg') AND ${IS_YOUTUBE_CATEGORY_SQL('r."gameName"')})
       WHERE r.date >= CURRENT_DATE - 30 AND r."gameName" IS NOT NULL AND r."gameName" <> ''
       GROUP BY 1, 2, 3
     ),
@@ -585,11 +604,49 @@ async function activity() {
   >(`
     SELECT COUNT(*) n, COUNT(game_name) with_game, COUNT(game_slug) with_slug, COUNT(*) FILTER (WHERE active30) active30 FROM tmp_sh_activity`);
   log("activity: computed", stats[0]);
+
+  // A profile with no game in the 30-day window keeps its saved game, so a
+  // link the old code got wrong would stay until the creator streams again
+  // (397 inactive Counter-Strike players listed under PUBG, 2026-11). Re-match
+  // the saved name by the same rule. Which platform a saved name came from
+  // isn't recorded, so a video category only counts as YouTube's on a profile
+  // with no other platform.
+  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS tmp_sh_saved_game`);
+  await prisma.$executeRawUnsafe(`
+    CREATE TEMP TABLE tmp_sh_saved_game AS
+    WITH ${gameSlugCtes()}
+    SELECT cp.id,
+           COALESCE(BTRIM(gm.name), cp."primaryGameName") AS game_name,
+           gs.slug AS game_slug,
+           cp."primaryGameSlug" AS old_slug
+    FROM "CreatorProfile" cp
+    LEFT JOIN tmp_sh_activity t ON t.id = cp.id
+    LEFT JOIN game_slug gs ON gs.lname = ${NORM_SQL('cp."primaryGameName"')}
+      AND NOT (${IS_YOUTUBE_CATEGORY_SQL('cp."primaryGameName"')} AND NOT EXISTS (
+        SELECT 1 FROM "PlatformAccount" pa
+        WHERE pa."creatorProfileId" = cp.id AND pa.platform <> 'youtube'))
+    LEFT JOIN "Game" gm ON gm.slug = gs.slug
+    WHERE ${UNCLAIMED_SQL}
+      AND cp."primaryGameName" IS NOT NULL
+      AND t.game_name IS NULL
+      AND (cp."primaryGameSlug" IS DISTINCT FROM gs.slug
+        OR cp."primaryGameName" IS DISTINCT FROM COALESCE(BTRIM(gm.name), cp."primaryGameName"))
+  `);
+  const savedStats = await prisma.$queryRawUnsafe<
+    { n: bigint; linked: bigint; corrected: bigint; cleared: bigint }[]
+  >(`
+    SELECT COUNT(*) n,
+           COUNT(*) FILTER (WHERE old_slug IS NULL AND game_slug IS NOT NULL) linked,
+           COUNT(*) FILTER (WHERE old_slug <> game_slug) corrected,
+           COUNT(*) FILTER (WHERE old_slug IS NOT NULL AND game_slug IS NULL) cleared
+    FROM tmp_sh_saved_game`);
+  log("activity: saved games to re-match", savedStats[0]);
   if (!WRITE) return;
 
   // Chunk by uuid prefix so each UPDATE stays small and commits on its own.
   const hex = "0123456789abcdef".split("");
   let updated = 0;
+  let savedGames = 0;
   for (const h of hex) {
     const n = await prisma.$executeRawUnsafe(`
       UPDATE "CreatorProfile" cp
@@ -607,16 +664,23 @@ async function activity() {
           OR (t.game_name IS NOT NULL AND cp."primaryGameName" IS DISTINCT FROM t.game_name)
           OR (t.game_name IS NOT NULL AND cp."primaryGameSlug" IS DISTINCT FROM t.game_slug))
     `);
+    const saved = await prisma.$executeRawUnsafe(`
+      UPDATE "CreatorProfile" cp
+      SET "primaryGameName" = t.game_name, "primaryGameSlug" = t.game_slug
+      FROM tmp_sh_saved_game t
+      WHERE t.id = cp.id AND cp.id::text LIKE '${h}%'
+    `);
     updated += n;
-    log(`activity chunk ${h}`, { updated: n });
+    savedGames += saved;
+    log(`activity chunk ${h}`, { updated: n, savedGames: saved });
   }
   // Profiles that streamed >90d ago (or never in our data): mark inactive.
   const inactive = await prisma.$executeRawUnsafe(`
     UPDATE "CreatorProfile" cp SET "isActiveLast30d" = false
-    WHERE cp."mergedIntoId" IS NULL AND cp.state = 'unclaimed' AND cp."userId" IS NULL
+    WHERE ${UNCLAIMED_SQL}
       AND cp."isActiveLast30d" = true
       AND NOT EXISTS (SELECT 1 FROM tmp_sh_activity t WHERE t.id = cp.id AND t.active30)`);
-  log("activity applied", { updated, markedInactive: inactive });
+  log("activity applied", { updated, savedGames, markedInactive: inactive });
 }
 
 async function main() {
