@@ -4,6 +4,7 @@ import {
   captionFor,
   dailyViewerAverages,
   isSnapshotFresh,
+  latestReadings,
   preferSnapshot,
 } from "./game-platform-metrics";
 import { DAILY_GAME_SNAPSHOT_SOURCE } from "./streamhatchet/daily-game-platform";
@@ -46,13 +47,15 @@ describe("preferSnapshot", () => {
     ).toBe(true);
   });
 
-  it("prefers the twitch API over the Stream Hatchet live feed", () => {
-    expect(
-      preferSnapshot(
-        { source: "twitch_api", snapshotAt: new Date("2026-09-21T09:00:00Z") },
-        live("2026-09-21T10:00:00Z"),
-      ),
-    ).toBe(true);
+  it("prefers the Stream Hatchet live feed over the platform APIs", () => {
+    for (const source of ["twitch_api", "kick_api"]) {
+      expect(
+        preferSnapshot(
+          { source, snapshotAt: new Date("2026-09-21T10:00:00Z") },
+          live("2026-09-21T09:00:00Z"),
+        ),
+      ).toBe(false);
+    }
   });
 
   it("falls back to recency within one source", () => {
@@ -133,6 +136,41 @@ describe("isSnapshotFresh", () => {
     expect(isSnapshotFresh(liveRow, Date.parse("2026-09-21T12:30:00Z"))).toBe(
       false,
     );
+  });
+});
+
+describe("latestReadings", () => {
+  const now = new Date("2026-09-21T12:00:00Z").getTime();
+  const reading = (source: string, hoursAgo: number, viewers: number) => {
+    const at = new Date(now - hoursAgo * 3_600_000);
+    return {
+      platform: "kick" as const,
+      source,
+      snapshotAt: at,
+      bucketStartedAt: at,
+      viewers,
+      channels: null,
+    };
+  };
+
+  it("shows Stream Hatchet's reading while it is fresh", () => {
+    const latest = latestReadings(
+      [reading("kick_api", 0.5, 100), reading("streamhatchet_live", 1, 200)],
+      now,
+    );
+    expect(latest.get("kick")?.viewers).toBe(200);
+  });
+
+  it("falls back to the API once Stream Hatchet's reading is stale", () => {
+    const latest = latestReadings(
+      [reading("streamhatchet_live", 3, 200), reading("kick_api", 0.5, 100)],
+      now,
+    );
+    expect(latest.get("kick")?.viewers).toBe(100);
+  });
+
+  it("drops a platform with nothing fresh", () => {
+    expect(latestReadings([reading("kick_api", 3, 100)], now).size).toBe(0);
   });
 });
 
@@ -282,6 +320,95 @@ describe("buildGameWindowMetrics", () => {
     });
   });
 
+  describe("with Stream Hatchet's hourly live readings", () => {
+    const liveRow = (
+      platform: "twitch" | "kick" | "youtube",
+      h: number,
+      viewers: number,
+    ) => ({
+      platform,
+      bucketStartedAt: hoursBack(h),
+      viewers,
+    });
+
+    it("peaks each platform at the highest reading from any source", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick: [
+          { bucketStartedAt: hoursBack(1), viewers: 30_000, channels: 140 },
+        ],
+        youtube: [],
+        live: [
+          liveRow("twitch", 2, 200_000), // above the API's 150,000
+          liveRow("kick", 3, 10_000), // below the API's 30,000
+        ],
+      });
+
+      expect(
+        metrics.peakViewers.rows.map((r) => [r.platform, r.value]),
+      ).toEqual([
+        ["twitch", 200_000],
+        ["kick", 30_000],
+      ]);
+    });
+
+    it("gives YouTube, and a Kick game with no API reading, a peak", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick: [],
+        youtube: [],
+        live: [liveRow("youtube", 2, 9_000), liveRow("kick", 2, 4_000)],
+      });
+
+      expect(
+        metrics.peakViewers.rows.map((r) => [r.platform, r.value]),
+      ).toEqual([
+        ["twitch", 150_000],
+        ["kick", 4_000],
+        ["youtube", 9_000],
+      ]);
+    });
+
+    it("ignores readings older than 24 hours", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick: [],
+        youtube: [],
+        live: [liveRow("twitch", 25, 900_000), liveRow("youtube", 25, 9_000)],
+      });
+
+      expect(metrics.peakViewers.rows).toEqual([
+        { platform: "twitch", value: 150_000, caption: null },
+      ]);
+    });
+  });
+
+  it("says when Kick's channel count sits at its limit", () => {
+    const at = (viewers: number, channels: number, h: number) => ({
+      bucketStartedAt: hoursBack(h),
+      viewers,
+      channels,
+    });
+    const capped = buildGameWindowMetrics({
+      until,
+      twitch,
+      kick: [at(1, 100, 160), at(1, 100, 1)],
+      youtube: [],
+    });
+    const under = buildGameWindowMetrics({
+      until,
+      twitch,
+      kick: [at(1, 60, 160), at(1, 99, 1)],
+      youtube: [],
+    });
+
+    expect(capped.avgChannels.rows[1]!.caption).toBe("top channels only");
+    expect(under.avgChannels.rows[1]!.caption).toBeNull();
+  });
+
   it("sums a game's Kick categories within one reading", () => {
     const at = hoursBack(2);
     const metrics = buildGameWindowMetrics({
@@ -315,7 +442,7 @@ describe("buildGameWindowMetrics", () => {
     expect(metrics.avgViewers.rows[1]!.caption).toBe("since Oct 18");
   });
 
-  it("peaks Kick over the last 24 hours only, and never YouTube", () => {
+  it("peaks Kick over the last 24 hours only, and YouTube only from live readings", () => {
     const metrics = buildGameWindowMetrics({
       until,
       twitch,

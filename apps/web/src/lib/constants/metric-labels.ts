@@ -31,9 +31,8 @@ export function topEntitiesLabel(include: "games" | "channels"): string {
 
 /**
  * Game page KPI tiles. The time window is part of every label (QA: "What are
- * the periods of the metrics?"). The 7d/24h figures come only from
- * GameViewerSnapshot, which only the Twitch game-snapshot job writes, so they
- * say "Twitch"; the live tiles show a per-platform breakdown instead.
+ * the periods of the metrics?"). Every tile breaks down per platform; where
+ * each row's number comes from is in GAME_INFO (metric-info.ts).
  */
 export const GAME_KPI_LABELS = {
   avgViewers7d: "Avg Viewers · 7d",

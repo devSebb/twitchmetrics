@@ -152,23 +152,23 @@ export const GAME_INFO = {
   },
   peakViewers24h: {
     title: "Peak Viewers · 24h",
-    body: "The highest reading in the last 24 hours, per platform. Readings come every 30 minutes on Twitch and hourly on Kick, so a shorter spike between two readings isn't caught. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube has no peak: its figures here come from daily averages.",
-    source: `${TWITCH_GAME_READING} Kick API, hourly.`,
+    body: "The highest reading in the last 24 hours, per platform. Readings are hourly or every 30 minutes, so a shorter spike between two readings isn't caught. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube only shows a peak for games with Stream Hatchet live data.",
+    source: `Stream Hatchet live data, hourly, for the biggest games. ${TWITCH_GAME_READING} Kick API, hourly (the top 100 channels per Kick category).`,
   },
   liveViewers: {
     title: "Live Viewers",
     body: "People watching the game right now, per platform, from each platform's latest reading (no older than 2 hours). When there's no recent YouTube reading, its row is the latest daily average, dated.",
-    source: `${TWITCH_GAME_READING} Kick API, hourly. YouTube: Stream Hatchet live data, hourly, or its daily averages.`,
+    source: `Stream Hatchet live data, hourly, for the biggest games. Other games: ${TWITCH_GAME_READING} Kick API, hourly (the top 100 channels per Kick category). YouTube: Stream Hatchet's daily averages.`,
   },
   liveChannels: {
     title: "Live Channels",
     body: "Channels streaming the game right now, per platform, from each platform's latest reading (no older than 2 hours). When there's no recent YouTube reading, its row is a daily average of channels live at once, dated.",
     source:
-      "Twitch API, every 30 minutes. Kick API, hourly. YouTube: Stream Hatchet live data, hourly, or its daily averages.",
+      "Stream Hatchet live data, hourly, for the biggest games. Other games: Twitch API, every 30 minutes (the top 5,000 streams at most). Kick API, hourly (the top 100 channels per Kick category). YouTube: Stream Hatchet's daily averages.",
   },
   avgChannels7d: {
     title: "Avg Live Channels · 7d",
-    body: "Average number of channels streaming the game at any moment over the last 7 days, per platform. The total adds the platforms together.",
+    body: "Average number of channels streaming the game at any moment over the last 7 days, per platform. The total adds the platforms together. Twitch counts stop at the top 5,000 streams and Kick counts at the top 100 channels per Kick category, so the biggest games read low.",
     source:
       "Twitch API, every 30 minutes. Kick API, hourly. YouTube: Stream Hatchet's daily averages.",
   },

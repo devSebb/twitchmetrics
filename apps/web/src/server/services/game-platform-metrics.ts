@@ -150,11 +150,15 @@ function group(rows: GamePlatformMetricRow[]): GamePlatformMetricGroup {
 
 function sourcePriority(source: string): number {
   switch (source) {
+    // Stream Hatchet's data first (their QA, 2026-11), and it holds up: at the
+    // same hour its viewers match the APIs' within a few percent, and it sees
+    // every channel, where ours stop at Twitch's top 5,000 streams and Kick's
+    // top 100 per category. Only the biggest games have it.
+    case "streamhatchet_live":
+      return 110;
     case "twitch_api":
     case "kick_api":
       return 100;
-    case "streamhatchet_live":
-      return 80;
     case "api":
       return 50;
     // A day's average is better than an empty YouTube column, and worse than
@@ -164,6 +168,31 @@ function sourcePriority(source: string): number {
     default:
       return 10;
   }
+}
+
+type PlatformReading = SnapshotTiming & {
+  platform: Platform;
+  viewers: number;
+  channels: number | null;
+};
+
+/**
+ * The reading to show per platform: the best source among those still fresh.
+ * Freshness comes first, or an old reading from a better source would blank
+ * the row although a current one exists (a game that just left SH's top games).
+ */
+export function latestReadings(
+  readings: PlatformReading[],
+  now = Date.now(),
+): Map<Platform, PlatformReading> {
+  const latest = new Map<Platform, PlatformReading>();
+  for (const reading of readings) {
+    if (!isSnapshotFresh(reading, now)) continue;
+    if (preferSnapshot(reading, latest.get(reading.platform))) {
+      latest.set(reading.platform, reading);
+    }
+  }
+  return latest;
 }
 
 export async function getGamePlatformMetrics(input: {
@@ -206,69 +235,55 @@ export async function getGamePlatformMetrics(input: {
     }),
   ]);
 
-  const latestByPlatform = new Map<
-    Platform,
-    {
-      viewers: number;
-      channels: number | null;
-      snapshotAt: Date;
-      bucketStartedAt: Date;
-      source: string;
-    }
-  >();
-
-  for (const snapshot of platformSnapshots) {
-    const existing = latestByPlatform.get(snapshot.platform);
-    if (preferSnapshot(snapshot, existing)) {
-      latestByPlatform.set(snapshot.platform, {
-        viewers: snapshot.viewers,
-        channels: snapshot.channels,
-        snapshotAt: snapshot.snapshotAt,
-        bucketStartedAt: snapshot.bucketStartedAt,
-        source: snapshot.source,
+  const readings: PlatformReading[] = [...platformSnapshots];
+  if (legacySnapshot) {
+    const { snapshotAt } = legacySnapshot;
+    const legacy = (
+      platform: Platform,
+      source: string,
+      viewers: number,
+      channels: number,
+    ) =>
+      readings.push({
+        platform,
+        source,
+        snapshotAt,
+        bucketStartedAt: snapshotAt,
+        viewers,
+        channels,
       });
-    }
-  }
-
-  if (legacySnapshot && isFresh(legacySnapshot.snapshotAt, "twitch_api")) {
-    latestByPlatform.set("twitch", {
-      viewers: legacySnapshot.twitchViewers,
-      channels: legacySnapshot.twitchChannels,
-      snapshotAt: legacySnapshot.snapshotAt,
-      bucketStartedAt: legacySnapshot.snapshotAt,
-      source: "twitch_api",
-    });
-
+    legacy(
+      "twitch",
+      "twitch_api",
+      legacySnapshot.twitchViewers,
+      legacySnapshot.twitchChannels,
+    );
     if (legacySnapshot.kickViewers > 0) {
-      latestByPlatform.set("kick", {
-        viewers: legacySnapshot.kickViewers,
-        channels: legacySnapshot.kickChannels,
-        snapshotAt: legacySnapshot.snapshotAt,
-        bucketStartedAt: legacySnapshot.snapshotAt,
-        source: "legacy_game_snapshot",
-      });
+      legacy(
+        "kick",
+        "legacy_game_snapshot",
+        legacySnapshot.kickViewers,
+        legacySnapshot.kickChannels,
+      );
     }
-
     if (legacySnapshot.youtubeViewers > 0) {
-      latestByPlatform.set("youtube", {
-        viewers: legacySnapshot.youtubeViewers,
-        channels: legacySnapshot.youtubeChannels,
-        snapshotAt: legacySnapshot.snapshotAt,
-        bucketStartedAt: legacySnapshot.snapshotAt,
-        source: "legacy_game_snapshot",
-      });
+      legacy(
+        "youtube",
+        "legacy_game_snapshot",
+        legacySnapshot.youtubeViewers,
+        legacySnapshot.youtubeChannels,
+      );
     }
   }
 
   const viewerRows: GamePlatformMetricRow[] = [];
   const channelRows: GamePlatformMetricRow[] = [];
 
-  for (const [platform, snapshot] of latestByPlatform) {
-    if (!isSnapshotFresh(snapshot)) continue;
-    const caption = captionFor(snapshot.source, snapshot.bucketStartedAt);
-    viewerRows.push({ platform, value: snapshot.viewers, caption });
-    if (snapshot.channels !== null) {
-      channelRows.push({ platform, value: snapshot.channels, caption });
+  for (const [platform, reading] of latestReadings(readings)) {
+    const caption = captionFor(reading.source, reading.bucketStartedAt);
+    viewerRows.push({ platform, value: reading.viewers, caption });
+    if (reading.channels !== null) {
+      channelRows.push({ platform, value: reading.channels, caption });
     }
   }
 
@@ -286,8 +301,7 @@ export type GameWindowMetrics = {
   avgViewers: GamePlatformMetricGroup;
   /**
    * 24h peak per platform. No total: the platforms peak at different moments,
-   * and adding their peaks would report an audience nobody measured. YouTube
-   * has no peak: its figures here are daily averages.
+   * and adding their peaks would report an audience nobody measured.
    */
   peakViewers: GamePlatformMetricGroup;
   /** 7-day average live channels per platform; the total is their sum. */
@@ -302,8 +316,16 @@ type TwitchWindow = {
 
 type KickReading = { bucketStartedAt: Date; viewers: number; channels: number };
 type YouTubeDay = { bucketStartedAt: Date; viewers: number; channels: number };
+/** One hourly Stream Hatchet reading, for the 24h peak. */
+type LiveReading = {
+  platform: Platform;
+  bucketStartedAt: Date;
+  viewers: number;
+};
 
 const WINDOW_DAYS = 7;
+/** The most channels our Kick reading returns for one Kick category. */
+const KICK_CHANNELS_PER_CATEGORY = 100;
 
 /** Stream Hatchet's 7-day average viewers per platform, for named days. */
 export type DailyViewerAverages = {
@@ -374,8 +396,13 @@ export function dailyViewerAverages(
  * - YouTube: Stream Hatchet's daily averages for the days in the window,
  *   captioned with those days — they trail live data by a day or two.
  *
- * Average channels stay on these readings: SH's feed leaves out small channels,
- * so its daily totals read several times under the channels actually live.
+ * Average channels stay on these readings: SH's daily feed leaves out small
+ * channels, so its totals read several times under the channels actually live.
+ * Kick's reading stops at the top 100 channels per category, so a row at that
+ * limit says it counts top channels only.
+ *
+ * The 24h peak is the highest reading from any source: our readings plus SH's
+ * hourly live ones (`live`), which only the biggest games have.
  *
  * Pure, so the arithmetic is testable without a database.
  */
@@ -385,8 +412,26 @@ export function buildGameWindowMetrics(input: {
   kick: KickReading[];
   youtube: YouTubeDay[];
   daily?: DailyViewerAverages | null;
+  live?: LiveReading[];
 }): GameWindowMetrics {
   const { until, twitch, daily } = input;
+  const since24h = until.getTime() - DAY_MS;
+  const livePeak = new Map<Platform, number>();
+  for (const reading of input.live ?? []) {
+    if (reading.bucketStartedAt.getTime() < since24h) continue;
+    livePeak.set(
+      reading.platform,
+      Math.max(livePeak.get(reading.platform) ?? 0, reading.viewers),
+    );
+  }
+  const peakRow = (
+    platform: Platform,
+    reading: number,
+  ): GamePlatformMetricRow => ({
+    platform,
+    value: Math.max(reading, livePeak.get(platform) ?? 0),
+    caption: null,
+  });
   const averageRow = (
     platform: "twitch" | "kick" | "youtube",
     reading: number,
@@ -401,7 +446,7 @@ export function buildGameWindowMetrics(input: {
     averageRow("twitch", twitch.avgViewers, null),
   ];
   const peakViewers: GamePlatformMetricRow[] = [
-    { platform: "twitch", value: twitch.peakViewers24h, caption: null },
+    peakRow("twitch", twitch.peakViewers24h),
   ];
   const avgChannels: GamePlatformMetricRow[] = [
     { platform: "twitch", value: twitch.avgChannels, caption: null },
@@ -441,16 +486,26 @@ export function buildGameWindowMetrics(input: {
         totalViewers: p.channels,
       })),
     );
-    const since24h = until.getTime() - DAY_MS;
     const peak24h = points
       .filter((p) => p.snapshotAt.getTime() >= since24h)
       .reduce((peak, p) => Math.max(peak, p.viewers), 0);
     avgViewers.push(averageRow("kick", viewers.average, caption));
-    avgChannels.push({ platform: "kick", value: channels.average, caption });
-    peakViewers.push({ platform: "kick", value: peak24h, caption: null });
-  } else if (daily?.viewers.kick !== undefined) {
-    avgViewers.push(averageRow("kick", 0, null));
+    avgChannels.push({
+      platform: "kick",
+      value: channels.average,
+      caption:
+        channels.peak >= KICK_CHANNELS_PER_CATEGORY
+          ? "top channels only"
+          : caption,
+    });
+    peakViewers.push(peakRow("kick", peak24h));
+  } else {
+    if (daily?.viewers.kick !== undefined) {
+      avgViewers.push(averageRow("kick", 0, null));
+    }
+    if (livePeak.has("kick")) peakViewers.push(peakRow("kick", 0));
   }
+  if (livePeak.has("youtube")) peakViewers.push(peakRow("youtube", 0));
 
   if (input.youtube.length > 0) {
     const days = [...input.youtube].sort(
@@ -512,11 +567,19 @@ export async function getGameWindowMetrics(input: {
   twitch: TwitchWindow;
 }): Promise<GameWindowMetrics> {
   const since = new Date(input.until.getTime() - WEEK_MS);
-  const [daily, kick, youtube] = await Promise.all([
+  const [daily, live, kick, youtube] = await Promise.all([
     // One figure's source: if it fails, the header shows our readings.
     getDailyViewerAverages(input.gameId).catch((err: unknown) => {
       log.warn({ err, gameId: input.gameId }, "daily viewer averages failed");
       return null;
+    }),
+    prisma.gamePlatformViewerSnapshot.findMany({
+      where: {
+        gameId: input.gameId,
+        source: "streamhatchet_live",
+        bucketStartedAt: { gte: new Date(input.until.getTime() - DAY_MS) },
+      },
+      select: { platform: true, bucketStartedAt: true, viewers: true },
     }),
     prisma.gamePlatformViewerSnapshot.findMany({
       where: {
@@ -549,5 +612,6 @@ export async function getGameWindowMetrics(input: {
     kick: kick.map((row) => ({ ...row, channels: row.channels ?? 0 })),
     youtube: youtube.map((row) => ({ ...row, channels: row.channels ?? 0 })),
     daily,
+    live,
   });
 }
