@@ -314,3 +314,75 @@ describe("Twitch priority", () => {
     expect(mocks.priorities).toEqual(["tier", "tier"]);
   });
 });
+
+describe("profiles polled at once (GitHub)", () => {
+  /** Track how many fetchSnapshot calls are in flight, and their order. */
+  function trackOverlap() {
+    const seen = { inFlight: 0, max: 0, order: [] as string[] };
+    mocks.fetchSnapshot.mockImplementation(async (platformUserId: string) => {
+      seen.order.push(platformUserId);
+      seen.inFlight++;
+      seen.max = Math.max(seen.max, seen.inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      seen.inFlight--;
+      return twitchSnapshot;
+    });
+    return seen;
+  }
+
+  beforeEach(() => {
+    mocks.profiles = Array.from({ length: 12 }, (_, i) => ({
+      id: `p${String(i).padStart(2, "0")}`,
+      platformAccounts: [account(`a${i}`, "twitch", `u${i}`)],
+    }));
+  });
+
+  it("default (Inngest): one profile after another, in order", async () => {
+    const seen = trackOverlap();
+
+    const result = await runTierSnapshot("tier3", step);
+
+    expect(seen.max).toBe(1);
+    expect(seen.order).toEqual(
+      mocks.profiles.map((p) => p.platformAccounts[0]!.platformUserId),
+    );
+    expect(result.processed).toBe(12);
+  });
+
+  it("profileConcurrency 5: at most 5 at once, every count exact", async () => {
+    const seen = trackOverlap();
+    mocks.fetchSnapshot.mockImplementationOnce(async () => {
+      throw new Error("boom"); // one failure among the overlapping profiles
+    });
+
+    const result = await runTierSnapshot("tier3", step, {
+      profileConcurrency: 5,
+    });
+
+    expect(seen.max).toBe(5);
+    expect(result.processed).toBe(11);
+    expect(result.errors).toBe(1);
+    expect(mocks.prisma.metricSnapshot.create).toHaveBeenCalledTimes(11);
+    expect(mocks.invalidateCreatorCacheOrThrow).toHaveBeenCalledTimes(12);
+  });
+
+  it("reports where the time went, per run and in the run metadata", async () => {
+    trackOverlap();
+
+    const result = await runTierSnapshot("tier3", step, {
+      profileConcurrency: 5,
+    });
+
+    expect(result.timing).toEqual({
+      wallMs: expect.any(Number),
+      youtubeMs: expect.any(Number),
+      twitchWaitMs: expect.any(Number),
+      twitchHttpMs: expect.any(Number),
+      dbAndOtherMs: expect.any(Number),
+    });
+    expect(result.timing.dbAndOtherMs).toBeGreaterThan(0);
+    expect(tierRunSummary(result, { runner: "github" }).metadata).toMatchObject(
+      { timing: result.timing },
+    );
+  });
+});

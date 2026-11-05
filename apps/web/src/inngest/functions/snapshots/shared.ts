@@ -10,7 +10,10 @@ import {
 import { decryptToken } from "@/lib/encryption";
 import { createLogger } from "@/lib/logger";
 import { getAdapter } from "@/server/adapters";
-import { withTwitchPriority } from "@/server/adapters/twitch-rate";
+import {
+  getTwitchRateStats,
+  withTwitchPriority,
+} from "@/server/adapters/twitch-rate";
 import {
   fetchChannelsByIds,
   youtubeSnapshotFromStats,
@@ -81,7 +84,50 @@ export type TierSnapshotOptions = {
    * each step is a fresh request, so a wall clock differs per replay.
    */
   timeBudgetMs?: number;
+  /**
+   * Profiles of a batch polled at once (default 1, one after another). The
+   * GitHub runner sits farther from the database than Vercel, so each
+   * profile's 8-10 sequential queries cost more there; overlapping a few
+   * profiles hides that latency. Inngest keeps 1: a batch step must finish
+   * inside Vercel's 300 s cap and its behaviour must not change. Twitch
+   * pacing still applies per call, so overlapping can't eat the reserve.
+   */
+  profileConcurrency?: number;
 };
+
+/**
+ * Where a batch's time went. The *Ms fields are summed over profiles, so
+ * with profileConcurrency > 1 they add up to more than the wall time.
+ * Twitch figures come from the process-wide pacing stats: on Vercel they
+ * can include other functions running in the same instance.
+ */
+export type TierBatchTiming = {
+  wallMs: number;
+  /** The batched YouTube channels.list lookups, before the profiles. */
+  youtubeMs: number;
+  twitchWaitMs: number;
+  twitchHttpMs: number;
+  /** Everything else in the profiles: database writes, aggregates, cache. */
+  dbAndOtherMs: number;
+};
+
+const NO_TIME: TierBatchTiming = {
+  wallMs: 0,
+  youtubeMs: 0,
+  twitchWaitMs: 0,
+  twitchHttpMs: 0,
+  dbAndOtherMs: 0,
+};
+
+function addTiming(a: TierBatchTiming, b: TierBatchTiming): TierBatchTiming {
+  return {
+    wallMs: a.wallMs + b.wallMs,
+    youtubeMs: a.youtubeMs + b.youtubeMs,
+    twitchWaitMs: a.twitchWaitMs + b.twitchWaitMs,
+    twitchHttpMs: a.twitchHttpMs + b.twitchHttpMs,
+    dbAndOtherMs: a.dbAndOtherMs + b.dbAndOtherMs,
+  };
+}
 
 export type TierSnapshotResult = {
   tier: SnapshotTier;
@@ -94,9 +140,35 @@ export type TierSnapshotResult = {
   stoppedByTimeBudget: boolean;
   /** "on", or why invalidation was switched off during the run. */
   cacheInvalidation: string;
+  /** Batch timings added up (see TierBatchTiming). */
+  timing: TierBatchTiming;
 };
 
 const DAY_MS = 86_400_000;
+
+/**
+ * Run `fn` over `items`, at most `limit` at a time. limit 1 is a plain
+ * sequential loop, exactly the behaviour before overlapping existed.
+ */
+async function forEachLimited<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  if (limit <= 1) {
+    for (const item of items) await fn(item);
+    return;
+  }
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      await fn(items[next++]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+}
 
 /** Stable shard of a profile id: UUIDs end in random hex. */
 export function profileShard(id: string, count: number): number {
@@ -206,6 +278,8 @@ export async function runTierSnapshot(
   let resumed = 0;
   let profilesReached = 0;
   let stoppedByTimeBudget = false;
+  let timing = NO_TIME;
+  const profileConcurrency = Math.max(1, options.profileConcurrency ?? 1);
   const shardTag = shard ? `-s${shard.index}of${shard.count}` : "";
 
   for (let i = 0; i < profileIds.length; i += BATCH_SIZE) {
@@ -228,14 +302,34 @@ export async function runTierSnapshot(
       `snapshot-batch-${tier}${shardTag}-${batchIndex}`,
       () =>
         withTwitchPriority("tier", () =>
-          snapshotProfileBatch(batchIds, cache, resumeSince),
+          snapshotProfileBatch(
+            batchIds,
+            cache,
+            resumeSince,
+            profileConcurrency,
+          ),
         ),
-    )) as { processed: number; errors: number; resumed: number };
+    )) as BatchResult;
 
     processed += batchResult.processed;
     errors += batchResult.errors;
     resumed += batchResult.resumed ?? 0;
     profilesReached += batchIds.length;
+    // Batches memoized before timing existed have none.
+    if (batchResult.timing) {
+      timing = addTiming(timing, batchResult.timing);
+      log.info(
+        {
+          tier,
+          batchIndex,
+          profiles: batchIds.length,
+          profileConcurrency,
+          accounts: batchResult.processed + batchResult.errors,
+          ...batchResult.timing,
+        },
+        "Tier batch timing",
+      );
+    }
   }
 
   // Invalidate trending/landing cache after a full tier batch
@@ -250,6 +344,7 @@ export async function runTierSnapshot(
     profilesReached,
     stoppedByTimeBudget,
     cacheInvalidation: cache.status(),
+    timing,
   };
   log.info({ ...result, shard }, "Tier snapshot completed");
   return result;
@@ -285,6 +380,7 @@ export function tierRunSummary(
       profilesTotal: result.profilesTotal,
       profilesReached: result.profilesReached,
       cacheInvalidation: result.cacheInvalidation,
+      timing: result.timing,
     },
   };
 }
@@ -321,11 +417,21 @@ async function prefetchYouTube(
   }
 }
 
+type BatchResult = {
+  processed: number;
+  errors: number;
+  resumed: number;
+  timing?: TierBatchTiming;
+};
+
 async function snapshotProfileBatch(
   profileIds: string[],
   cache: RunCacheInvalidator,
   resumeSince: string | null,
-): Promise<{ processed: number; errors: number; resumed: number }> {
+  profileConcurrency: number,
+): Promise<BatchResult> {
+  const batchStartedAt = Date.now();
+  const twitchBefore = getTwitchRateStats();
   const profiles: SnapshotableProfile[] = await prisma.creatorProfile.findMany({
     where: { id: { in: profileIds } },
     select: {
@@ -374,6 +480,7 @@ async function snapshotProfileBatch(
   const isDone = (profileId: string, platform: Platform) =>
     done.has(`${profileId}:${platform}`);
 
+  const youtubeStartedAt = Date.now();
   const youtube = await prefetchYouTube(
     profiles.flatMap((profile) =>
       profile.platformAccounts
@@ -385,92 +492,139 @@ async function snapshotProfileBatch(
         .map((account) => account.platformUserId),
     ),
   );
+  const youtubeMs = Date.now() - youtubeStartedAt;
   const youtubeSnapshotAt = new Date();
 
+  // Each profile returns its own counts; nothing is shared between
+  // profiles that overlap.
+  const results: Array<{
+    processed: number;
+    errors: number;
+    resumed: number;
+    ms: number;
+  }> = [];
+
+  await forEachLimited(profiles, profileConcurrency, async (profile) => {
+    const startedAt = Date.now();
+    const counts = await snapshotOneProfile(
+      profile,
+      cache,
+      isDone,
+      youtube,
+      youtubeSnapshotAt,
+    );
+    results.push({ ...counts, ms: Date.now() - startedAt });
+  });
+
+  const twitchAfter = getTwitchRateStats();
+  const twitchWaitMs = twitchAfter.waitMs - twitchBefore.waitMs;
+  const twitchHttpMs = twitchAfter.httpMs - twitchBefore.httpMs;
+  const profileMs = results.reduce((sum, r) => sum + r.ms, 0);
+
+  return {
+    processed: results.reduce((sum, r) => sum + r.processed, 0),
+    errors: results.reduce((sum, r) => sum + r.errors, 0),
+    resumed: results.reduce((sum, r) => sum + r.resumed, 0),
+    timing: {
+      wallMs: Date.now() - batchStartedAt,
+      youtubeMs,
+      twitchWaitMs,
+      twitchHttpMs,
+      dbAndOtherMs: Math.max(0, profileMs - twitchWaitMs - twitchHttpMs),
+    },
+  };
+}
+
+async function snapshotOneProfile(
+  profile: SnapshotableProfile,
+  cache: RunCacheInvalidator,
+  isDone: (profileId: string, platform: Platform) => boolean,
+  youtube: Map<string, YouTubeChannelStats> | null,
+  youtubeSnapshotAt: Date,
+): Promise<{ processed: number; errors: number; resumed: number }> {
   let processed = 0;
   let errors = 0;
   let resumed = 0;
-
-  for (const profile of profiles) {
-    let polled = 0;
-    for (const account of profile.platformAccounts) {
-      if (isDone(profile.id, account.platform)) {
-        resumed++;
-        continue;
-      }
-      polled++;
-      let prefetched: PrefetchedSnapshot | undefined;
-      if (account.platform === "youtube" && youtube) {
-        const stats = youtube.get(account.platformUserId);
-        prefetched = stats
-          ? youtubeSnapshotFromStats(stats, youtubeSnapshotAt)
-          : YOUTUBE_MISSING;
-      }
-      try {
-        await snapshotPlatformAccount(profile.id, account, prefetched);
-        processed++;
-      } catch (err) {
-        if (isNotFoundError(err)) {
-          // Expected for deleted/banned channels: count it, don't call it a
-          // failure, and stop polling once the threshold is reached.
-          const notFoundCount = account.notFoundCount + 1;
-          await prisma.platformAccount
-            .update({
-              where: { id: account.id },
-              data: { notFoundCount, lastNotFoundAt: new Date() },
-            })
-            .catch(() => {});
-          log.warn(
-            {
-              creatorProfileId: profile.id,
-              platform: account.platform,
-              platformUserId: account.platformUserId,
-              notFoundCount,
-              stopped: notFoundCount >= NOT_FOUND_SKIP_THRESHOLD,
-            },
-            "Platform account not found",
-          );
-          continue;
-        }
-        errors++;
-        log.error(
+  let polled = 0;
+  for (const account of profile.platformAccounts) {
+    if (isDone(profile.id, account.platform)) {
+      resumed++;
+      continue;
+    }
+    polled++;
+    let prefetched: PrefetchedSnapshot | undefined;
+    if (account.platform === "youtube" && youtube) {
+      const stats = youtube.get(account.platformUserId);
+      prefetched = stats
+        ? youtubeSnapshotFromStats(stats, youtubeSnapshotAt)
+        : YOUTUBE_MISSING;
+    }
+    try {
+      await snapshotPlatformAccount(profile.id, account, prefetched);
+      processed++;
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        // Expected for deleted/banned channels: count it, don't call it a
+        // failure, and stop polling once the threshold is reached.
+        const notFoundCount = account.notFoundCount + 1;
+        await prisma.platformAccount
+          .update({
+            where: { id: account.id },
+            data: { notFoundCount, lastNotFoundAt: new Date() },
+          })
+          .catch(() => {});
+        log.warn(
           {
-            err,
             creatorProfileId: profile.id,
             platform: account.platform,
             platformUserId: account.platformUserId,
+            notFoundCount,
+            stopped: notFoundCount >= NOT_FOUND_SKIP_THRESHOLD,
           },
-          "Failed to snapshot platform account",
+          "Platform account not found",
         );
+        continue;
       }
-    }
-    // Fully resumed profile: its aggregates were updated by the first attempt.
-    if (polled === 0 && profile.platformAccounts.length > 0) continue;
-
-    // Update aggregate totals and evaluate tier changes
-    try {
-      await recomputeCreatorAggregates(profile.id);
-      await recomputeCreatorGrowthRollups(
-        profile.id,
-        profile.platformAccounts.map((account) => account.platform),
-      );
-    } catch (err) {
+      errors++;
       log.error(
-        { err, creatorProfileId: profile.id },
-        "Failed to update profile aggregates",
+        {
+          err,
+          creatorProfileId: profile.id,
+          platform: account.platform,
+          platformUserId: account.platformUserId,
+        },
+        "Failed to snapshot platform account",
       );
     }
+  }
+  // Fully resumed profile: its aggregates were updated by the first attempt.
+  if (polled === 0 && profile.platformAccounts.length > 0) {
+    return { processed, errors, resumed };
+  }
 
-    // Never fails the run (see createRunCacheInvalidator).
-    try {
-      const slug = await getCreatorSlug(profile.id);
-      if (slug) await cache.creator(slug);
-    } catch (err) {
-      log.warn(
-        { err, creatorProfileId: profile.id },
-        "Cache invalidation failed — continuing",
-      );
-    }
+  // Update aggregate totals and evaluate tier changes
+  try {
+    await recomputeCreatorAggregates(profile.id);
+    await recomputeCreatorGrowthRollups(
+      profile.id,
+      profile.platformAccounts.map((account) => account.platform),
+    );
+  } catch (err) {
+    log.error(
+      { err, creatorProfileId: profile.id },
+      "Failed to update profile aggregates",
+    );
+  }
+
+  // Never fails the run (see createRunCacheInvalidator).
+  try {
+    const slug = await getCreatorSlug(profile.id);
+    if (slug) await cache.creator(slug);
+  } catch (err) {
+    log.warn(
+      { err, creatorProfileId: profile.id },
+      "Cache invalidation failed — continuing",
+    );
   }
 
   return { processed, errors, resumed };

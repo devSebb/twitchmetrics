@@ -57,6 +57,13 @@ env:
   # shared bucket free for game snapshots and page requests.
   TWITCH_RATE_PRIORITY: tier
   RESUME_SINCE: ${{ inputs.resume_since }}
+  # --profile-concurrency 5 (below): profiles of a batch polled 5 at a time.
+  # The runner is farther from Neon than Vercel, so each profile's sequential
+  # queries cost more here; the first run with 1 took 100 min for 88% of
+  # tier1 (Inngest: 29-50 min). Twitch pacing is per call, so this can't eat
+  # the reserve. Each profile runs its queries one at a time (no transactions
+  # or parallel queries), so 5 profiles need 5 connections: Prisma's default
+  # pool is 2 x physical CPUs + 1, at least 5 on a GitHub runner.
   # Not `&& ''`: an empty string is falsy here and would always pick --write.
   WRITE_FLAG: ${{ inputs.dry_run && '--dry-run' || '--write' }}
 
@@ -81,7 +88,7 @@ jobs:
         run: pnpm --filter @twitchmetrics/database db:generate
       - name: Snapshot tier1
         run: |
-          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier \
+          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier --profile-concurrency 5 \
             --tier tier1 --time-budget-min 100 \
             ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG
 
@@ -105,7 +112,7 @@ jobs:
         run: pnpm --filter @twitchmetrics/database db:generate
       - name: Snapshot tier2
         run: |
-          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier \
+          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier --profile-concurrency 5 \
             --tier tier2 --time-budget-min 215 \
             ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG
 
@@ -139,6 +146,6 @@ jobs:
         run: pnpm --filter @twitchmetrics/database db:generate
       - name: Snapshot tier3 shard ${{ matrix.shard }}
         run: |
-          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier \
+          npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier --profile-concurrency 5 \
             --tier tier3 --shard "${{ matrix.shard }}" --time-budget-min 195 \
             ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG

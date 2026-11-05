@@ -78,3 +78,38 @@ describe("twitch adapter rate handling", () => {
     expect(sleeps).toEqual([10_250]);
   });
 });
+
+describe("twitch app token", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("overlapping callers with a cold cache share one token request", async () => {
+    vi.stubEnv("TWITCH_CLIENT_ID", "id");
+    vi.stubEnv("TWITCH_CLIENT_SECRET", "secret");
+    vi.resetModules(); // fresh module: no cached token
+    const { fetchFollowerTotal: fresh } = await import("./twitch");
+    let tokenCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("https://id.twitch.tv/")) {
+          tokenCalls++;
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return new Response(
+            JSON.stringify({ access_token: "t", expires_in: 3600 }),
+          );
+        }
+        return helix(200);
+      }),
+    );
+
+    const totals = await Promise.all(
+      Array.from({ length: 5 }, () => fresh("123")),
+    );
+
+    expect(totals).toEqual([42, 42, 42, 42, 42]);
+    expect(tokenCalls).toBe(1);
+  });
+});

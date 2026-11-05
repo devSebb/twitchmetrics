@@ -14,6 +14,8 @@
  *                                   the run is then `degraded`, not failed
  *        --resume-since ISO         skip accounts snapshotted since then
  *                                   (re-run after a partial/failed run)
+ *        --profile-concurrency N    profiles of a batch polled at once
+ *                                   (default 1; the workflow uses 5)
  *        --write                    without it (or with --dry-run): a
  *                                   read-only count of what would be polled,
  *                                   no API calls, no writes
@@ -86,11 +88,25 @@ async function tierJob() {
   const shard = parseShard(argValue("--shard"));
   const budgetMin = argValue("--time-budget-min");
   const resumeSince = argValue("--resume-since");
+  const concurrency = argValue("--profile-concurrency");
   const options: TierSnapshotOptions = {
     ...(shard ? { shard } : {}),
     ...(budgetMin ? { timeBudgetMs: Number(budgetMin) * 60_000 } : {}),
     ...(resumeSince ? { resumeSince: new Date(resumeSince) } : {}),
+    ...(concurrency ? { profileConcurrency: Number(concurrency) } : {}),
   };
+  if (
+    options.profileConcurrency != null &&
+    !(
+      Number.isInteger(options.profileConcurrency) &&
+      options.profileConcurrency >= 1 &&
+      options.profileConcurrency <= 20
+    )
+  ) {
+    throw new Error(
+      `--profile-concurrency must be 1-20 (got '${concurrency}')`,
+    );
+  }
   if (options.resumeSince && Number.isNaN(options.resumeSince.getTime())) {
     throw new Error(`--resume-since is not a date: '${resumeSince}'`);
   }

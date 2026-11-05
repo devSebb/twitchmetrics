@@ -29,13 +29,22 @@ const OAUTH_URL = "https://id.twitch.tv/oauth2/token";
 // ============================================================
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
+let tokenRequest: Promise<string> | null = null;
 
 async function getAppAccessToken(): Promise<string> {
   // Return cached token if still valid (with 5-min buffer)
   if (cachedToken && cachedToken.expiresAt > Date.now() + 5 * 60 * 1000) {
     return cachedToken.token;
   }
+  // Callers that overlap (tier jobs poll several profiles at once on
+  // GitHub) share one token request instead of each fetching their own.
+  tokenRequest ??= requestAppAccessToken().finally(() => {
+    tokenRequest = null;
+  });
+  return tokenRequest;
+}
 
+async function requestAppAccessToken(): Promise<string> {
   const clientId = process.env.TWITCH_CLIENT_ID;
   const clientSecret = process.env.TWITCH_CLIENT_SECRET;
 

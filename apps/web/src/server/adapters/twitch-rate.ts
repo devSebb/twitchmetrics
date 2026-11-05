@@ -77,8 +77,11 @@ let bucket: Bucket | null = null;
 export type TwitchRateStats = {
   calls: number;
   waits: number;
+  /** Time spent waiting for the bucket (summed when calls overlap). */
   waitMs: number;
   rateLimited: number;
+  /** Time inside Helix requests (summed when calls overlap). */
+  httpMs: number;
   minRemaining: number | null;
 };
 
@@ -87,6 +90,7 @@ const stats: TwitchRateStats = {
   waits: 0,
   waitMs: 0,
   rateLimited: 0,
+  httpMs: 0,
   minRemaining: null,
 };
 
@@ -148,21 +152,40 @@ async function waitFor(ms: number): Promise<void> {
   await clock.sleep(capped);
 }
 
+/** Helix refills the bucket about once a minute. */
+const WINDOW_MS = 60_000;
+
+/**
+ * Treat the bucket as full again, for an estimated new window, until the
+ * next response's headers say otherwise. Moving resetAtMs forward matters
+ * with overlapping callers: otherwise every one of them would "refill" on
+ * the same expired reading and throw away the others' local counts.
+ */
+function assumeRefilled(now: number): void {
+  if (bucket) {
+    bucket = { ...bucket, remaining: bucket.limit, resetAtMs: now + WINDOW_MS };
+  }
+}
+
 /** Before a job-scope call: wait for the reset when below the reserve. */
 async function gate(priority: TwitchPriority): Promise<void> {
-  if (!bucket) return;
-  const now = clock.now();
-  if (bucket.resetAtMs <= now) {
-    // The reported window is over; the bucket has refilled.
-    bucket = { ...bucket, remaining: bucket.limit };
-  }
-  if (bucket.remaining < TWITCH_RESERVE[priority]) {
+  for (;;) {
+    if (!bucket) return;
+    const now = clock.now();
+    if (bucket.resetAtMs <= now) assumeRefilled(now);
+    // Clamped to the bucket's size: with a reported limit below the reserve,
+    // a refilled bucket must still let one call through, or this loop would
+    // never exit.
+    const reserve = Math.min(TWITCH_RESERVE[priority], bucket.limit);
+    if (bucket.remaining >= reserve) {
+      // Take the point in the same synchronous step as the check, before
+      // the response arrives: overlapping calls in this process can't all
+      // pass on one stale reading.
+      bucket.remaining -= 1;
+      return;
+    }
     await waitFor(bucket.resetAtMs - now + RESET_SLACK_MS);
-    bucket = { ...bucket, remaining: bucket.limit };
   }
-  // Count this call before its response arrives, so concurrent calls in this
-  // process don't all pass the gate on the same stale reading.
-  bucket.remaining -= 1;
 }
 
 /**
@@ -179,7 +202,9 @@ export async function twitchRateLimitedFetch(
   for (let attempt = 0; ; attempt++) {
     if (priority) await gate(priority);
     stats.calls += 1;
+    const sentAt = clock.now();
     const res = await fetch(url, init);
+    stats.httpMs += clock.now() - sentAt;
     record(res.headers);
     if (res.status !== 429) return res;
 
@@ -193,7 +218,7 @@ export async function twitchRateLimitedFetch(
     );
     // The retry goes out now; its response brings fresh headers. Without
     // this the gate would read the 429's "0 remaining" and wait again.
-    if (bucket) bucket = { ...bucket, remaining: bucket.limit };
+    assumeRefilled(clock.now());
   }
 }
 
@@ -205,5 +230,6 @@ export function __resetTwitchRateForTests(testClock?: Clock): void {
   stats.waits = 0;
   stats.waitMs = 0;
   stats.rateLimited = 0;
+  stats.httpMs = 0;
   stats.minRemaining = null;
 }
