@@ -27,7 +27,7 @@ import {
 } from "./game-names";
 
 /** A rollup covers a whole day, so a daily total divides down to a concurrent average. */
-const MINUTES_PER_DAY = 1440;
+export const MINUTES_PER_DAY = 1440;
 
 export const DAILY_GAME_SNAPSHOT_SOURCE = "streamhatchet_daily";
 

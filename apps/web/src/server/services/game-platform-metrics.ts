@@ -1,7 +1,16 @@
 import type { Platform } from "@twitchmetrics/database";
 import { prisma } from "@twitchmetrics/database";
-import { DAILY_GAME_SNAPSHOT_SOURCE } from "@/server/services/streamhatchet/daily-game-platform";
+import { createLogger } from "@/lib/logger";
+import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-stats";
 import { summarizeViewerSeries } from "@/server/services/game-metrics";
+import { completeDayWindow } from "@/server/services/streaming-stats";
+import {
+  DAILY_GAME_SNAPSHOT_SOURCE,
+  MINUTES_PER_DAY,
+} from "@/server/services/streamhatchet/daily-game-platform";
+import { streamHatchetNamesForGame } from "@/server/services/streamhatchet/game-names";
+
+const log = createLogger("game-platform-metrics");
 
 const CURRENT_SNAPSHOT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
@@ -294,6 +303,15 @@ type TwitchWindow = {
 type KickReading = { bucketStartedAt: Date; viewers: number; channels: number };
 type YouTubeDay = { bucketStartedAt: Date; viewers: number; channels: number };
 
+const WINDOW_DAYS = 7;
+
+/** Stream Hatchet's 7-day average viewers per platform, for named days. */
+export type DailyViewerAverages = {
+  viewers: Partial<Record<"twitch" | "kick" | "youtube", number>>;
+  /** Says which days: these trail live readings by a day or two. */
+  caption: string;
+};
+
 function dayLabel(date: Date): string {
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -302,10 +320,52 @@ function dayLabel(date: Date): string {
   });
 }
 
+function dayRangeLabel(first: Date, last: Date): string {
+  return first.getTime() === last.getTime()
+    ? dayLabel(first)
+    : `${dayLabel(first)}–${dayLabel(last)}`;
+}
+
+/**
+ * 7-day average viewers per platform from Stream Hatchet's daily totals: all
+ * minutes watched over all the minutes in the window. A day with no row for a
+ * platform counts as nobody watching, so the window stays a whole 7 days.
+ * A platform with no rows at all is left out, so its caller can fall back.
+ */
+export function dailyViewerAverages(
+  rollups: { platform: string; minutesWatched: bigint | number }[],
+  days: number,
+): DailyViewerAverages["viewers"] {
+  const minutes = new Map<"twitch" | "kick" | "youtube", number>();
+  for (const rollup of rollups) {
+    const platform =
+      rollup.platform === "yt" || rollup.platform === "ytg"
+        ? "youtube"
+        : rollup.platform === "twitch" || rollup.platform === "kick"
+          ? rollup.platform
+          : null;
+    if (!platform) continue;
+    minutes.set(
+      platform,
+      (minutes.get(platform) ?? 0) + Number(rollup.minutesWatched),
+    );
+  }
+  return Object.fromEntries(
+    [...minutes].map(([platform, total]) => [
+      platform,
+      Math.round(total / (MINUTES_PER_DAY * days)),
+    ]),
+  );
+}
+
 /**
  * Header numbers for the 7 days ending `until`, per platform (QA 2026-10: the
  * header counted Twitch only, so every game read well under Stream Hatchet's
  * all-platform figure).
+ *
+ * Average viewers come from Stream Hatchet's daily totals whenever it has the
+ * platform (`daily`, SH's QA 2026-11: their data first). Everything else, and
+ * any platform SH has nothing for, comes from:
  *
  * - Twitch: the page's own 7d series — the same numbers its Twitch charts show.
  * - Kick: hourly Kick API readings, summed across the game's Kick categories
@@ -314,6 +374,9 @@ function dayLabel(date: Date): string {
  * - YouTube: Stream Hatchet's daily averages for the days in the window,
  *   captioned with those days — they trail live data by a day or two.
  *
+ * Average channels stay on these readings: SH's feed leaves out small channels,
+ * so its daily totals read several times under the channels actually live.
+ *
  * Pure, so the arithmetic is testable without a database.
  */
 export function buildGameWindowMetrics(input: {
@@ -321,10 +384,21 @@ export function buildGameWindowMetrics(input: {
   twitch: TwitchWindow;
   kick: KickReading[];
   youtube: YouTubeDay[];
+  daily?: DailyViewerAverages | null;
 }): GameWindowMetrics {
-  const { until, twitch } = input;
+  const { until, twitch, daily } = input;
+  const averageRow = (
+    platform: "twitch" | "kick" | "youtube",
+    reading: number,
+    readingCaption: string | null,
+  ): GamePlatformMetricRow => {
+    const fromDaily = daily?.viewers[platform];
+    return fromDaily === undefined
+      ? { platform, value: reading, caption: readingCaption }
+      : { platform, value: fromDaily, caption: daily?.caption ?? null };
+  };
   const avgViewers: GamePlatformMetricRow[] = [
-    { platform: "twitch", value: twitch.avgViewers, caption: null },
+    averageRow("twitch", twitch.avgViewers, null),
   ];
   const peakViewers: GamePlatformMetricRow[] = [
     { platform: "twitch", value: twitch.peakViewers24h, caption: null },
@@ -371,9 +445,11 @@ export function buildGameWindowMetrics(input: {
     const peak24h = points
       .filter((p) => p.snapshotAt.getTime() >= since24h)
       .reduce((peak, p) => Math.max(peak, p.viewers), 0);
-    avgViewers.push({ platform: "kick", value: viewers.average, caption });
+    avgViewers.push(averageRow("kick", viewers.average, caption));
     avgChannels.push({ platform: "kick", value: channels.average, caption });
     peakViewers.push({ platform: "kick", value: peak24h, caption: null });
+  } else if (daily?.viewers.kick !== undefined) {
+    avgViewers.push(averageRow("kick", 0, null));
   }
 
   if (input.youtube.length > 0) {
@@ -382,23 +458,19 @@ export function buildGameWindowMetrics(input: {
     );
     const first = days[0]!.bucketStartedAt;
     const last = days[days.length - 1]!.bucketStartedAt;
-    const range =
-      first.getTime() === last.getTime()
-        ? dayLabel(first)
-        : `${dayLabel(first)}–${dayLabel(last)}`;
-    const caption = `daily avg · ${range}`;
+    const caption = `daily avg · ${dayRangeLabel(first, last)}`;
     const mean = (values: number[]) =>
       Math.floor(values.reduce((sum, v) => sum + v, 0) / values.length);
-    avgViewers.push({
-      platform: "youtube",
-      value: mean(days.map((d) => d.viewers)),
-      caption,
-    });
+    avgViewers.push(
+      averageRow("youtube", mean(days.map((d) => d.viewers)), caption),
+    );
     avgChannels.push({
       platform: "youtube",
       value: mean(days.map((d) => d.channels)),
       caption,
     });
+  } else if (daily?.viewers.youtube !== undefined) {
+    avgViewers.push(averageRow("youtube", 0, null));
   }
 
   return {
@@ -408,13 +480,44 @@ export function buildGameWindowMetrics(input: {
   };
 }
 
+/** The last 7 complete days of a game's Stream Hatchet totals, every spelling. */
+async function getDailyViewerAverages(
+  gameId: string,
+): Promise<DailyViewerAverages> {
+  const window = completeDayWindow(
+    WINDOW_DAYS,
+    await getLastCompleteStatsDay(),
+  );
+  const names = await streamHatchetNamesForGame(prisma, gameId, window.start);
+  const rollups = await prisma.gameDailyRollup.findMany({
+    where: {
+      source: "streamhatchet",
+      date: { gte: window.start, lte: window.lastDay },
+      OR: [
+        { platform: { in: ["twitch", "kick"] }, gameName: { in: names.all } },
+        { platform: { in: ["yt", "ytg"] }, gameName: { in: names.youtube } },
+      ],
+    },
+    select: { platform: true, minutesWatched: true },
+  });
+  return {
+    viewers: dailyViewerAverages(rollups, WINDOW_DAYS),
+    caption: `daily avg · ${dayRangeLabel(window.start, window.lastDay)}`,
+  };
+}
+
 export async function getGameWindowMetrics(input: {
   gameId: string;
   until: Date;
   twitch: TwitchWindow;
 }): Promise<GameWindowMetrics> {
   const since = new Date(input.until.getTime() - WEEK_MS);
-  const [kick, youtube] = await Promise.all([
+  const [daily, kick, youtube] = await Promise.all([
+    // One figure's source: if it fails, the header shows our readings.
+    getDailyViewerAverages(input.gameId).catch((err: unknown) => {
+      log.warn({ err, gameId: input.gameId }, "daily viewer averages failed");
+      return null;
+    }),
     prisma.gamePlatformViewerSnapshot.findMany({
       where: {
         gameId: input.gameId,
@@ -445,5 +548,6 @@ export async function getGameWindowMetrics(input: {
     twitch: input.twitch,
     kick: kick.map((row) => ({ ...row, channels: row.channels ?? 0 })),
     youtube: youtube.map((row) => ({ ...row, channels: row.channels ?? 0 })),
+    daily,
   });
 }

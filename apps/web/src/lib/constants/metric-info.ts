@@ -147,8 +147,8 @@ const TWITCH_GAME_READING =
 export const GAME_INFO = {
   avgViewers7d: {
     title: "Avg Viewers · 7d",
-    body: "Average number of people watching the game at any moment over the last 7 days, per platform. The total adds the platforms together.",
-    source: `${TWITCH_GAME_READING} Kick API, hourly. YouTube: Stream Hatchet's daily averages, which run a day or two behind, so its row names the days it covers.`,
+    body: "Average number of people watching the game at any moment over the last 7 complete days, per platform. The total adds the platforms together. A stream that played several games counts equally toward each of them, so a game's figure is an estimate.",
+    source: `Stream Hatchet's daily totals, which run a day or two behind, so each row names the days it covers. If Stream Hatchet has nothing for a platform: ${TWITCH_GAME_READING} Kick API, hourly.`,
   },
   peakViewers24h: {
     title: "Peak Viewers · 24h",
@@ -174,7 +174,7 @@ export const GAME_INFO = {
   },
   viewershipHistory: {
     title: "Twitch Viewership History",
-    body: "Viewers watching the game on Twitch over time, one reading every 30 minutes. A spike shorter than that can fall between two readings, so peaks can look lower than in tools that measure more often. The average line is weighted by time, the same way as the Twitch figure in the header. Kick and YouTube aren't in this chart.",
+    body: "Viewers watching the game on Twitch over time, one reading every 30 minutes. A spike shorter than that can fall between two readings, so peaks can look lower than in tools that measure more often. The average line comes from these readings, so it can differ from the Twitch figure in the header, which uses Stream Hatchet's daily totals. Kick and YouTube aren't in this chart.",
     source: TWITCH_GAME_READING,
   },
   activity: {

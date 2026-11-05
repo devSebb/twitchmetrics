@@ -38,9 +38,10 @@ export function GameViewerChart({
   initialData,
   initialSummary,
 }: GameViewerChartProps) {
-  // 7d first: it is the header's window, so the avg line and the header's
-  // "Avg Viewers · 7d" print the same number. (The default used to be a "30d"
-  // tab seeded with the page's last 100 snapshots — about two days.)
+  // 7d first: the same span as the header's "Avg Viewers · 7d". The numbers can
+  // differ: this chart is our Twitch readings, the header Stream Hatchet's daily
+  // totals. (The default used to be a "30d" tab seeded with the page's last 100
+  // snapshots — about two days.)
   const [period, setPeriod] = useState<Period>("7d");
 
   const { data, isLoading } = useQuery({

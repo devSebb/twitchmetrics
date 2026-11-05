@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGameWindowMetrics,
   captionFor,
+  dailyViewerAverages,
   isSnapshotFresh,
   preferSnapshot,
 } from "./game-platform-metrics";
@@ -178,6 +179,109 @@ describe("buildGameWindowMetrics", () => {
     );
   });
 
+  describe("with Stream Hatchet's daily totals", () => {
+    const kick = [
+      { bucketStartedAt: hoursBack(160), viewers: 20_000, channels: 100 },
+      { bucketStartedAt: hoursBack(1), viewers: 30_000, channels: 140 },
+    ];
+    const youtube = [
+      {
+        bucketStartedAt: new Date("2026-10-17T00:00:00Z"),
+        viewers: 10_000,
+        channels: 50,
+      },
+    ];
+    const caption = "daily avg · Oct 11–Oct 17";
+
+    it("uses them for average viewers on every platform they cover", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick,
+        youtube,
+        daily: {
+          viewers: { twitch: 80_000, kick: 15_000, youtube: 9_000 },
+          caption,
+        },
+      });
+
+      expect(metrics.avgViewers.rows).toEqual([
+        { platform: "twitch", value: 80_000, caption },
+        { platform: "kick", value: 15_000, caption },
+        { platform: "youtube", value: 9_000, caption },
+      ]);
+      expect(metrics.avgViewers.total).toBe(104_000);
+    });
+
+    it("falls back to readings per platform, keeping their caption", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick,
+        youtube,
+        daily: { viewers: { kick: 15_000 }, caption },
+      });
+
+      expect(metrics.avgViewers.rows).toEqual([
+        { platform: "twitch", value: 100_000, caption: null },
+        { platform: "kick", value: 15_000, caption },
+        {
+          platform: "youtube",
+          value: 10_000,
+          caption: "daily avg · Oct 17",
+        },
+      ]);
+    });
+
+    it("shows a platform only they cover", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick: [],
+        youtube: [],
+        daily: { viewers: { kick: 15_000, youtube: 9_000 }, caption },
+      });
+
+      expect(metrics.avgViewers.rows.map((r) => r.platform)).toEqual([
+        "twitch",
+        "kick",
+        "youtube",
+      ]);
+      expect(metrics.avgChannels.rows.map((r) => r.platform)).toEqual([
+        "twitch",
+      ]);
+    });
+
+    it("leaves channels and peaks on the readings", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick,
+        youtube,
+        daily: { viewers: { twitch: 80_000 }, caption },
+      });
+
+      expect(metrics.avgChannels.total).toBe(900 + 120 + 50);
+      expect(metrics.peakViewers.rows[0]!.value).toBe(150_000);
+    });
+
+    it("keeps the readings when the daily read failed", () => {
+      const metrics = buildGameWindowMetrics({
+        until,
+        twitch,
+        kick,
+        youtube,
+        daily: null,
+      });
+
+      expect(metrics.avgViewers.rows[0]).toEqual({
+        platform: "twitch",
+        value: 100_000,
+        caption: null,
+      });
+    });
+  });
+
   it("sums a game's Kick categories within one reading", () => {
     const at = hoursBack(2);
     const metrics = buildGameWindowMetrics({
@@ -232,5 +336,46 @@ describe("buildGameWindowMetrics", () => {
       ["twitch", 150_000],
       ["kick", 40_000],
     ]);
+  });
+});
+
+describe("dailyViewerAverages", () => {
+  const minutesPerWeek = 1440 * 7;
+
+  it("divides a platform's minutes by the whole window", () => {
+    expect(
+      dailyViewerAverages(
+        [
+          { platform: "twitch", minutesWatched: BigInt(minutesPerWeek * 500) },
+          { platform: "kick", minutesWatched: minutesPerWeek * 20 },
+        ],
+        7,
+      ),
+    ).toEqual({ twitch: 500, kick: 20 });
+  });
+
+  it("adds days, spellings and YouTube's two feeds together", () => {
+    expect(
+      dailyViewerAverages(
+        [
+          { platform: "yt", minutesWatched: minutesPerWeek * 10 },
+          { platform: "yt", minutesWatched: minutesPerWeek * 5 },
+          { platform: "ytg", minutesWatched: minutesPerWeek * 1 },
+        ],
+        7,
+      ),
+    ).toEqual({ youtube: 16 });
+  });
+
+  it("counts a day with no row as nobody watching", () => {
+    expect(
+      dailyViewerAverages([{ platform: "kick", minutesWatched: 1440 * 7 }], 7),
+    ).toEqual({ kick: 1 });
+  });
+
+  it("leaves out platforms with no rows and ones it doesn't know", () => {
+    expect(
+      dailyViewerAverages([{ platform: "trovo", minutesWatched: 9_999 }], 7),
+    ).toEqual({});
   });
 });
