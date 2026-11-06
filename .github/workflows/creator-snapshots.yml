@@ -14,9 +14,14 @@
 # A partial/failed run can be finished with resume_since (skips accounts
 # already snapshotted since then, so nothing is written twice).
 #
-# Cache invalidation is best-effort and off when the Upstash secrets aren't
-# set: the cached entries it would clear expire within 5 minutes anyway, and
-# the Upstash request cap is exhausted (2026-10).
+# Cache invalidation is off here on purpose (no Upstash secrets; the run
+# logs "off (not configured)"). After a run, the cached creator API
+# responses expire within 5 minutes (CACHE_TTL.CREATOR_PROFILE /
+# CREATOR_SNAPSHOTS in services/cache.ts). The creator page itself is ISR
+# (revalidate 3600, so up to 1 h behind a run) and was never refreshed by
+# this invalidation either way. Invalidating costs a DEL plus a full-keyspace SCAN per creator, ~40K
+# creators a day: the pattern that exhausted the Upstash request cap
+# (2026-10). Don't add the secrets to turn it on.
 #
 # Manual runs: Actions tab -> this workflow -> Run workflow.
 #

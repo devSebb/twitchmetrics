@@ -547,6 +547,11 @@ async function snapshotOneProfile(
   let resumed = 0;
   let polled = 0;
   for (const account of profile.platformAccounts) {
+    // Not this job's to poll (Kick, Instagram, paused X...): neither
+    // processed nor resumed, so the run's counts match the rows it writes.
+    if (!supportsCreatorSnapshots(account.platform, account.isOAuthConnected)) {
+      continue;
+    }
     if (isDone(profile.id, account.platform)) {
       resumed++;
       continue;
@@ -598,7 +603,7 @@ async function snapshotOneProfile(
     }
   }
   // Fully resumed profile: its aggregates were updated by the first attempt.
-  if (polled === 0 && profile.platformAccounts.length > 0) {
+  if (polled === 0 && resumed > 0) {
     return { processed, errors, resumed };
   }
 

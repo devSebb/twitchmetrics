@@ -52,10 +52,14 @@ export const CREATOR_PLATFORM_CAPABILITIES: Record<
   },
   x: {
     supportsPublicProfile: true,
-    // Public reads go through the app-level TWITTER_BEARER_TOKEN — no
-    // per-user OAuth needed, but the X API Basic tier caps reads, so only
-    // the ~dozens of real (non-link-only) X accounts may flow through here.
-    supportsPublicSnapshot: true,
+    // Paused: every X API read has answered 402 Payment Required since
+    // 2026-05-20, so polling only logged errors. X follower counts come from
+    // Stream Hatchet's monthly social-profiles feed instead (all ~180k X
+    // accounts); the ~70 API-only accounts keep their last value. Set back to
+    // true once the X API plan is paid — reads go through the app-level
+    // TWITTER_BEARER_TOKEN, and the API caps reads, so only the real
+    // (non-link-only) X accounts flow through here.
+    supportsPublicSnapshot: false,
     supportsOAuthSnapshot: false,
     supportsOAuthEnrichment: false,
     supportsTokenRefresh: true,

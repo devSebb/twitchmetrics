@@ -213,6 +213,32 @@ describe("resume after a partial run", () => {
   });
 });
 
+describe("platforms tier jobs don't poll", () => {
+  it("are left out of the counts, and the profile is still refreshed", async () => {
+    mocks.profiles = [
+      {
+        id: "p1",
+        platformAccounts: [
+          account("a1", "twitch"),
+          account("k1", "kick"),
+          account("i1", "instagram"),
+        ],
+      },
+      { id: "p2", platformAccounts: [account("k2", "kick")] },
+    ];
+
+    const result = await runTierSnapshot("tier3", step);
+    const summary = tierRunSummary(result, { runner: "github" });
+
+    expect(result.processed).toBe(1);
+    expect(summary.recordsScanned).toBe(1);
+    expect(summary.recordsWritten).toBe(1);
+    expect(mocks.prisma.metricSnapshot.create).toHaveBeenCalledTimes(1);
+    // The Kick-only profile still gets its aggregates and cache refresh.
+    expect(mocks.invalidateCreatorCacheOrThrow).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("time budget", () => {
   it("stops starting batches and reports the run as degraded", async () => {
     mocks.profiles = Array.from({ length: 120 }, (_, i) => ({
