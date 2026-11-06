@@ -58,6 +58,7 @@ import {
   type DailySessionPlatform,
   type StreamHatchetDailySession,
 } from "./lib/streamhatchet-daily-sessions";
+import { SH_DAILY_SESSIONS_JOB_TYPE } from "../apps/web/src/server/services/ingestion/job-types";
 
 const prisma = new PrismaClient();
 const args = process.argv.slice(2);
@@ -844,7 +845,7 @@ async function main() {
       data: {
         domain: "platform",
         scope: "snapshot",
-        jobType: "streamhatchet-daily-sessions",
+        jobType: SH_DAILY_SESSIONS_JOB_TYPE,
         platform: config.platform,
         status: "running",
       },

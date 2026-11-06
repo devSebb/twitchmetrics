@@ -28,6 +28,7 @@ import { discoverGames } from "./discovery/discover-games";
 import { discoverSocialLinks } from "./discovery/discover-social-links";
 import { youtubeCrosslinkBackfill } from "./discovery/youtube-crosslink-backfill";
 import { finalizeStaleIngestionRuns } from "./maintenance/finalize-stale-runs";
+import { githubJobsWatchdog } from "./maintenance/github-jobs-watchdog";
 
 export const functions = [
   tier1Snapshot,
@@ -56,4 +57,5 @@ export const functions = [
   discoverSocialLinks,
   youtubeCrosslinkBackfill,
   finalizeStaleIngestionRuns,
+  githubJobsWatchdog,
 ];

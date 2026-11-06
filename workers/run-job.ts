@@ -35,6 +35,7 @@ import {
 } from "../apps/web/src/inngest/functions/snapshots/shared";
 import { executeIngestionRun } from "../apps/web/src/server/services/ingestion/runs";
 import { supportsCreatorSnapshots } from "../apps/web/src/server/services/ingestion/constants";
+import { TIER_SNAPSHOT_JOB_TYPE } from "../apps/web/src/server/services/ingestion/job-types";
 import { getTwitchRateStats } from "../apps/web/src/server/adapters/twitch-rate";
 
 const args = process.argv.slice(2);
@@ -142,7 +143,11 @@ async function tierJob() {
 
   log("start", { tier, ...options });
   const result = await executeIngestionRun(
-    { domain: "creator", scope: "snapshot", jobType: `${tier}-snapshot` },
+    {
+      domain: "creator",
+      scope: "snapshot",
+      jobType: TIER_SNAPSHOT_JOB_TYPE[tier],
+    },
     async () => {
       const result = await runTierSnapshot(tier, step, options);
       return {

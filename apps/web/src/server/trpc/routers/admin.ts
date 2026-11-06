@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure } from "../middleware";
 import { router } from "../root";
 import { logAudit } from "@/server/services/audit";
+import { TIER_SNAPSHOT_JOB_TYPE } from "@/server/services/ingestion/job-types";
 import {
   CREATOR_SNAPSHOT_INTERVAL_MS,
   GAME_SNAPSHOT_STALE_MS,
@@ -576,7 +577,7 @@ export const adminRouter = router({
     ] = await Promise.all([
       ctx.prisma.ingestionRun.findFirst({
         where: {
-          jobType: "tier1-snapshot",
+          jobType: TIER_SNAPSHOT_JOB_TYPE.tier1,
           status: "completed",
         },
         orderBy: { startedAt: "desc" },
@@ -584,7 +585,7 @@ export const adminRouter = router({
       }),
       ctx.prisma.ingestionRun.findFirst({
         where: {
-          jobType: "tier2-snapshot",
+          jobType: TIER_SNAPSHOT_JOB_TYPE.tier2,
           status: "completed",
         },
         orderBy: { startedAt: "desc" },
@@ -592,7 +593,7 @@ export const adminRouter = router({
       }),
       ctx.prisma.ingestionRun.findFirst({
         where: {
-          jobType: "tier3-snapshot",
+          jobType: TIER_SNAPSHOT_JOB_TYPE.tier3,
           status: "completed",
         },
         orderBy: { startedAt: "desc" },

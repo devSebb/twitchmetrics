@@ -1,6 +1,7 @@
 import { inngest } from "../../client";
 import { runTierSnapshot, tierRunSummary } from "./shared";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
+import { TIER_SNAPSHOT_JOB_TYPE } from "@/server/services/ingestion/job-types";
 
 // Cron: daily at 3am UTC — Tier 3 creators (under 10K followers).
 // Was weekly, which left small creators with barely any data points;
@@ -14,7 +15,7 @@ export const tier3Snapshot = inngest.createFunction(
       {
         domain: "creator",
         scope: "snapshot",
-        jobType: "tier3-snapshot",
+        jobType: TIER_SNAPSHOT_JOB_TYPE.tier3,
       },
       async () => {
         const result = await runTierSnapshot("tier3", step);
