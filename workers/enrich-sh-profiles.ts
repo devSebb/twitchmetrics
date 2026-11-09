@@ -60,10 +60,8 @@ const argValue = (name: string): string | undefined => {
 const LIMIT = Number.parseInt(argValue("--limit") ?? "0", 10) || 0;
 const SLEEP_MS = Number.parseInt(argValue("--sleep-ms") ?? "150", 10) || 0;
 
-// One pinned connection on the DIRECT url: the activity pass builds a temp
-// table and reads it back across several statements; the pooler would hand
-// those to different backends. Long statements are expected — raise the
-// timeout for this session only (session-scoped on a direct connection).
+// One connection on the DIRECT url. The activity pass no longer depends on
+// keeping it (see ACTIVITY_TABLE); this just keeps the job to one backend.
 const directUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 const prisma = new PrismaClient({
   datasources: {
@@ -546,12 +544,49 @@ function gameSlugCtes(): string {
     )`;
 }
 
+/**
+ * Scratch tables for the activity pass. They are ordinary (unlogged) tables,
+ * not TEMP ones: Prisma swaps out a connection about 5 minutes after opening
+ * it, so a TEMP table vanishes mid-run. On 2026-11-08 and 2026-11-09 the run
+ * lost tmp_sh_saved_game 5m09s and 5m06s in (chunk 1 and chunk 4); the
+ * 2026-11-05 run passed only because it finished in 4m37s. Only one run at a
+ * time: the GitHub job's concurrency group keeps it that way.
+ */
+const ACTIVITY_TABLE = "sh_enrich_activity_scratch";
+const SAVED_GAME_TABLE = "sh_enrich_saved_game_scratch";
+
+/**
+ * Run one statement with a 20-minute timeout. SET LOCAL lives and dies with
+ * its transaction, so the timeout holds on whatever connection runs the
+ * statement and never leaks to other clients (a plain SET is lost when the
+ * connection is swapped, and through the pooler it sticks to a shared backend).
+ */
+async function runLong(sql: string): Promise<number> {
+  const [, n] = await prisma.$transaction([
+    prisma.$executeRawUnsafe(`SET LOCAL statement_timeout = '20min'`),
+    prisma.$executeRawUnsafe(sql),
+  ]);
+  return n;
+}
+
+async function dropScratchTables(): Promise<void> {
+  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS ${ACTIVITY_TABLE}`);
+  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS ${SAVED_GAME_TABLE}`);
+}
+
 async function activity() {
-  await prisma.$executeRawUnsafe(`SET statement_timeout = '20min'`);
+  await dropScratchTables();
+  try {
+    await activityPass();
+  } finally {
+    await dropScratchTables();
+  }
+}
+
+async function activityPass() {
   log(
-    "activity: building per-profile activity + top-game temp table (last 90d / 30d)…",
+    "activity: building per-profile activity + top-game scratch table (last 90d / 30d)…",
   );
-  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS tmp_sh_activity`);
   // Scope: every UNCLAIMED profile, whatever minted it. This was SH-born only,
   // on the premise that the daily enrich-creators job owned the API-born ones —
   // but that job derives from MetricSnapshot 500 profiles at a time, so on
@@ -560,8 +595,8 @@ async function activity() {
   // covers them too (30,353 of the 42,248 API-born listed profiles have rollups
   // in the last 30 days) and these fields are derived, so the freshest source
   // should win. Claimed profiles stay out: enrich-claimed-profiles owns those.
-  await prisma.$executeRawUnsafe(`
-    CREATE TEMP TABLE tmp_sh_activity AS
+  await runLong(`
+    CREATE UNLOGGED TABLE ${ACTIVITY_TABLE} AS
     WITH owned AS (
       SELECT cp.id FROM "CreatorProfile" cp WHERE ${UNCLAIMED_SQL}
     ),
@@ -602,7 +637,7 @@ async function activity() {
   const stats = await prisma.$queryRawUnsafe<
     { n: bigint; with_game: bigint; with_slug: bigint; active30: bigint }[]
   >(`
-    SELECT COUNT(*) n, COUNT(game_name) with_game, COUNT(game_slug) with_slug, COUNT(*) FILTER (WHERE active30) active30 FROM tmp_sh_activity`);
+    SELECT COUNT(*) n, COUNT(game_name) with_game, COUNT(game_slug) with_slug, COUNT(*) FILTER (WHERE active30) active30 FROM ${ACTIVITY_TABLE}`);
   log("activity: computed", stats[0]);
 
   // A profile with no game in the 30-day window keeps its saved game, so a
@@ -611,16 +646,15 @@ async function activity() {
   // the saved name by the same rule. Which platform a saved name came from
   // isn't recorded, so a video category only counts as YouTube's on a profile
   // with no other platform.
-  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS tmp_sh_saved_game`);
-  await prisma.$executeRawUnsafe(`
-    CREATE TEMP TABLE tmp_sh_saved_game AS
+  await runLong(`
+    CREATE UNLOGGED TABLE ${SAVED_GAME_TABLE} AS
     WITH ${gameSlugCtes()}
     SELECT cp.id,
            COALESCE(BTRIM(gm.name), cp."primaryGameName") AS game_name,
            gs.slug AS game_slug,
            cp."primaryGameSlug" AS old_slug
     FROM "CreatorProfile" cp
-    LEFT JOIN tmp_sh_activity t ON t.id = cp.id
+    LEFT JOIN ${ACTIVITY_TABLE} t ON t.id = cp.id
     LEFT JOIN game_slug gs ON gs.lname = ${NORM_SQL('cp."primaryGameName"')}
       AND NOT (${IS_YOUTUBE_CATEGORY_SQL('cp."primaryGameName"')} AND NOT EXISTS (
         SELECT 1 FROM "PlatformAccount" pa
@@ -639,7 +673,7 @@ async function activity() {
            COUNT(*) FILTER (WHERE old_slug IS NULL AND game_slug IS NOT NULL) linked,
            COUNT(*) FILTER (WHERE old_slug <> game_slug) corrected,
            COUNT(*) FILTER (WHERE old_slug IS NOT NULL AND game_slug IS NULL) cleared
-    FROM tmp_sh_saved_game`);
+    FROM ${SAVED_GAME_TABLE}`);
   log("activity: saved games to re-match", savedStats[0]);
   if (!WRITE) return;
 
@@ -648,7 +682,7 @@ async function activity() {
   let updated = 0;
   let savedGames = 0;
   for (const h of hex) {
-    const n = await prisma.$executeRawUnsafe(`
+    const n = await runLong(`
       UPDATE "CreatorProfile" cp
       SET "lastStreamAt" = t.last_stream_at,
           "isActiveLast30d" = t.active30,
@@ -657,17 +691,17 @@ async function activity() {
           -- one listed Counter-Strike players under PUBG (2026-11).
           "primaryGameSlug" = CASE WHEN t.game_name IS NULL THEN cp."primaryGameSlug" ELSE t.game_slug END,
           "lastEnrichedAt" = NOW()
-      FROM tmp_sh_activity t
+      FROM ${ACTIVITY_TABLE} t
       WHERE t.id = cp.id AND cp.id::text LIKE '${h}%'
         AND (cp."lastStreamAt" IS DISTINCT FROM t.last_stream_at
           OR cp."isActiveLast30d" IS DISTINCT FROM t.active30
           OR (t.game_name IS NOT NULL AND cp."primaryGameName" IS DISTINCT FROM t.game_name)
           OR (t.game_name IS NOT NULL AND cp."primaryGameSlug" IS DISTINCT FROM t.game_slug))
     `);
-    const saved = await prisma.$executeRawUnsafe(`
+    const saved = await runLong(`
       UPDATE "CreatorProfile" cp
       SET "primaryGameName" = t.game_name, "primaryGameSlug" = t.game_slug
-      FROM tmp_sh_saved_game t
+      FROM ${SAVED_GAME_TABLE} t
       WHERE t.id = cp.id AND cp.id::text LIKE '${h}%'
     `);
     updated += n;
@@ -675,11 +709,11 @@ async function activity() {
     log(`activity chunk ${h}`, { updated: n, savedGames: saved });
   }
   // Profiles that streamed >90d ago (or never in our data): mark inactive.
-  const inactive = await prisma.$executeRawUnsafe(`
+  const inactive = await runLong(`
     UPDATE "CreatorProfile" cp SET "isActiveLast30d" = false
     WHERE ${UNCLAIMED_SQL}
       AND cp."isActiveLast30d" = true
-      AND NOT EXISTS (SELECT 1 FROM tmp_sh_activity t WHERE t.id = cp.id AND t.active30)`);
+      AND NOT EXISTS (SELECT 1 FROM ${ACTIVITY_TABLE} t WHERE t.id = cp.id AND t.active30)`);
   log("activity applied", { updated, savedGames, markedInactive: inactive });
 }
 
