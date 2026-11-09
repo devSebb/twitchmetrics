@@ -1120,6 +1120,9 @@ async function attachSocialLinks(
             SOCIAL_LINKS_SNAPSHOT_SOURCE,
           );
         }
+        // totalFollowers adds up link-only accounts too (creator-aggregates.ts),
+        // so refresh it for every creator in this chunk.
+        await withRetry(() => recomputeCreatorAggregatesMany(canonIds));
       }
     } catch (err) {
       errors += chunk.length;

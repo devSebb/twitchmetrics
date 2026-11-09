@@ -29,9 +29,22 @@ describe("buildRecomputeAggregatesSql", () => {
     ]);
   });
 
-  it("excludes link-only accounts and keeps profiles without accounts", () => {
+  it("totals every account but tiers on tracked accounts only", () => {
     const text = buildRecomputeAggregatesSql(["a"]).sql;
-    expect(text).toContain(`a."discoverySource" IS NULL`);
+    // The join keeps link-only accounts, so the total matches the header.
+    expect(text).not.toMatch(/ON a\."creatorProfileId" = cp\.id AND/);
+    expect(text).toContain(
+      `COALESCE(SUM(a."followerCount"), 0) AS total_followers`,
+    );
+    expect(text).toContain(
+      `FILTER (WHERE a."discoverySource" IS NULL), 0) AS tracked_followers`,
+    );
+    expect(text).toContain("WHEN agg.tracked_followers >=");
+    expect(text).not.toContain("WHEN agg.total_followers >=");
+  });
+
+  it("keeps profiles without accounts", () => {
+    const text = buildRecomputeAggregatesSql(["a"]).sql;
     expect(text).toContain("LEFT JOIN");
     expect(text).toContain(`"snapshotTier"`);
     expect(text).toContain(`"lastSnapshotAt"`);

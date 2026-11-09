@@ -843,26 +843,34 @@ export const snapshotRouter = router({
         },
       });
 
-      // Update profile aggregate (exclude link-only social accounts —
-      // discoverySource != null — so they don't inflate totalFollowers/tier).
+      // Update profile aggregate, by the same rule as
+      // buildRecomputeAggregatesSql: totalFollowers counts every account the
+      // header shows; the tier and views count tracked accounts only
+      // (link-only social accounts, discoverySource != null, are never polled).
       const allAccounts = await ctx.prisma.platformAccount.findMany({
-        where: {
-          creatorProfileId: input.creatorProfileId,
-          discoverySource: null,
+        where: { creatorProfileId: input.creatorProfileId },
+        select: {
+          followerCount: true,
+          totalViews: true,
+          discoverySource: true,
         },
-        select: { followerCount: true, totalViews: true },
       });
+      const tracked = allAccounts.filter((a) => a.discoverySource === null);
 
       const totalFollowers = allAccounts.reduce(
         (sum, a) => sum + (a.followerCount ?? 0n),
         0n,
       );
-      const totalViews = allAccounts.reduce(
+      const trackedFollowers = tracked.reduce(
+        (sum, a) => sum + (a.followerCount ?? 0n),
+        0n,
+      );
+      const totalViews = tracked.reduce(
         (sum, a) => sum + (a.totalViews ?? 0n),
         0n,
       );
 
-      const newTier = getTierForCreator(totalFollowers);
+      const newTier = getTierForCreator(trackedFollowers);
 
       await ctx.prisma.creatorProfile.update({
         where: { id: input.creatorProfileId },
