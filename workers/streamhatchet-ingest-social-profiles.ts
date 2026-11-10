@@ -81,7 +81,6 @@ import {
   mkdirSync,
   writeFileSync,
 } from "node:fs";
-import { createInterface } from "node:readline";
 import { Prisma, prisma, type Platform } from "@twitchmetrics/database";
 import {
   ClaimLockedError,
@@ -394,6 +393,23 @@ type LiveProfile = {
   }[];
 };
 
+/**
+ * A file's lines, split on "\n" only. node:readline also breaks lines at
+ * U+2028/U+2029, and Stream Hatchet bios contain them (676 in the 2026-11-09
+ * export), so a plan.json line was cut in half: "Unterminated string in JSON".
+ * Streams chunk by chunk, so files over Node's ~512MB string cap still work.
+ */
+async function* readLines(path: string): AsyncGenerator<string> {
+  let rest = "";
+  for await (const chunk of createReadStream(path, { encoding: "utf8" })) {
+    const parts = (rest + (chunk as string)).split("\n");
+    rest = parts.pop() ?? "";
+    for (const part of parts)
+      yield part.endsWith("\r") ? part.slice(0, -1) : part;
+  }
+  if (rest) yield rest;
+}
+
 type PlanMember = {
   platform: string;
   user_id: string;
@@ -463,11 +479,7 @@ async function buildPlan(config: Config): Promise<PlanGroup[]> {
   // ~512MB single-string cap, so we never read the whole file into one string.
   const plan: PlanGroup[] = [];
   let mergeable = 0;
-  const rl = createInterface({
-    input: createReadStream(path, "utf8"),
-    crlfDelay: Infinity,
-  });
-  for await (const line of rl) {
+  for await (const line of readLines(path)) {
     if (!line.trim()) continue;
     const g = JSON.parse(line) as PlanGroup;
     plan.push(g);
@@ -1410,9 +1422,8 @@ async function buildRefreshPlan(
 
   const changed: RefreshRow[] = [];
   const unchangedIds: string[] = [];
-  const rl = createInterface({ input: createReadStream(planPath) });
   let header = true;
-  for await (const line of rl) {
+  for await (const line of readLines(planPath)) {
     if (header) {
       header = false;
       continue;
@@ -1809,11 +1820,7 @@ async function applyDemographics(
   const rows: Upsert[] = [];
   let emptyRows = 0;
   const platformSet = new Set<string>(DEMOGRAPHICS_PLATFORMS);
-  const rl = createInterface({
-    input: createReadStream(planPath, "utf8"),
-    crlfDelay: Infinity,
-  });
-  for await (const line of rl) {
+  for await (const line of readLines(planPath)) {
     if (!line.trim()) continue;
     const r = JSON.parse(line) as DemoPlanRow;
     if (!platformSet.has(r.platform)) continue;
