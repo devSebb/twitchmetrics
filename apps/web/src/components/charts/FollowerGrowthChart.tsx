@@ -98,7 +98,9 @@ export function FollowerGrowthChart({
         {
           type: "line" as const,
           data: values,
-          smooth: true,
+          // A count holds until the next reading changes it: steps, not
+          // diagonals between sparse readings.
+          step: "end",
           symbol: "none",
           lineStyle: { color, width: 2 },
           areaStyle: {

@@ -111,11 +111,14 @@ async function hasFollowerGrowth(
   const since = new Date(
     Date.now() - GROWTH_DEFAULT_PERIOD_DAYS * 24 * 60 * 60 * 1000,
   );
+  // Same readings the widget draws: one without a follower count (Kick
+  // polls store viewers only) is not data for this card.
   const snapshot = await prisma.metricSnapshot.findFirst({
     where: {
       creatorProfileId: profile.id,
       platform,
       snapshotAt: { gte: since },
+      followerCount: { not: null },
     },
     select: { id: true },
   });

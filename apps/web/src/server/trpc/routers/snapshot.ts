@@ -115,10 +115,13 @@ export const snapshotRouter = router({
         ? new Date(Date.now() - days * 24 * 60 * 60 * 1000)
         : undefined;
 
+      // Readings without a follower count (Kick polls store viewers only)
+      // say nothing about followers; drawn as 0 they made the line dive.
       const snapshots = await ctx.prisma.metricSnapshot.findMany({
         where: {
           creatorProfileId: input.creatorProfileId,
           platform: input.platform,
+          followerCount: { not: null },
           ...(since ? { snapshotAt: { gte: since } } : {}),
         },
         select: {

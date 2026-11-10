@@ -62,10 +62,16 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
   // Transform snapshot data → chart format
   const chartData = useMemo(() => {
     if (platform !== "all" && primaryQuery.data) {
-      return primaryQuery.data.map((s) => ({
-        date: new Date(s.snapshotAt).toISOString(),
-        value: s.followerCount?.toString() ?? "0",
-      }));
+      return primaryQuery.data.flatMap((s) =>
+        s.followerCount == null
+          ? []
+          : [
+              {
+                date: new Date(s.snapshotAt).toISOString(),
+                value: s.followerCount.toString(),
+              },
+            ],
+      );
     }
     return [];
   }, [platform, primaryQuery.data]);
@@ -203,9 +209,10 @@ function AllPlatformsChart({
       }[];
       const map = new Map<string, number>();
       data.forEach((s) => {
+        if (s.followerCount == null) return; // no count, not zero
         const dateKey = new Date(s.snapshotAt).toISOString().split("T")[0]!;
         allDates.add(dateKey);
-        map.set(dateKey, Number(s.followerCount ?? 0));
+        map.set(dateKey, Number(s.followerCount));
       });
       platformData[p] = map;
     });
@@ -220,7 +227,9 @@ function AllPlatformsChart({
         type: "line" as const,
         name: PLATFORM_CONFIG[p].name,
         data: sortedDates.map((d) => map?.get(d) ?? null),
-        smooth: true,
+        // A count holds until the next reading changes it: steps, not
+        // diagonals between sparse readings.
+        step: "end" as const,
         symbol: "none",
         lineStyle: { color, width: 2 },
         areaStyle: {
