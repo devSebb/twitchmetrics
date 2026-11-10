@@ -34,7 +34,7 @@ describe("buildRecomputeAggregatesSql", () => {
     // The join keeps link-only accounts, so the total matches the header.
     expect(text).not.toMatch(/ON a\."creatorProfileId" = cp\.id AND/);
     expect(text).toContain(
-      `COALESCE(SUM(a."followerCount"), 0) AS total_followers`,
+      `COALESCE(SUM(COALESCE(a."followerCount", 0) + COALESCE(a."otherChannelsFollowerCount", 0)), 0) AS total_followers`,
     );
     expect(text).toContain(
       `FILTER (WHERE a."discoverySource" IS NULL), 0) AS tracked_followers`,

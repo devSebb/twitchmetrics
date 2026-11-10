@@ -65,7 +65,7 @@ const FOLLOWER_SOURCES =
 export const CREATOR_HEADER_INFO = {
   totalFollowers: {
     title: "Total Followers",
-    body: "The latest follower count on each of the creator's platforms, added together. Someone who follows on two platforms counts twice.",
+    body: "The latest follower count on each of the creator's platforms, added together. A creator with several channels on one platform (two YouTube channels, say) has those added together too, as in Stream Hatchet. Someone who follows on two platforms counts twice.",
     source: FOLLOWER_SOURCES,
   },
 } satisfies Record<string, MetricInfo>;

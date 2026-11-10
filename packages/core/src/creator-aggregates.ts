@@ -11,7 +11,9 @@ const DEFAULT_CHUNK = 1000;
  * their tracked platform accounts:
  * - totalFollowers: every account on the profile, link-only ones included,
  *   so the total equals the sum of the platforms the creator header shows
- *   (NULL counts as 0). Stream Hatchet's BI adds all platforms up the same way;
+ *   (NULL counts as 0), plus each account's otherChannelsFollowerCount (the
+ *   creator's other channels on that platform). Stream Hatchet's BI adds
+ *   everything up the same way;
  *   until 2026-11 social links were left out, so ibai showed 37.7M next to
  *   five platforms adding up to 99.7M.
  * - snapshotTier: from the tracked accounts only (TIER_CONFIG thresholds).
@@ -37,7 +39,7 @@ export function buildRecomputeAggregatesSql(
         END)::"SnapshotTier"
     FROM (
       SELECT cp.id,
-             COALESCE(SUM(a."followerCount"), 0) AS total_followers,
+             COALESCE(SUM(COALESCE(a."followerCount", 0) + COALESCE(a."otherChannelsFollowerCount", 0)), 0) AS total_followers,
              COALESCE(SUM(a."followerCount") FILTER (WHERE a."discoverySource" IS NULL), 0) AS tracked_followers,
              COALESCE(SUM(a."totalViews") FILTER (WHERE a."discoverySource" IS NULL), 0) AS total_views,
              MAX(a."lastSyncedAt") FILTER (WHERE a."discoverySource" IS NULL) AS last_synced_at

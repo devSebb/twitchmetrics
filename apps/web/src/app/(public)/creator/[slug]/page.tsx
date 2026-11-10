@@ -18,6 +18,7 @@ import { isKnownGrowthRollup } from "@/server/services/creator-growth";
 import { selectDisplayableDemographics } from "@/lib/metric-freshness";
 import { getProfileDataAvailability } from "@/server/services/profile-widget-availability";
 import { getStatsContext } from "@/server/services/creator-streaming-stats";
+import { platformFollowerCount } from "@/lib/platform-follower-count";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -42,6 +43,7 @@ const getCreator = cache(async (slug: string) => {
           platformUsername: true,
           platformUrl: true,
           followerCount: true,
+          otherChannelsFollowerCount: true,
           totalViews: true,
           postCount: true,
           lastSyncedAt: true,
@@ -217,7 +219,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
       platform: a.platform,
       platformUsername: a.platformUsername,
       platformUrl: a.platformUrl,
-      followerCount: a.followerCount ? String(a.followerCount) : null,
+      followerCount: platformFollowerCount(a)?.toString() ?? null,
       totalViews: a.totalViews ? String(a.totalViews) : null,
       postCount: a.postCount ?? null,
     })),

@@ -854,6 +854,7 @@ export const snapshotRouter = router({
         where: { creatorProfileId: input.creatorProfileId },
         select: {
           followerCount: true,
+          otherChannelsFollowerCount: true,
           totalViews: true,
           discoverySource: true,
         },
@@ -861,7 +862,8 @@ export const snapshotRouter = router({
       const tracked = allAccounts.filter((a) => a.discoverySource === null);
 
       const totalFollowers = allAccounts.reduce(
-        (sum, a) => sum + (a.followerCount ?? 0n),
+        (sum, a) =>
+          sum + (a.followerCount ?? 0n) + (a.otherChannelsFollowerCount ?? 0n),
         0n,
       );
       const trackedFollowers = tracked.reduce(

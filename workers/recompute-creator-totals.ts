@@ -80,7 +80,7 @@ async function main() {
     FROM "CreatorProfile" cp
     LEFT JOIN (
       SELECT "creatorProfileId",
-             SUM("followerCount") AS total,
+             SUM(COALESCE("followerCount", 0) + COALESCE("otherChannelsFollowerCount", 0)) AS total,
              SUM("followerCount") FILTER (WHERE "discoverySource" IS NULL) AS tracked
       FROM "PlatformAccount"
       GROUP BY 1

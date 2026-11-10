@@ -7,6 +7,7 @@ import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { MediaKitLayout } from "@/components/media-kit/MediaKitLayout";
 import { creatorRobots } from "@/server/services/creator-visibility";
+import { platformFollowerCount } from "@/lib/platform-follower-count";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -23,6 +24,7 @@ async function getMediaKitData(slug: string) {
           platformUsername: true,
           platformUrl: true,
           followerCount: true,
+          otherChannelsFollowerCount: true,
           totalViews: true,
         },
       },
@@ -174,7 +176,7 @@ export default async function MediaKitPage({ params }: PageProps) {
       platform: a.platform,
       platformUsername: a.platformUsername,
       platformUrl: a.platformUrl,
-      followerCount: a.followerCount ? String(a.followerCount) : "0",
+      followerCount: platformFollowerCount(a)?.toString() ?? "0",
       totalViews: a.totalViews ? String(a.totalViews) : "0",
     })),
     growthRollups: profile.growthRollups.map((g) => ({

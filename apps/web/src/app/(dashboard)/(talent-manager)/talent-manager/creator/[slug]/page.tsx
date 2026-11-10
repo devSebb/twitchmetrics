@@ -7,6 +7,7 @@ import { CreatorDetailView } from "@/components/manager/CreatorDetailView";
 import { ROSTER_ACTIVE_FILTER } from "@/server/services/roster-access";
 import { getLatestTimestamp } from "@/lib/metric-freshness";
 import type { Platform } from "@twitchmetrics/database";
+import { platformFollowerCount } from "@/lib/platform-follower-count";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -37,6 +38,7 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
           platform: true,
           platformUsername: true,
           followerCount: true,
+          otherChannelsFollowerCount: true,
           lastSyncedAt: true,
         },
       },
@@ -72,6 +74,7 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
     platform: Platform;
     platformUsername: string;
     followerCount: bigint | number | null;
+    otherChannelsFollowerCount: bigint | number | null;
     lastSyncedAt: string | null;
   }[];
   const lastUpdatedAt = getLatestTimestamp(
@@ -91,7 +94,7 @@ export default async function TalentManagerCreatorPage({ params }: PageProps) {
     platformAccounts: serializedAccounts.map((a) => ({
       platform: a.platform,
       platformUsername: a.platformUsername,
-      followerCount: a.followerCount ? String(a.followerCount) : "0",
+      followerCount: platformFollowerCount(a)?.toString() ?? "0",
     })),
     growthRollups: (
       serialized.growthRollups as {

@@ -16,6 +16,7 @@ import {
   type SerializedProfile,
 } from "@/components/dashboard";
 import type { DashboardHeaderData } from "@/components/dashboard/OwnerDashboardView";
+import { platformFollowerCount } from "@/lib/platform-follower-count";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -39,6 +40,7 @@ export default async function DashboardPage() {
             platformUrl: true,
             platformAvatarUrl: true,
             followerCount: true,
+            otherChannelsFollowerCount: true,
             totalViews: true,
             postCount: true,
             lastSyncedAt: true,
@@ -154,9 +156,7 @@ export default async function DashboardPage() {
       platform: account.platform,
       platformUsername: account.platformUsername,
       platformUrl: account.platformUrl,
-      followerCount: account.followerCount
-        ? String(account.followerCount)
-        : null,
+      followerCount: platformFollowerCount(account)?.toString() ?? null,
       totalViews: account.totalViews ? String(account.totalViews) : null,
       postCount: account.postCount ?? null,
     })),

@@ -6,6 +6,7 @@ import { getSession } from "@/server/auth-cache";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { MediaKitLayout } from "@/components/media-kit/MediaKitLayout";
 import { Button } from "@/components/ui";
+import { platformFollowerCount } from "@/lib/platform-follower-count";
 
 export const metadata: Metadata = {
   title: "Media Kit",
@@ -25,6 +26,7 @@ export default async function MediaKitPage() {
           platformUsername: true,
           platformUrl: true,
           followerCount: true,
+          otherChannelsFollowerCount: true,
           totalViews: true,
         },
       },
@@ -108,13 +110,14 @@ export default async function MediaKitPage() {
         platformUsername: string;
         platformUrl: string | null;
         followerCount: bigint | number | null;
+        otherChannelsFollowerCount: bigint | number | null;
         totalViews: bigint | number | null;
       }[]
     ).map((a) => ({
       platform: a.platform as Platform,
       platformUsername: a.platformUsername,
       platformUrl: a.platformUrl,
-      followerCount: a.followerCount ? String(a.followerCount) : "0",
+      followerCount: platformFollowerCount(a)?.toString() ?? "0",
       totalViews: a.totalViews ? String(a.totalViews) : "0",
     })),
     growthRollups: (

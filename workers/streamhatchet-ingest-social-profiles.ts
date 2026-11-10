@@ -112,7 +112,16 @@ const SP_TYPES = Object.keys(TYPE_TO_PLATFORM);
 // Streaming platforms we hold metric-tracked accounts for — these drive the
 // merge/enrich flow. The rest are link-only socials attached (handle + follower
 // count) to already-matched creators via --social-links, marked discoverySource.
-const SOCIAL_LINK_PLATFORMS: Platform[] = ["instagram", "tiktok", "x"];
+// YouTube joined in 2026-11: the catalog only holds YouTube channels that
+// stream, so a Twitch streamer's video channel (xQc's @xqcow, 2.51M) was
+// missing although Stream Hatchet's contact links it and BI shows it. A
+// creator who already has a YouTube account keeps it (never touched).
+const SOCIAL_LINK_PLATFORMS: Platform[] = [
+  "instagram",
+  "tiktok",
+  "x",
+  "youtube",
+];
 const DISCOVERY_SOURCE = "sh-social";
 
 type Config = {
@@ -849,7 +858,32 @@ type SocialLink = {
   raw_url: string | null;
   reach: number | null;
 };
-type AttachTarget = { canonicalId: string; links: SocialLink[] };
+type AttachTarget = {
+  canonicalId: string;
+  links: SocialLink[];
+  /** Every channel the contact has, per platform (deduped by user_id). */
+  channels: Map<string, Map<string, number>>;
+};
+
+/**
+ * Followers of the creator's other channels on an account's platform, as
+ * Stream Hatchet BI adds them in. Null when the contact lists no other
+ * channel, or when the account's own channel is not among the contact's
+ * (then we can't be sure the two lists describe the same creator).
+ */
+function otherChannelsFor(
+  target: AttachTarget,
+  platform: string,
+  platformUserId: string,
+): bigint | null {
+  const channels = target.channels.get(platform);
+  if (!channels || !channels.has(platformUserId)) return null;
+  let other = 0;
+  for (const [userId, reach] of channels) {
+    if (userId !== platformUserId) other += reach;
+  }
+  return other > 0 ? BigInt(other) : null;
+}
 type SocialAccountCreate = {
   creatorProfileId: string;
   platform: Platform;
@@ -876,8 +910,8 @@ function reachToBigInt(reach: number | null): bigint | null {
  *
  * Follower history: after the writes, every link account this export wrote
  * gets a MetricSnapshot at the export date when its count changed or it has
- * no social follower history yet (seeds the series). Link-only accounts never
- * count toward totalFollowers, so no aggregate recompute is needed here.
+ * no social follower history yet (seeds the series). Totals count link-only
+ * accounts and other channels, so each chunk ends with an aggregate recompute.
  */
 async function attachSocialLinks(
   plan: PlanGroup[],
@@ -905,6 +939,18 @@ async function attachSocialLinks(
     if (canonicalIds.length !== 1) continue;
     const canonicalId = canonicalIds[0]!;
 
+    const channels = new Map<string, Map<string, number>>();
+    for (const m of group.members) {
+      if (!m.user_id) continue;
+      const reach =
+        m.reach != null && Number.isFinite(m.reach)
+          ? Math.max(0, Math.trunc(m.reach))
+          : 0;
+      const byUser = channels.get(m.platform) ?? new Map<string, number>();
+      byUser.set(m.user_id, Math.max(byUser.get(m.user_id) ?? 0, reach));
+      channels.set(m.platform, byUser);
+    }
+
     const bestByPlatform = new Map<string, SocialLink>();
     for (const m of group.members) {
       if (!socialSet.has(m.platform) || !m.user_id) continue;
@@ -919,8 +965,11 @@ async function attachSocialLinks(
         });
       }
     }
-    if (bestByPlatform.size > 0)
-      targets.push({ canonicalId, links: [...bestByPlatform.values()] });
+    targets.push({
+      canonicalId,
+      links: [...bestByPlatform.values()],
+      channels,
+    });
   }
 
   log("info", "Social-link targets resolved", {
@@ -935,6 +984,9 @@ async function attachSocialLinks(
   let processed = 0;
   let snapshotsPlanned = 0;
   let snapshotsCreated = 0;
+  let youtubeLinksPlanned = 0;
+  let otherChannelsChanged = 0;
+  let otherChannelsSet = 0;
 
   for (let i = 0; i < targets.length; i += READ_CHUNK) {
     const chunk = targets.slice(i, i + READ_CHUNK);
@@ -1005,6 +1057,57 @@ async function attachSocialLinks(
           }
         }
       }
+
+      youtubeLinksPlanned += toCreate.filter(
+        (c) => c.platform === "youtube",
+      ).length;
+
+      // Other channels per platform, on every account these creators hold
+      // (tracked ones included: only this column is written, never the
+      // polled followerCount). Computed before the link writes, so a link
+      // created in this chunk is picked up on the next monthly run.
+      const accounts = await withRetry(() =>
+        prisma.platformAccount.findMany({
+          where: { creatorProfileId: { in: canonIds } },
+          select: {
+            id: true,
+            creatorProfileId: true,
+            platform: true,
+            platformUserId: true,
+            otherChannelsFollowerCount: true,
+          },
+        }),
+      );
+      const targetById = new Map(chunk.map((t) => [t.canonicalId, t]));
+      // Links about to be created count as held, so their siblings are known.
+      const pendingLinks = toCreate.map((c) => ({
+        id: null as string | null,
+        creatorProfileId: c.creatorProfileId,
+        platform: c.platform,
+        platformUserId: c.platformUserId,
+        otherChannelsFollowerCount: null as bigint | null,
+      }));
+      const otherUpdates: {
+        id: string | null;
+        creatorProfileId: string;
+        platform: Platform;
+        value: bigint | null;
+      }[] = [];
+      for (const a of [...accounts, ...pendingLinks]) {
+        const t = targetById.get(a.creatorProfileId);
+        if (!t) continue;
+        const value = otherChannelsFor(t, a.platform, a.platformUserId);
+        if (value !== a.otherChannelsFollowerCount) {
+          otherUpdates.push({
+            id: a.id,
+            creatorProfileId: a.creatorProfileId,
+            platform: a.platform,
+            value,
+          });
+        }
+      }
+      otherChannelsChanged += otherUpdates.length;
+      otherChannelsSet += otherUpdates.filter((u) => u.value !== null).length;
 
       if (!config.write) {
         created += toCreate.length;
@@ -1120,8 +1223,27 @@ async function attachSocialLinks(
             SOCIAL_LINKS_SNAPSHOT_SOURCE,
           );
         }
-        // totalFollowers adds up link-only accounts too (creator-aggregates.ts),
-        // so refresh it for every creator in this chunk.
+        // Other channels: by (creator, platform), which also reaches the
+        // links created above.
+        for (let j = 0; j < otherUpdates.length; j += UPDATE_BATCH) {
+          const batch = otherUpdates.slice(j, j + UPDATE_BATCH);
+          const tuples = Prisma.join(
+            batch.map(
+              (u) =>
+                Prisma.sql`(${u.creatorProfileId}::uuid, ${u.platform}::"Platform", ${u.value === null ? null : u.value.toString()}::bigint)`,
+            ),
+          );
+          await withRetry(() =>
+            prisma.$executeRaw(Prisma.sql`
+              UPDATE "PlatformAccount" AS a
+              SET "otherChannelsFollowerCount" = v.other
+              FROM (VALUES ${tuples}) AS v(cid, platform, other)
+              WHERE a."creatorProfileId" = v.cid AND a.platform = v.platform
+            `),
+          );
+        }
+        // totalFollowers adds up link-only accounts and other channels too
+        // (creator-aggregates.ts), so refresh it for every creator here.
         await withRetry(() => recomputeCreatorAggregatesMany(canonIds));
       }
     } catch (err) {
@@ -1141,6 +1263,8 @@ async function attachSocialLinks(
       errors,
       snapshotsPlanned,
       snapshotsCreated,
+      youtubeLinksPlanned,
+      otherChannelsChanged,
     });
   }
 
@@ -1153,6 +1277,9 @@ async function attachSocialLinks(
     errors,
     snapshotsPlanned,
     snapshotsCreated,
+    youtubeLinksPlanned,
+    otherChannelsChanged,
+    otherChannelsSet,
   });
 }
 

@@ -445,6 +445,13 @@ model PlatformAccount {
   subscriberCount BigInt?
   postCount       Int?
 
+  /// Followers of the creator's OTHER channels on this platform, from Stream
+  /// Hatchet's contact data (e.g. xQc's four smaller YouTube channels next to
+  /// @xqcow). Stream Hatchet BI adds a creator's channels per platform
+  /// together, so displays and totalFollowers add this to followerCount.
+  /// NULL = no other channels known. Written by the monthly social-links run.
+  otherChannelsFollowerCount BigInt?
+
   lastSyncedAt DateTime?
 
   createdAt DateTime @default(now())
