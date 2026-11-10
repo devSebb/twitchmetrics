@@ -1201,16 +1201,25 @@ async function exportRefreshAccounts(config: Config): Promise<number> {
       followerCount: bigint | null;
     }[] = await prisma.platformAccount.findMany({
       where: {
-        platform: { in: REFRESH_PLATFORMS },
         discoverySource: null,
-        isOAuthConnected: false,
-        creatorProfile: {
-          catalogSource: "streamhatchet",
-          state: { notIn: ["claimed", "premium"] },
-          userId: null,
-          mergedIntoId: null,
-          platformAccounts: { none: { isOAuthConnected: true } },
-        },
+        OR: [
+          {
+            platform: { in: REFRESH_PLATFORMS },
+            isOAuthConnected: false,
+            creatorProfile: {
+              catalogSource: "streamhatchet",
+              state: { notIn: ["claimed", "premium"] },
+              userId: null,
+              mergedIntoId: null,
+              platformAccounts: { none: { isOAuthConnected: true } },
+            },
+          },
+          // Every Kick account, whatever the profile's origin: no Kick API
+          // gives follower counts (OAuth included) and /live's run stale, so
+          // this export is the only Kick source. Before 2026-11, 2,407 listed
+          // non-catalog profiles (xQc among them) had no or months-old counts.
+          { platform: "kick", creatorProfile: { mergedIntoId: null } },
+        ],
       },
       select: {
         id: true,
@@ -1384,8 +1393,10 @@ async function refreshFollowersFromExport(
   if (!config.write) return;
 
   // 1. Changed counts — set-based batches. The lastSyncedAt guard means an
-  // older export can never clobber a value something fresher (e.g. the
-  // live-channels harvest) wrote after the export date.
+  // older export can never clobber a value something fresher (the Twitch /
+  // YouTube live-channels harvest) wrote after the export date. Kick has no
+  // fresher source (kick-channel-snapshot bumps lastSyncedAt without a
+  // count), so Kick skips the guard and lastSyncedAt never moves backwards.
   let updatedRows = 0;
   for (let i = 0; i < changed.length; i += UPDATE_BATCH) {
     const chunk = changed.slice(i, i + UPDATE_BATCH);
@@ -1395,10 +1406,11 @@ async function refreshFollowersFromExport(
     const count = await withRetry(() =>
       prisma.$executeRaw(Prisma.sql`
         UPDATE "PlatformAccount" AS a
-        SET "followerCount" = v.reach, "lastSyncedAt" = ${snapshotAt}
+        SET "followerCount" = v.reach,
+            "lastSyncedAt" = GREATEST(COALESCE(a."lastSyncedAt", ${snapshotAt}), ${snapshotAt})
         FROM (VALUES ${tuples}) AS v(id, reach)
         WHERE a."id" = v.id
-          AND (a."lastSyncedAt" IS NULL OR a."lastSyncedAt" < ${snapshotAt})
+          AND (a.platform = 'kick' OR a."lastSyncedAt" IS NULL OR a."lastSyncedAt" < ${snapshotAt})
       `),
     );
     updatedRows += count;

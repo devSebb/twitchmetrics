@@ -452,6 +452,12 @@ async function syncFollowersFromLiveChannels(
   for (const channel of channels) {
     const platform = internalPlatformForStreamHatchet(channel.platform);
     if (!platform) continue;
+    // Kick counts from /live run stale: on 2026-11-09, Stream Hatchet's daily
+    // social export was >5% higher for 488 of 668 Kick channels seen live that
+    // week (median +25%; xQc 1,062,037 here vs 1,508,563 in the export and
+    // 1.51M in Stream Hatchet BI). Kick followers come from that export only
+    // (weekly refresh-followers); Twitch/YouTube /live counts agree with it.
+    if (platform === "kick") continue;
     const followers = channel.followers;
     if (
       typeof followers !== "number" ||
@@ -500,7 +506,7 @@ async function syncFollowersFromLiveChannels(
       `${account.platform}:${account.platformUserId}`,
     );
     if (!entry) continue;
-    if (account.platform !== "kick" && isApiPolledAccount(account)) continue;
+    if (isApiPolledAccount(account)) continue;
 
     await prisma.platformAccount.update({
       where: { id: account.id },
