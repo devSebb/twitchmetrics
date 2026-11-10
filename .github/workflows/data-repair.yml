@@ -20,6 +20,10 @@
 #   reslug-hash-creators: rewrites the July catalog build's hash slugs
 #     (`name-76116e27`) to clean ones, leaving a SlugRedirect per rename so old
 #     URLs keep resolving. 547k profiles; expect ~1 % collisions (kept as-is).
+#   game-minutes: minutes per game from SH's per-game file for a date range
+#     (platform/from/to), then that day's per-game rollups. Newest day first,
+#     so a run that times out has done the days the site shows; re-run with an
+#     earlier `to`. Already-stored days are skipped quickly.
 #   enrich-activity: recomputes isActiveLast30d / lastStreamAt / primaryGame
 #     for SH-born profiles from our own rollups. Last run 2026-08-17, so 44 %
 #     of "inactive" profiles are in fact streaming.
@@ -44,6 +48,7 @@ on:
           - recompute-rollups
           - creator-rollups-only
           - import-sessions
+          - game-minutes
       write:
         description: "Write to the database (unchecked = dry run)"
         required: false
@@ -60,7 +65,7 @@ on:
         default: ""
         type: string
       platform:
-        description: "Stream Hatchet platform (dedupe / recompute-rollups only)"
+        description: "Stream Hatchet platform (dedupe / recompute-rollups / imports / game-minutes; all = game-minutes only)"
         required: false
         default: yt
         type: choice
@@ -68,6 +73,7 @@ on:
           - yt
           - twitch
           - kick
+          - all
       force:
         description: "Re-import dates already marked completed (import-sessions only)"
         required: false
@@ -177,6 +183,13 @@ jobs:
             --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
             --profile "" \
             $FORCE_FLAG $WRITE_FLAG
+
+      - name: streamhatchet-game-minutes (per-game minutes + rollups)
+        if: ${{ inputs.worker == 'game-minutes' }}
+        run: |
+          npx tsx workers/streamhatchet-game-minutes.ts \
+            --platform "$PLATFORM" --start-date "$FROM" --end-date "$TO" \
+            --profile "" --rebuild-rollups $WRITE_FLAG
 
       # Cross-platform by nature, but the worker still wants a --platform for
       # its date parsing; the creator rollup it writes covers every platform.

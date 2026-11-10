@@ -50,8 +50,9 @@ type RankedRow = {
  * days, across Twitch, Kick and YouTube (QA 2026-11: Stream Hatchet ranks
  * Most Watched Channels by Hours Watched, not by viewers right now).
  *
- * Until per-game minutes are imported, a stream that played several games
- * has its hours split equally between them (see ChannelGameDailyRollup).
+ * A stream that played several games is split by Stream Hatchet's per-game
+ * minutes (StreamSessionFact.gameMinutesByDay); streams without them fall
+ * back to an equal split (see packages/core/src/rollups/game-minutes.ts).
  */
 export async function getGameMostWatched(
   prisma: PrismaClient,

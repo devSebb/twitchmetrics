@@ -3,3 +3,4 @@ export * from "./build";
 export * from "./creator";
 export * from "./persist";
 export * from "./facts";
+export * from "./game-minutes";

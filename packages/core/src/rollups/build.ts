@@ -6,6 +6,12 @@ import type {
   RollupContext,
   RollupFact,
 } from "./types";
+import {
+  gameMinutesForDay,
+  namedGameMinutes,
+  splitByWeights,
+  utcDayKey,
+} from "./game-minutes";
 
 /**
  * The daily rollup grouping, as one pure function.
@@ -138,6 +144,49 @@ function averageViewers(
   return airtimeMinutes > 0 ? Number(minutesWatched) / airtimeMinutes : null;
 }
 
+type GameShare = {
+  gameName: string;
+  airtimeMinutes: number;
+  minutesWatched: bigint;
+};
+
+/**
+ * One fact's day slice, split by game. `daySlice` already holds the day's
+ * airtime/watch time; `rawFact` carries the stored per-game minutes.
+ */
+export function splitFactByGame(
+  daySlice: RollupFact,
+  rawFact: RollupFact,
+  dayKey: string,
+): GameShare[] {
+  const minutes = gameMinutesForDay(rawFact.gameMinutesByDay, dayKey);
+  if (minutes) {
+    const { games, noGameMinutes } = namedGameMinutes(minutes);
+    const weights = [...games.map((g) => g.minutes), noGameMinutes];
+    const airtime = splitByWeights(daySlice.airtimeMinutes, weights);
+    const watched = splitByWeights(Number(daySlice.minutesWatched), weights);
+    return games
+      .map((game, index) => ({
+        gameName: game.name,
+        airtimeMinutes: airtime[index] ?? 0,
+        minutesWatched: BigInt(watched[index] ?? 0),
+      }))
+      .filter((s) => s.airtimeMinutes > 0 || s.minutesWatched > 0n);
+  }
+
+  const categories = categoriesOf(daySlice);
+  const airtimeShares = splitEvenly(daySlice.airtimeMinutes, categories.length);
+  const watchShares = splitEvenly(
+    Number(daySlice.minutesWatched),
+    categories.length,
+  );
+  return categories.map((gameName, index) => ({
+    gameName,
+    airtimeMinutes: airtimeShares[index] ?? 0,
+    minutesWatched: BigInt(watchShares[index] ?? 0),
+  }));
+}
+
 export function buildRollups(
   facts: RollupFact[],
   context: RollupContext,
@@ -158,6 +207,7 @@ export function buildRollups(
     else map.set(key, [fact]);
   };
 
+  const dayKey = utcDayKey(date);
   for (const rawFact of facts) {
     // This day's slice of the stream (C26): facts are loaded by overlap with
     // the day, and each contributes only the part that falls inside it.
@@ -178,24 +228,18 @@ export function buildRollups(
 
     push(byChannel, fact.platformUserId, fact);
 
-    // C25: every category the session played, not just the primary game.
-    // rawData.games carries no per-game minutes, so each category takes an
-    // equal share of this day's airtime/watch time, summing back exactly.
-    const categories = categoriesOf(fact);
-    if (categories.length === 0) continue;
-
-    const airtimeShares = splitEvenly(fact.airtimeMinutes, categories.length);
-    const watchShares = splitEvenly(
-      Number(fact.minutesWatched),
-      categories.length,
-    );
-
-    categories.forEach((gameName, index) => {
+    // Per game: Stream Hatchet's per-game minutes for this day when we have
+    // them (gameMinutesByDay, see ./game-minutes), else every category the
+    // session played (C25) takes an equal share. Either way the shares sum
+    // back exactly to the day's airtime/watch time — minus, with real
+    // minutes, the time SH lists with no game, which no game is credited.
+    const split = splitFactByGame(fact, rawFact, dayKey);
+    for (const { gameName, airtimeMinutes, minutesWatched } of split) {
       const categoryFact: RollupFact = {
         ...fact,
         primaryGameName: gameName,
-        airtimeMinutes: airtimeShares[index] ?? 0,
-        minutesWatched: BigInt(watchShares[index] ?? 0),
+        airtimeMinutes,
+        minutesWatched,
       };
       if (!matchedOnly) push(byGame, gameName, categoryFact);
       push(
@@ -203,7 +247,7 @@ export function buildRollups(
         `${fact.platformUserId}\u0000${gameName}`,
         categoryFact,
       );
-    });
+    }
   }
 
   const channel: ChannelRollupRow[] = [];

@@ -20,6 +20,8 @@ export type RollupFact = {
   peakViewersAt: Date | null;
   primaryGameName: string | null;
   allGameNames: string[];
+  /** StreamSessionFact.gameMinutesByDay — raw JSON, read via gameMinutesForDay. */
+  gameMinutesByDay?: unknown;
   airtimeMinutes: number;
   minutesWatched: bigint;
   sessionViews: bigint | null;

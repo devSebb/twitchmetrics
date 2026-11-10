@@ -856,6 +856,14 @@ model StreamSessionFact {
 
   primaryGameName String?
   allGameNames    String[] @default([])
+  /// Minutes per game per UTC day, from Stream Hatchet's per-game file
+  /// (daily_sessions_games): { "2026-11-08": { "Grand Theft Auto V": 587,
+  /// "Just Chatting": 63, "": 4 } }, "" = time with no game. The daily
+  /// sessions file only lists which games a stream had, so without this the
+  /// rollups split a stream equally between them. Written by
+  /// workers/streamhatchet-game-minutes.ts, and only for days where the file
+  /// says more than "the stream's one game, the whole time".
+  gameMinutesByDay Json?
 
   airtimeMinutes       Int
   minutesWatched       BigInt

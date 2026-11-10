@@ -85,7 +85,7 @@ export const CREATOR_WIDGET_INFO: Partial<Record<string, MetricInfo>> = {
   },
   popular_games: {
     title: "Popular Games",
-    body: "Games played in the last 30 days, ranked by time streamed. Stream data lists the games in each stream but not the minutes spent on each, so a stream's airtime and watch time are split equally across the games it played.",
+    body: "Games played in the last 30 days, ranked by time streamed. Time per game comes from Stream Hatchet's per-game stream data; a stream's watch time is shared between its games in proportion to the time spent on each.",
     source: `${SH_DAILY}. Creators Stream Hatchet doesn't cover: games seen in our own live readings, marked as observed.`,
   },
   viewer_count: {
@@ -184,7 +184,7 @@ export const GAME_INFO = {
   },
   mostWatched: {
     title: "Most Watched Channels",
-    body: "Channels with the most hours watched on this game over the last 7 days with complete data (UTC), across Twitch, Kick and YouTube. A stream that played several games has its time split equally between them, so a channel that switched games can be over- or under-counted for each.",
+    body: "Channels with the most hours watched on this game over the last 7 days with complete data (UTC), across Twitch, Kick and YouTube. A stream that played several games is split by the time spent on each, from Stream Hatchet's per-game data; its watch time is shared in the same proportions.",
     source: SH_DAILY,
   },
   emerging: {

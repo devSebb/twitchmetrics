@@ -19,6 +19,10 @@
 # What runs here, for the last N days (completed files are skipped, so normally
 # only yesterday's file per platform is read):
 #   1. kick, yt and twitch imports, each with the imported day's rollups;
+#   1b. minutes per game from SH's per-game file (daily_sessions_games), which
+#      lands ~02:00 UTC the next day; a day whose minutes changed gets its
+#      per-game rollups rebuilt (the sessions file alone only says which games
+#      a stream had, so without it every stream is split equally);
 #   2. rollups for the older days of the window, per platform — a new file
 #      extends streams that crossed midnight, which changes earlier days;
 #   3. YouTube per-game daily averages (GamePlatformViewerSnapshot), which read
@@ -94,6 +98,14 @@ jobs:
         run: |
           npx tsx workers/streamhatchet-ingest.ts \
             --platform twitch --days "$DAYS" --profile "" --write
+
+      # After the imports (it matches the per-game file to their facts) and
+      # before anything reads per-game rollups. Days whose minutes did not
+      # change are not rebuilt, so normally only yesterday is.
+      - name: Minutes per game (last N days)
+        run: |
+          npx tsx workers/streamhatchet-game-minutes.ts \
+            --days "$DAYS" --profile "" --write --rebuild-rollups
 
       - name: Rebuild rollups for the older days (kick, yt, twitch)
         if: ${{ env.DAYS != '1' }}

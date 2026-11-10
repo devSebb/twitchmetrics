@@ -55,6 +55,7 @@ export const ROLLUP_FACT_SELECT = {
   peakViewersAt: true,
   primaryGameName: true,
   allGameNames: true,
+  gameMinutesByDay: true,
   airtimeMinutes: true,
   minutesWatched: true,
   sessionViews: true,
@@ -97,6 +98,12 @@ export type RecomputeRollupsInput = {
   retry?: <T>(fn: () => Promise<T>) => Promise<T>;
   /** The worker writes with skipDuplicates so a retried batch is a no-op. */
   skipDuplicates?: boolean;
+  /**
+   * Rebuild only the per-game tables (GameDailyRollup, ChannelGameDailyRollup)
+   * and leave ChannelDailyRollup alone — for a change that only moves time
+   * between games (workers/streamhatchet-game-minutes.ts backfill).
+   */
+  gamesOnly?: boolean;
 };
 
 export async function recomputeRollups(
@@ -110,6 +117,7 @@ export async function recomputeRollups(
   const { source, platform, partitionDate, matchedOnly } = input;
   const run = input.retry ?? (<T>(fn: () => Promise<T>) => fn());
   const skipDuplicates = input.skipDuplicates ?? false;
+  const gamesOnly = input.gamesOnly ?? false;
 
   // Facts are selected by OVERLAP with the day, not by partitionDate: one
   // stream can span days (a 24/7 channel is a single fact for weeks), and the
@@ -140,7 +148,7 @@ export async function recomputeRollups(
   const where = { source, platform, date: partitionDate };
   await run(() =>
     db.$transaction([
-      db.channelDailyRollup.deleteMany({ where }),
+      ...(gamesOnly ? [] : [db.channelDailyRollup.deleteMany({ where })]),
       ...(matchedOnly ? [] : [db.gameDailyRollup.deleteMany({ where })]),
       db.channelGameDailyRollup.deleteMany({ where }),
     ]),
@@ -153,7 +161,7 @@ export async function recomputeRollups(
     matchedOnly,
   });
 
-  for (const batch of chunk(rollups.channel, WRITE_BATCH)) {
+  for (const batch of chunk(gamesOnly ? [] : rollups.channel, WRITE_BATCH)) {
     await run(() =>
       db.channelDailyRollup.createMany({ data: batch, skipDuplicates }),
     );
@@ -170,7 +178,7 @@ export async function recomputeRollups(
   }
 
   return {
-    channelRollups: rollups.channel.length,
+    channelRollups: gamesOnly ? 0 : rollups.channel.length,
     gameRollups: rollups.game.length,
     channelGameRollups: rollups.channelGame.length,
   };
