@@ -141,7 +141,6 @@ describe("aggregateShRollups", () => {
       streamCount: 3,
       peak: 500,
       peakPlatform: null,
-      peakCombined: false,
       airtimePlatforms: [],
       watchPlatforms: [],
     });
@@ -193,7 +192,6 @@ describe("combineViewerStats", () => {
     streamCount: 0,
     peak: null,
     peakPlatform: null,
-    peakCombined: false,
     airtimePlatforms: [],
     watchPlatforms: [],
     ...overrides,
@@ -220,23 +218,21 @@ describe("combineViewerStats", () => {
   });
 
   it("keeps SH's peak even when one of our readings was higher", () => {
-    const combined = shTotals({
+    const totals = shTotals({
       airtimeSeconds: 60 * 60,
       minutesWatched: 6_000,
       peak: 500,
-      peakPlatform: null,
-      peakCombined: true,
+      peakPlatform: "youtube",
     });
 
     // QA 2026-11: every number SH has comes from SH, so a snapshot reading
     // above SH's peak no longer replaces it.
     const result = combineViewerStats(
       { peak: 900, avgSamples: [], peakPlatform: "twitch" },
-      combined,
+      totals,
     );
     expect(result.peakViewers).toBe(500);
-    expect(result.peakCombined).toBe(true);
-    expect(result.peakPlatform).toBeNull();
+    expect(result.peakPlatform).toBe("youtube");
   });
 
   it("falls back to the snapshot mean when SH has no airtime", () => {
@@ -277,7 +273,6 @@ describe("combineViewerStats", () => {
       peakViewers: 300,
       avgViewers: 100,
       peakPlatform: null,
-      peakCombined: false,
       viewerPlatforms: [],
     });
     expect(
@@ -294,14 +289,12 @@ describe("combineViewerStats", () => {
       peakViewers: 240,
       avgViewers: 100,
       peakPlatform: null,
-      peakCombined: false,
       viewerPlatforms: [],
     });
     expect(combineViewerStats({ peak: null, avgSamples: [] }, null)).toEqual({
       peakViewers: null,
       avgViewers: null,
       peakPlatform: null,
-      peakCombined: false,
       viewerPlatforms: [],
     });
   });
@@ -354,7 +347,6 @@ describe("aggregateCreatorRollups", () => {
       peakViewers: 15_000,
       avgViewers: 12_000,
       peakPlatform: "twitch",
-      peakCombined: false,
       viewerPlatforms: ["twitch", "youtube"],
     });
   });

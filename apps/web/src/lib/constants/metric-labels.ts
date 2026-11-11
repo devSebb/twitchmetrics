@@ -69,9 +69,6 @@ const CREATOR_STAT_NAMES: Record<CreatorStatMetric, string> = {
   newFollowers: "New Followers",
 };
 
-/** Suffix marking a peak figure that spans platforms rather than naming one. */
-export const COMBINED_PEAK_SUFFIX = "estimated combined";
-
 /** Creator stat tile label with its window, e.g. "Airtime · 30d". */
 export function creatorStatLabel(
   metric: CreatorStatMetric,

@@ -41,11 +41,6 @@ export const CREATOR_STATS_INFO = {
     body: "The highest audience on a single platform in the period.",
     source: `${SH_DAILY} (daily peak per channel). Creators Stream Hatchet doesn't cover: the highest of our own live readings.`,
   },
-  peakViewersCombined: {
-    title: "Peak Viewers · estimated combined",
-    body: "Highest platform peak in the period plus what the creator's other platforms averaged at that moment. An estimate: the data has one peak per channel per day, not a minute-by-minute series.",
-    source: SH_DAILY,
-  },
   avgViewers: {
     title: "Avg Viewers",
     body: "Average concurrent viewers while live: total minutes watched divided by airtime, across all platforms.",
@@ -130,10 +125,9 @@ export const CREATOR_LIST_INFO = {
     ...CREATOR_STATS_INFO.avgAirtime,
     body: `${CREATOR_STATS_INFO.avgAirtime.body} Last 30 whole days with complete data.`,
   },
-  // The list doesn't say which kind of peak a row has, so this covers both.
   peakViewers: {
     ...CREATOR_STATS_INFO.peakViewers,
-    body: "The highest audience in the period: the best single platform, or for a creator streaming on several platforms at once, an estimate of their combined peak. Last 30 whole days with complete data.",
+    body: `${CREATOR_STATS_INFO.peakViewers.body} Last 30 whole days with complete data.`,
   },
   avgViewers: {
     ...CREATOR_STATS_INFO.avgViewers,

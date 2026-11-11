@@ -155,11 +155,6 @@ export type ShRollupTotals = {
   peak: number | null;
   /** Platform of the rollup row that holds `peak` (null when unknown). */
   peakPlatform: Platform | null;
-  /**
-   * True when `peak` is C28's cross-platform estimate rather than one
-   * platform's reading, so the tile can say so instead of naming a platform.
-   */
-  peakCombined: boolean;
   /** Platforms with airtime in the period. */
   airtimePlatforms: Platform[];
   /** Platforms with watch time in the period (they feed the SH average). */
@@ -208,8 +203,6 @@ export function aggregateShRollups(
     streamCount,
     peak,
     peakPlatform,
-    // Per-channel rows are always a single platform's reading.
-    peakCombined: false,
     airtimePlatforms: [...airtimePlatforms],
     watchPlatforms: [...watchPlatforms],
   };
@@ -312,7 +305,6 @@ export function aggregateCreatorRollups(
   let vodMinutesAdded = 0;
   let peak: number | null = null;
   let peakPlatform: Platform | null = null;
-  let peakCombined = false;
   const airtimePlatforms = new Set<Platform>();
   const watchPlatforms = new Set<Platform>();
 
@@ -343,9 +335,6 @@ export function aggregateCreatorRollups(
     if (row.peakViewers !== null && (peak === null || row.peakViewers > peak)) {
       peak = row.peakViewers;
       peakPlatform = row.peakPlatform;
-      // buildCreatorRollups leaves peakPlatform null exactly when the figure
-      // came from more than one platform (C28).
-      peakCombined = row.peakPlatform === null && row.platforms.length > 1;
     }
     for (const platform of row.platforms) {
       if (row.uniqueAirtimeMinutes > 0) airtimePlatforms.add(platform);
@@ -373,7 +362,6 @@ export function aggregateCreatorRollups(
     vodMinutesAdded,
     peak,
     peakPlatform,
-    peakCombined,
     airtimePlatforms: [...airtimePlatforms],
     watchPlatforms: [...watchPlatforms],
   };
@@ -401,7 +389,6 @@ export function combineViewerStats(
   peakViewers: number | null;
   avgViewers: number | null;
   peakPlatform: Platform | null;
-  peakCombined: boolean;
   viewerPlatforms: Platform[];
 } {
   const shPeak = sh?.peak ?? null;
@@ -413,10 +400,6 @@ export function combineViewerStats(
       : snapshotWins
         ? (snapshot.peakPlatform ?? null)
         : (sh?.peakPlatform ?? null);
-  // Only the SH side can produce a combined estimate; a snapshot reading is
-  // always one platform.
-  const peakCombined =
-    peakViewers !== null && !snapshotWins && (sh?.peakCombined ?? false);
 
   let avgViewers: number | null = null;
   let viewerPlatforms: Platform[] = [];
@@ -435,7 +418,6 @@ export function combineViewerStats(
     peakViewers,
     avgViewers,
     peakPlatform,
-    peakCombined,
     viewerPlatforms,
   };
 }
