@@ -137,6 +137,7 @@ describe("aggregateShRollups", () => {
     ]);
     expect(totals).toEqual({
       airtimeSeconds: 180 * 60,
+      watchedAirtimeSeconds: 180 * 60,
       minutesWatched: 27_000,
       streamCount: 3,
       peak: 500,
@@ -188,6 +189,7 @@ describe("combineViewerStats", () => {
     overrides: Partial<ShRollupTotals> = {},
   ): ShRollupTotals => ({
     airtimeSeconds: 0,
+    watchedAirtimeSeconds: 0,
     minutesWatched: 0,
     streamCount: 0,
     peak: null,
@@ -204,6 +206,7 @@ describe("combineViewerStats", () => {
       { peak: 300, avgSamples: [80, 120], avgPlatforms: ["twitch"] },
       shTotals({
         airtimeSeconds: 180 * 60,
+        watchedAirtimeSeconds: 180 * 60,
         minutesWatched: 27_000,
         streamCount: 3,
         peak: 500,
@@ -280,6 +283,7 @@ describe("combineViewerStats", () => {
         { peak: null, avgSamples: [] },
         shTotals({
           airtimeSeconds: 3600,
+          watchedAirtimeSeconds: 3600,
           minutesWatched: 6_000,
           streamCount: 1,
           peak: 240,
@@ -381,6 +385,49 @@ describe("aggregateCreatorRollups", () => {
     expect(totals.vodMinutesAdded).toBe(120);
     expect(totals.streamBlocks).toBe(1);
     expect(totals.airtimePlatforms).toContain("twitch");
+  });
+
+  it("averages viewers over Stream Hatchet's airtime only, not VOD-filled time", () => {
+    // QA 2026-11, Rubius 30D: SH rows hold 6,876 min / 147.78M watched
+    // (avg 21,492, BI 21,700); a 280-min VOD for a stream SH missed carries
+    // no viewers. Dividing by all 7,156 min gave the 20.7K on the page.
+    const totals = aggregateCreatorRollups(
+      [
+        day({
+          date: new Date("2026-11-11T00:00:00.000Z"),
+          uniqueAirtimeMinutes: 6_876,
+          minutesWatched: 147_778_666n,
+          intervals: [[0, 1440]],
+        }),
+      ],
+      [
+        {
+          startedAt: new Date("2026-11-12T18:00:00.000Z"),
+          durationSeconds: 280 * 60,
+        },
+      ],
+    );
+    expect(totals.airtimeSeconds).toBe(7_156 * 60);
+    expect(totals.watchedAirtimeSeconds).toBe(6_876 * 60);
+    expect(
+      combineViewerStats({ peak: null, avgSamples: [] }, totals).avgViewers,
+    ).toBe(21_492);
+  });
+
+  it("falls back to snapshot samples when only VOD time is known", () => {
+    const totals = aggregateCreatorRollups(
+      [],
+      [
+        {
+          startedAt: new Date("2026-09-12T08:00:00.000Z"),
+          durationSeconds: 2 * 3600,
+        },
+      ],
+    );
+    expect(totals.watchedAirtimeSeconds).toBe(0);
+    expect(
+      combineViewerStats({ peak: 90, avgSamples: [40, 60] }, totals).avgViewers,
+    ).toBe(50);
   });
 
   it("counts a VOD-only day in full", () => {

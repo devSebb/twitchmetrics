@@ -150,6 +150,13 @@ export function extractSnapshotViewerStats(
 
 export type ShRollupTotals = {
   airtimeSeconds: number;
+  /**
+   * The part of `airtimeSeconds` that Stream Hatchet covered, i.e. the time
+   * `minutesWatched` was measured over. Twitch VOD time filled in for days SH
+   * missed carries no viewers, so dividing by the full airtime would deflate
+   * the average (QA 2026-11: Rubius 30D 20.7K shown vs 21.7K in BI).
+   */
+  watchedAirtimeSeconds: number;
   minutesWatched: number;
   streamCount: number;
   peak: number | null;
@@ -199,6 +206,7 @@ export function aggregateShRollups(
 
   return {
     airtimeSeconds,
+    watchedAirtimeSeconds: airtimeSeconds,
     minutesWatched,
     streamCount,
     peak,
@@ -300,6 +308,7 @@ export function aggregateCreatorRollups(
   const vodsByDay = vodIntervalsByDay(vods);
 
   let airtimeMinutes = 0;
+  let watchedAirtimeMinutes = 0;
   let minutesWatched = 0;
   let streamBlocks = 0;
   let vodMinutesAdded = 0;
@@ -331,6 +340,8 @@ export function aggregateCreatorRollups(
       streamBlocks += row.streamBlocks;
     }
 
+    // Only the stored SH time carries viewers; VOD minutes merged above do not.
+    watchedAirtimeMinutes += row.uniqueAirtimeMinutes;
     minutesWatched += Number(row.minutesWatched);
     if (row.peakViewers !== null && (peak === null || row.peakViewers > peak)) {
       peak = row.peakViewers;
@@ -356,6 +367,7 @@ export function aggregateCreatorRollups(
 
   return {
     airtimeSeconds: airtimeMinutes * 60,
+    watchedAirtimeSeconds: watchedAirtimeMinutes * 60,
     minutesWatched,
     streamCount: streamBlocks,
     streamBlocks,
@@ -403,8 +415,12 @@ export function combineViewerStats(
 
   let avgViewers: number | null = null;
   let viewerPlatforms: Platform[] = [];
-  if (sh && sh.airtimeSeconds > 0) {
-    avgViewers = Math.round(sh.minutesWatched / (sh.airtimeSeconds / 60));
+  // Watched minutes over the airtime they were measured on, so VOD-filled
+  // time (no viewer data) cannot dilute the average.
+  if (sh && sh.watchedAirtimeSeconds > 0) {
+    avgViewers = Math.round(
+      sh.minutesWatched / (sh.watchedAirtimeSeconds / 60),
+    );
     viewerPlatforms = sh.watchPlatforms;
   } else if (snapshot.avgSamples.length > 0) {
     avgViewers = Math.round(
