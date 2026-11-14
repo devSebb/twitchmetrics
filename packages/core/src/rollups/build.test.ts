@@ -377,3 +377,88 @@ describe("attribution helpers", () => {
     expect(splitEvenly(5, 0)).toEqual([]);
   });
 });
+
+describe("buildRollups — concurrent streams on one channel (QA 2026-11)", () => {
+  // LoL Esports on YouTube: the match stream and a "VERTICAL" feed run at the
+  // same time. Their airtime used to add up (29.5 h vs BI's 15.2 h for the
+  // week); the channel's day is capped at the time it was actually live.
+  const concurrent: RollupFact[] = [
+    fact({
+      platformUserId: "lolesports",
+      platformUsername: "lolesports",
+      streamBeginsAt: new Date("2026-09-10T20:56:00.000Z"),
+      streamEndsAt: new Date("2026-09-10T23:59:00.000Z"),
+      airtimeMinutes: 183,
+      minutesWatched: 27_000_000n,
+      primaryGameName: "League of Legends",
+      allGameNames: ["League of Legends"],
+      peakViewers: 241_480,
+    }),
+    fact({
+      platformUserId: "lolesports",
+      platformUsername: "lolesports",
+      streamBeginsAt: new Date("2026-09-10T21:10:00.000Z"),
+      streamEndsAt: new Date("2026-09-10T23:59:00.000Z"),
+      airtimeMinutes: 169,
+      minutesWatched: 131_000n,
+      primaryGameName: "League of Legends",
+      allGameNames: ["League of Legends"],
+      peakViewers: 1_319,
+    }),
+  ];
+  const { channel, game, channelGame } = buildRollups(concurrent, context);
+
+  it("caps the channel's airtime at its live time, keeps both sessions and all watch time", () => {
+    expect(channel).toHaveLength(1);
+    expect(channel[0]).toMatchObject({
+      sessionCount: 2,
+      airtimeMinutes: 183,
+      minutesWatched: 27_131_000n,
+      peakViewers: 241_480,
+    });
+    // Viewers of both feeds, averaged over the time the channel was live.
+    expect(channel[0]!.averageViewers).toBeCloseTo(27_131_000 / 183, 3);
+  });
+
+  it("caps the per-game and platform-wide game airtime the same way", () => {
+    expect(channelGame).toHaveLength(1);
+    expect(channelGame[0]).toMatchObject({
+      gameName: "League of Legends",
+      sessionCount: 2,
+      airtimeMinutes: 183,
+    });
+    expect(
+      game.find((row) => row.gameName === "League of Legends"),
+    ).toMatchObject({
+      sessionCount: 2,
+      channelCount: 1,
+      airtimeMinutes: 183,
+      minutesWatched: 27_131_000n,
+    });
+  });
+
+  it("leaves non-overlapping sessions as the plain sum", () => {
+    const { channel: plain } = buildRollups(facts, context);
+    expect(plain.find((row) => row.platformUserId === "chan-1")).toMatchObject({
+      airtimeMinutes: 180,
+    });
+  });
+
+  it("caps each game of two different concurrent streams at the live time", () => {
+    const twoGames = buildRollups(
+      [
+        concurrent[0]!,
+        {
+          ...concurrent[1]!,
+          primaryGameName: "Just Chatting",
+          allGameNames: ["Just Chatting"],
+        },
+      ],
+      context,
+    );
+    for (const row of twoGames.channelGame) {
+      expect(row.airtimeMinutes).toBeLessThanOrEqual(183);
+    }
+    expect(twoGames.channel[0]!.airtimeMinutes).toBe(183);
+  });
+});

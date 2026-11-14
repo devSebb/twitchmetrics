@@ -12,6 +12,7 @@ import {
   splitByWeights,
   utcDayKey,
 } from "./game-minutes";
+import { mergeIntervals, totalMinutes } from "./creator";
 
 /**
  * The daily rollup grouping, as one pure function.
@@ -59,6 +60,38 @@ export function dayOverlap(
     minutes: overlapMs / 60_000,
     fraction: spanMs > 0 ? overlapMs / spanMs : 1,
   };
+}
+
+/**
+ * The part of `fact` inside the UTC day as [startMinute, endMinute] from
+ * 00:00Z, or null when it does not touch the day.
+ */
+function dayInterval(
+  fact: Pick<RollupFact, "streamBeginsAt" | "streamEndsAt">,
+  dayStart: Date,
+): [number, number] | null {
+  const dayStartMs = dayStart.getTime();
+  const start = Math.max(fact.streamBeginsAt.getTime(), dayStartMs);
+  const end = Math.min(fact.streamEndsAt.getTime(), dayStartMs + DAY_MS);
+  if (end <= start) return null;
+  return [(start - dayStartMs) / 60_000, (end - dayStartMs) / 60_000];
+}
+
+/**
+ * A channel's airtime for the day: the sum of its sessions' airtime, but never
+ * more than the wall-clock time the channel was live. A channel that runs two
+ * streams at once (LoL Esports: the match plus a vertical feed) used to show
+ * both added together, 29.5 h against Stream Hatchet BI's 15.2 h on the game
+ * page (QA 2026-11-13). Where streams do not overlap the sum is kept as is,
+ * so SH's own airtime figure survives rounding of the span.
+ */
+function channelAirtime(
+  facts: RollupFact[],
+  intervals: [number, number][],
+): number {
+  const summed = sumAirtime(facts);
+  const live = Math.round(totalMinutes(mergeIntervals(intervals)));
+  return Math.min(summed, live);
 }
 
 /** Every category a session played: primary game first, then allGameNames. */
@@ -196,6 +229,8 @@ export function buildRollups(
   const byChannel = new Map<string, RollupFact[]>();
   const byGame = new Map<string, RollupFact[]>();
   const byChannelGame = new Map<string, RollupFact[]>();
+  /** Each channel's live intervals this day, for the concurrency cap. */
+  const intervalsByChannel = new Map<string, [number, number][]>();
 
   const push = (
     map: Map<string, RollupFact[]>,
@@ -227,6 +262,12 @@ export function buildRollups(
     };
 
     push(byChannel, fact.platformUserId, fact);
+    const interval = dayInterval(rawFact, date);
+    if (interval) {
+      const list = intervalsByChannel.get(fact.platformUserId) ?? [];
+      list.push(interval);
+      intervalsByChannel.set(fact.platformUserId, list);
+    }
 
     // Per game: Stream Hatchet's per-game minutes for this day when we have
     // them (gameMinutesByDay, see ./game-minutes), else every category the
@@ -251,11 +292,17 @@ export function buildRollups(
   }
 
   const channel: ChannelRollupRow[] = [];
-  for (const channelFacts of byChannel.values()) {
+  /** Each channel's capped airtime, the ceiling for its per-game rows. */
+  const airtimeByChannel = new Map<string, number>();
+  for (const [platformUserId, channelFacts] of byChannel) {
     const latest = channelFacts[channelFacts.length - 1]!;
     const peak = peakFact(channelFacts);
     const minutesWatched = sumMinutesWatched(channelFacts);
-    const airtimeMinutes = sumAirtime(channelFacts);
+    const airtimeMinutes = channelAirtime(
+      channelFacts,
+      intervalsByChannel.get(platformUserId) ?? [],
+    );
+    airtimeByChannel.set(platformUserId, airtimeMinutes);
     const sessionViews = channelFacts.reduce(
       (sum, fact) => sum + (fact.sessionViews ?? 0n),
       0n,
@@ -320,11 +367,49 @@ export function buildRollups(
     });
   }
 
+  // Per channel and game first: a game's airtime on a channel is capped at
+  // the channel's live time, and the platform-wide game rows add up those
+  // capped figures, so one channel's concurrent streams never inflate a game.
+  const channelGame: ChannelGameRollupRow[] = [];
+  const airtimeByGame = new Map<string, number>();
+  for (const channelGameFacts of byChannelGame.values()) {
+    const latest = channelGameFacts[channelGameFacts.length - 1]!;
+    if (!latest.primaryGameName) continue;
+
+    const minutesWatched = sumMinutesWatched(channelGameFacts);
+    const airtimeMinutes = Math.min(
+      sumAirtime(channelGameFacts),
+      airtimeByChannel.get(latest.platformUserId) ?? Number.POSITIVE_INFINITY,
+    );
+    const peak = peakFact(channelGameFacts);
+    airtimeByGame.set(
+      latest.primaryGameName,
+      (airtimeByGame.get(latest.primaryGameName) ?? 0) + airtimeMinutes,
+    );
+
+    channelGame.push({
+      source,
+      platform,
+      date,
+      creatorProfileId: latest.creatorProfileId,
+      platformUserId: latest.platformUserId,
+      platformUsername: latest.platformUsername,
+      platformDisplayName: latest.platformDisplayName,
+      gameName: latest.primaryGameName,
+      sessionCount: channelGameFacts.length,
+      airtimeMinutes,
+      minutesWatched,
+      averageViewers: averageViewers(minutesWatched, airtimeMinutes),
+      peakViewers: peak?.peakViewers ?? null,
+    });
+  }
+
   const game: GameRollupRow[] = [];
   if (!matchedOnly) {
     for (const [gameName, gameFacts] of byGame.entries()) {
       const minutesWatched = sumMinutesWatched(gameFacts);
-      const airtimeMinutes = sumAirtime(gameFacts);
+      const airtimeMinutes =
+        airtimeByGame.get(gameName) ?? sumAirtime(gameFacts);
       const peak = peakFact(gameFacts);
       const topChannel = gameFacts.reduce<RollupFact | null>(
         (best, fact) =>
@@ -351,32 +436,6 @@ export function buildRollups(
         topChannelDisplayName: topChannel?.platformDisplayName ?? null,
       });
     }
-  }
-
-  const channelGame: ChannelGameRollupRow[] = [];
-  for (const channelGameFacts of byChannelGame.values()) {
-    const latest = channelGameFacts[channelGameFacts.length - 1]!;
-    if (!latest.primaryGameName) continue;
-
-    const minutesWatched = sumMinutesWatched(channelGameFacts);
-    const airtimeMinutes = sumAirtime(channelGameFacts);
-    const peak = peakFact(channelGameFacts);
-
-    channelGame.push({
-      source,
-      platform,
-      date,
-      creatorProfileId: latest.creatorProfileId,
-      platformUserId: latest.platformUserId,
-      platformUsername: latest.platformUsername,
-      platformDisplayName: latest.platformDisplayName,
-      gameName: latest.primaryGameName,
-      sessionCount: channelGameFacts.length,
-      airtimeMinutes,
-      minutesWatched,
-      averageViewers: averageViewers(minutesWatched, airtimeMinutes),
-      peakViewers: peak?.peakViewers ?? null,
-    });
   }
 
   return { channel, game, channelGame };
