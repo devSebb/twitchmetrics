@@ -13,3 +13,23 @@ export function platformFollowerCount(account: {
   if (own == null && other == null) return null;
   return BigInt(own ?? 0) + BigInt(other ?? 0);
 }
+
+/**
+ * The same figure for an account serialized for the client, where BigInt
+ * columns arrive as decimal strings (serializeBigInt). Non-numeric strings
+ * count as unknown.
+ */
+export function serializedPlatformFollowerCount(account: {
+  followerCount: string | null;
+  otherChannelsFollowerCount?: string | null;
+}): bigint | null {
+  return platformFollowerCount({
+    followerCount: parseCount(account.followerCount),
+    otherChannelsFollowerCount: parseCount(account.otherChannelsFollowerCount),
+  });
+}
+
+function parseCount(value: string | null | undefined): bigint | null {
+  if (value == null || !/^-?\d+$/.test(value)) return null;
+  return BigInt(value);
+}

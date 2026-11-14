@@ -13,6 +13,7 @@ import {
   type ProfileDataAvailability,
 } from "@/lib/profile-layout";
 import type { StatsContext } from "@/lib/stats-period";
+import { serializedPlatformFollowerCount } from "@/lib/platform-follower-count";
 import {
   EmptyState,
   StatsRow,
@@ -42,6 +43,9 @@ export type SerializedPlatformAccount = {
   platform: Platform;
   platformAvatarUrl?: string | null;
   followerCount: string | null;
+  // The creator's other channels on this platform (Stream Hatchet BI adds
+  // them to the channel we hold); absent on older callers.
+  otherChannelsFollowerCount?: string | null;
   totalViews: string | null;
   lastSyncedAt: string | null;
   isOAuthConnected: boolean;
@@ -170,7 +174,7 @@ function hasContent(widgetId: WidgetId, ctx: ContentContext): boolean {
       );
     case "platform_breakdown":
       return ctx.profile.platformAccounts.some(
-        (account) => Number(account.followerCount ?? 0) > 0,
+        (account) => (serializedPlatformFollowerCount(account) ?? 0n) > 0n,
       );
     case "popular_games":
     case "recent_streams":

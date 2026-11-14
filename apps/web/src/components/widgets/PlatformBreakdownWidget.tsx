@@ -3,6 +3,7 @@
 import type { EChartsOption } from "echarts";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { formatNumber } from "@/lib/utils/format";
+import { serializedPlatformFollowerCount } from "@/lib/platform-follower-count";
 import { BaseChart } from "@/components/charts/BaseChart";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import type { SerializedProfile } from "@/components/dashboard/DashboardGrid";
@@ -13,14 +14,16 @@ type Props = {
 };
 
 export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
+  // Per platform as Stream Hatchet BI shows it: the channel we hold plus the
+  // creator's other channels on that platform, the same figure as the header.
   const bars = profile.platformAccounts
-    .filter((a) => a.followerCount !== null && Number(a.followerCount) > 0)
     .map((a) => ({
       platform: a.platform,
-      followerCount: Number(a.followerCount),
+      followerCount: Number(serializedPlatformFollowerCount(a) ?? 0n),
       color: PLATFORM_CONFIG[a.platform].color,
       name: PLATFORM_CONFIG[a.platform].name,
     }))
+    .filter((bar) => bar.followerCount > 0)
     .sort((a, b) => b.followerCount - a.followerCount);
 
   if (bars.length === 0) {

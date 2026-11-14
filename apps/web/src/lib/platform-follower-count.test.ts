@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { platformFollowerCount } from "./platform-follower-count";
+import {
+  platformFollowerCount,
+  serializedPlatformFollowerCount,
+} from "./platform-follower-count";
 
 describe("platformFollowerCount", () => {
   it("adds the creator's other channels on the platform", () => {
@@ -28,5 +31,37 @@ describe("platformFollowerCount", () => {
         otherChannelsFollowerCount: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe("serializedPlatformFollowerCount", () => {
+  it("adds serialized counts the way the header does (QA 2026-11: Rubius YouTube 41M + 14.9M)", () => {
+    expect(
+      serializedPlatformFollowerCount({
+        followerCount: "41000000",
+        otherChannelsFollowerCount: "14900000",
+      }),
+    ).toBe(55_900_000n);
+  });
+
+  it("works for callers that never serialized other channels", () => {
+    expect(serializedPlatformFollowerCount({ followerCount: "1795884" })).toBe(
+      1_795_884n,
+    );
+  });
+
+  it("treats null and junk as unknown", () => {
+    expect(
+      serializedPlatformFollowerCount({
+        followerCount: null,
+        otherChannelsFollowerCount: null,
+      }),
+    ).toBeNull();
+    expect(
+      serializedPlatformFollowerCount({
+        followerCount: "n/a",
+        otherChannelsFollowerCount: "12",
+      }),
+    ).toBe(12n);
   });
 });
