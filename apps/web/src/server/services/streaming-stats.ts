@@ -545,6 +545,11 @@ export function computeFollowerGain(
  * latest of their first in-window readings, so every platform in the sum
  * covers the same days. A platform without a reading near that start is
  * left out.
+ *
+ * A platform that joined too recently to span the minimum is dropped rather
+ * than allowed to set the shared start: one YouTube reading from the day the
+ * channel was attached pulled every 6M/1Y start to that day and blanked the
+ * tile over months of Twitch history (QA 2026-11, Caedrel and Rubius).
  */
 function partialFollowerGain(
   readings: FollowerReading[],
@@ -568,32 +573,38 @@ function partialFollowerGain(
     list.push(r);
     series.set(r.platform, list);
   }
-  const candidates = [...series].filter(
-    ([, list]) =>
-      endMs - list[list.length - 1]!.snapshotAt.getTime() <= toleranceMs,
-  );
-  if (candidates.length === 0)
-    return { gain: null, platforms: [], since: null };
+  // Earliest-starting platform first; the pool shrinks from the late end.
+  const pool = [...series]
+    .filter(
+      ([, list]) =>
+        endMs - list[list.length - 1]!.snapshotAt.getTime() <= toleranceMs,
+    )
+    .sort(
+      (a, b) => a[1][0]!.snapshotAt.getTime() - b[1][0]!.snapshotAt.getTime(),
+    );
 
-  const sinceMs = Math.max(
-    ...candidates.map(([, list]) => list[0]!.snapshotAt.getTime()),
-  );
-  let gain = 0;
-  const platforms: Platform[] = [];
-  let latestEndMs = 0;
-  for (const [platform, list] of candidates) {
-    const start = list.filter((r) => r.snapshotAt.getTime() <= sinceMs).pop();
-    if (!start || sinceMs - start.snapshotAt.getTime() > toleranceMs) continue;
-    const end = list[list.length - 1]!;
-    gain += Number(end.followerCount! - start.followerCount!);
-    platforms.push(platform);
-    latestEndMs = Math.max(latestEndMs, end.snapshotAt.getTime());
+  while (pool.length > 0) {
+    const sinceMs = pool[pool.length - 1]![1][0]!.snapshotAt.getTime();
+    let gain = 0;
+    const platforms: Platform[] = [];
+    let latestEndMs = 0;
+    for (const [platform, list] of pool) {
+      const start = list.filter((r) => r.snapshotAt.getTime() <= sinceMs).pop();
+      if (!start || sinceMs - start.snapshotAt.getTime() > toleranceMs)
+        continue;
+      const end = list[list.length - 1]!;
+      gain += Number(end.followerCount! - start.followerCount!);
+      platforms.push(platform);
+      latestEndMs = Math.max(latestEndMs, end.snapshotAt.getTime());
+    }
+    if (
+      platforms.length > 0 &&
+      latestEndMs - sinceMs >= FOLLOWER_PARTIAL_MIN_DAYS * DAY_MS
+    ) {
+      return { gain, platforms, since: new Date(sinceMs) };
+    }
+    // The latest joiner made the span too short: measure without it.
+    pool.pop();
   }
-  if (
-    platforms.length === 0 ||
-    latestEndMs - sinceMs < FOLLOWER_PARTIAL_MIN_DAYS * DAY_MS
-  ) {
-    return { gain: null, platforms: [], since: null };
-  }
-  return { gain, platforms, since: new Date(sinceMs) };
+  return { gain: null, platforms: [], since: null };
 }

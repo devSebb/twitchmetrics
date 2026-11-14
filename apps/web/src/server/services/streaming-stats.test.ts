@@ -686,6 +686,46 @@ describe("computeFollowerGain, partial (6M / 1Y)", () => {
     });
   });
 
+  it("drops a platform that joined too recently instead of blanking the tile", () => {
+    // QA 2026-11: Caedrel's 6M. Twitch tracked since June; YouTube got its
+    // single reading on Nov 9 when the channel was attached. The shared start
+    // used to jump to Nov 9, leaving a 2-day span and a "—".
+    const sixMonths = completeDayWindow(180, new Date("2026-11-11T00:00:00Z"));
+    const result = computeFollowerGain(
+      [
+        reading("twitch", "2026-06-13T12:00:00Z", 1_500_000),
+        reading("twitch", "2026-09-01T00:00:00Z", 1_650_000),
+        reading("twitch", "2026-11-11T18:00:00Z", 1_796_392),
+        reading("youtube", "2026-11-09T00:00:00Z", 663_000),
+      ],
+      sixMonths,
+      { partial: true },
+    );
+    expect(result).toEqual({
+      gain: 296_392,
+      platforms: ["twitch"],
+      since: new Date("2026-06-13T12:00:00Z"),
+    });
+  });
+
+  it("keeps a late joiner that still spans 30 days", () => {
+    const sixMonths = completeDayWindow(180, new Date("2026-11-11T00:00:00Z"));
+    const result = computeFollowerGain(
+      [
+        reading("twitch", "2026-06-13T12:00:00Z", 1_000),
+        reading("twitch", "2026-10-01T00:00:00Z", 1_400),
+        reading("twitch", "2026-11-11T18:00:00Z", 2_000),
+        reading("youtube", "2026-10-01T06:00:00Z", 50_000),
+        reading("youtube", "2026-11-09T00:00:00Z", 51_000),
+      ],
+      sixMonths,
+      { partial: true },
+    );
+    expect(result.gain).toBe(600 + 1_000);
+    expect(result.platforms.sort()).toEqual(["twitch", "youtube"]);
+    expect(result.since).toEqual(new Date("2026-10-01T06:00:00Z"));
+  });
+
   it("needs at least 30 days of tracking", () => {
     expect(
       computeFollowerGain(
