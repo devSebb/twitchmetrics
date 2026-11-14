@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/widgets/EmptyState";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
 import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
+import { SOCIAL_AGE_LABELS, labeledBars } from "@/lib/social-age-buckets";
 import { trpc } from "@/lib/trpc";
 import type {
   SerializedAudienceDemographics,
@@ -274,18 +275,6 @@ function CountryRows({
 // Social-audience estimates (AudienceDemographics / DemographicsPro)
 // ----------------------------------------------------------------
 
-// DP bucket keys → compact display labels, in display order.
-const SOCIAL_AGE_LABELS: [string, string][] = [
-  ["age 17 and under", "17 & under"],
-  ["age 18 to 20", "18-20"],
-  ["age 21 to 24", "21-24"],
-  ["age 25 to 29", "25-29"],
-  ["age 30 to 34", "30-34"],
-  ["age 35 to 44", "35-44"],
-  ["age 45 to 54", "45-54"],
-  ["age 55 to 64", "55-64"],
-  ["age 65 and over", "65+"],
-];
 function asPercentRecord(raw: unknown): Record<string, number> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const entries = Object.entries(raw as Record<string, unknown>).filter(
@@ -295,19 +284,11 @@ function asPercentRecord(raw: unknown): Record<string, number> | null {
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
-/** Map a 0-100 labeled distribution to ordered non-zero bars (0-1 scale). */
-function labeledBars(
-  data: Record<string, number> | null,
-  labels: [string, string][],
+/** The social age bars, labelled like Stream Hatchet BI (lib/social-age-buckets). */
+function socialAgeBars(
+  ages: unknown,
 ): { range: string; percentage: number }[] | null {
-  if (!data) return null;
-  const bars = labels
-    .map(([key, label]) => ({
-      range: label,
-      percentage: (data[key] ?? 0) / 100,
-    }))
-    .filter((bar) => bar.percentage > 0);
-  return bars.length > 0 ? bars : null;
+  return labeledBars(asPercentRecord(ages), SOCIAL_AGE_LABELS);
 }
 
 function pickSocialRow(
@@ -364,7 +345,7 @@ function SocialAudienceContent({
         }))
         .filter((g) => g.value > 0)
     : null;
-  const ageRanges = labeledBars(asPercentRecord(row.ages), SOCIAL_AGE_LABELS);
+  const ageRanges = socialAgeBars(row.ages);
   const countries = parseCountryData(row.countries);
   // Household income is intentionally not rendered.
 
