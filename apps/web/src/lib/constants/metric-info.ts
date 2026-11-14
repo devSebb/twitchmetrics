@@ -33,7 +33,7 @@ export const CREATOR_STATS_INFO = {
   },
   avgAirtime: {
     title: "Avg Airtime",
-    body: "Airtime divided by the number of streams in the period. A stream is one continuous live block, across platforms.",
+    body: "Average length of a stream, start to end, over every recorded stream that touched the period. A stream that began before the period or crosses midnight counts once, in full.",
     source: `${SH_DAILY}. Twitch VODs fill days Stream Hatchet missed.`,
   },
   peakViewers: {

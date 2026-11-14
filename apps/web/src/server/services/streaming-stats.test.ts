@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateCreatorRollups,
   aggregateShRollups,
+  averageSessionAirtime,
   clipVodsToWindow,
   computeFollowerGain,
   combineViewerStats,
@@ -324,6 +325,57 @@ describe("vodIntervalsByDay", () => {
         { startedAt: new Date("2026-09-10T10:00:00.000Z"), durationSeconds: 0 },
       ]).size,
     ).toBe(0);
+  });
+});
+
+describe("averageSessionAirtime", () => {
+  const span = (begin: string, end: string) => ({
+    streamBeginsAt: new Date(begin),
+    streamEndsAt: new Date(end),
+  });
+  // QA 2026-11-13, Rubius 7D: 6–12 Nov UTC.
+  const week = completeDayWindow(7, new Date("2026-11-12T00:00:00Z"));
+
+  it("averages whole streams that touch the window, like Stream Hatchet BI", () => {
+    // Rubius's six Twitch sessions from SH's feed: three cross UTC midnight
+    // and the first began the day before the window. Per-day blocks gave 8
+    // and 4:06; BI shows 5 sessions (6 overlapping) and 6:42.
+    const result = averageSessionAirtime(
+      [
+        span("2026-11-05T16:29:00Z", "2026-11-06T01:57:00Z"),
+        span("2026-11-06T16:42:00Z", "2026-11-07T03:01:00Z"),
+        span("2026-11-07T18:25:00Z", "2026-11-07T23:19:00Z"),
+        span("2026-11-09T17:44:00Z", "2026-11-09T22:09:00Z"),
+        span("2026-11-10T19:25:00Z", "2026-11-11T01:55:00Z"),
+        span("2026-11-11T18:39:00Z", "2026-11-11T23:27:00Z"),
+      ],
+      week,
+    );
+    expect(result).toEqual({ sessions: 6, meanSeconds: 404 * 60 });
+  });
+
+  it("keeps a simulcast as two recorded streams; the mean barely moves", () => {
+    const result = averageSessionAirtime(
+      [
+        span("2026-11-08T18:00:00Z", "2026-11-08T22:00:00Z"),
+        span("2026-11-08T18:00:00Z", "2026-11-08T21:50:00Z"),
+      ],
+      week,
+    );
+    expect(result).toEqual({ sessions: 2, meanSeconds: 235 * 60 });
+  });
+
+  it("ignores streams outside the window and empty spans", () => {
+    expect(
+      averageSessionAirtime(
+        [
+          span("2026-11-04T10:00:00Z", "2026-11-04T12:00:00Z"),
+          span("2026-11-13T00:00:00Z", "2026-11-13T02:00:00Z"),
+          span("2026-11-08T10:00:00Z", "2026-11-08T10:00:00Z"),
+        ],
+        week,
+      ),
+    ).toBeNull();
   });
 });
 

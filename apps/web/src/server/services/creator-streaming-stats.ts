@@ -12,11 +12,13 @@ import { fetchVideos } from "@/server/adapters/twitch";
 import {
   aggregateCreatorRollups,
   aggregateShRollups,
+  averageSessionAirtime,
   clipVodsToWindow,
   combineViewerStats,
   completeDayWindow,
   viewerMetricsFromExtended,
   type CreatorRollupDay,
+  type SessionSpan,
   type ShRollupTotals,
   type StatsWindow,
 } from "@/server/services/streaming-stats";
@@ -77,6 +79,50 @@ export async function getLastCompleteStatsDay(
 /** The N complete days creator stats cover, ending on the newest complete day. */
 export async function getStatsWindow(days: number): Promise<StatsWindow> {
   return completeDayWindow(days, await getLastCompleteStatsDay());
+}
+
+/**
+ * How far before the window a stream can have started and still touch it:
+ * 24/7 YouTube streams reach ~26 days in one fact. Bounds the index scan on
+ * (creatorProfileId, platform, partitionDate).
+ */
+const SESSION_LOOKBACK_DAYS = 60;
+
+/**
+ * Every Stream Hatchet session that overlaps the window, per creator, for
+ * Avg Airtime (averageSessionAirtime): BI averages whole streams, so a
+ * stream that began before the window or crosses midnight is one session.
+ */
+export async function loadSessionSpans(
+  db: PrismaClient,
+  creatorProfileIds: string[],
+  window: Pick<StatsWindow, "start" | "end">,
+): Promise<Map<string, SessionSpan[]>> {
+  const byCreator = new Map<string, SessionSpan[]>();
+  if (creatorProfileIds.length === 0) return byCreator;
+  const rows = await db.streamSessionFact.findMany({
+    where: {
+      creatorProfileId: { in: creatorProfileIds },
+      partitionDate: {
+        gte: new Date(window.start.getTime() - SESSION_LOOKBACK_DAYS * DAY_MS),
+        lt: window.end,
+      },
+      streamEndsAt: { gt: window.start },
+      streamBeginsAt: { lt: window.end },
+    },
+    select: {
+      creatorProfileId: true,
+      streamBeginsAt: true,
+      streamEndsAt: true,
+    },
+  });
+  for (const row of rows) {
+    if (!row.creatorProfileId) continue;
+    const list = byCreator.get(row.creatorProfileId) ?? [];
+    list.push(row);
+    byCreator.set(row.creatorProfileId, list);
+  }
+  return byCreator;
 }
 
 /**
@@ -192,7 +238,7 @@ export async function getStreamingStatsBatch(
   const window = await getStatsWindow(sinceDays);
   const since = window.start;
 
-  const [snapshots, rollups, creatorRollups, twitchAccounts] =
+  const [snapshots, rollups, creatorRollups, twitchAccounts, sessionSpans] =
     await Promise.all([
       prisma.metricSnapshot.findMany({
         where: {
@@ -248,6 +294,7 @@ export async function getStreamingStatsBatch(
           platformUserId: true,
         },
       }),
+      loadSessionSpans(prisma, creatorProfileIds, window),
     ]);
 
   const viewerAccs = new Map<string, ViewerAccumulator>();
@@ -369,6 +416,14 @@ export async function getStreamingStatsBatch(
       totalStreams > 0
         ? Math.round((stats.airTimeSeconds ?? 0) / totalStreams)
         : null;
+  }
+
+  // Avg Airtime like BI: whole sessions that touch the window. The block-based
+  // figures above stay as the fallback for creators SH has no sessions for.
+  for (const [creatorId, spans] of sessionSpans) {
+    const stats = result.get(creatorId);
+    const average = averageSessionAirtime(spans, window);
+    if (stats && average) stats.avgAirTimeSeconds = average.meanSeconds;
   }
 
   return result;

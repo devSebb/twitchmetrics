@@ -8,6 +8,7 @@ import { getPopularGames } from "@/server/services/popular-games";
 import {
   aggregateCreatorRollups,
   aggregateShRollups,
+  averageSessionAirtime,
   clipVodsToWindow,
   combineViewerStats,
   computeFollowerGain,
@@ -16,7 +17,10 @@ import {
   type ShRollupTotals,
   type VodAirtime,
 } from "@/server/services/streaming-stats";
-import { getStatsWindow } from "@/server/services/creator-streaming-stats";
+import {
+  getStatsWindow,
+  loadSessionSpans,
+} from "@/server/services/creator-streaming-stats";
 import { CREATOR_STAT_PERIOD_DAYS } from "@/lib/stats-period";
 import {
   getStreamHatchetAccounts,
@@ -711,6 +715,21 @@ export const snapshotRouter = router({
         streamCount += twitchApiStreamCount;
         avgAirTimeSeconds =
           streamCount > 0 ? Math.round(airTimeSeconds / streamCount) : null;
+      }
+
+      // Avg Airtime like Stream Hatchet BI: the mean full length of every
+      // session that touches the window (QA 2026-11: a midnight-crossing
+      // stream counted as two blocks, Rubius 4:06 vs BI 6:42). The
+      // block-based figure above stays for creators SH has no sessions for.
+      const sessionAverage = averageSessionAirtime(
+        (
+          await loadSessionSpans(ctx.prisma, [input.creatorProfileId], window)
+        ).get(input.creatorProfileId) ?? [],
+        window,
+      );
+      if (sessionAverage) {
+        avgAirTimeSeconds = sessionAverage.meanSeconds;
+        streamCount = sessionAverage.sessions;
       }
 
       // SH watch-time-weighted average wins over the mean of per-poll

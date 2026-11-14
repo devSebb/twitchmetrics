@@ -234,6 +234,50 @@ export type VodAirtime = { startedAt: Date; durationSeconds: number };
 
 const MINUTE_MS = 60_000;
 
+/** One stream as Stream Hatchet's session feed records it. */
+export type SessionSpan = { streamBeginsAt: Date; streamEndsAt: Date };
+
+export type SessionAverage = {
+  /** Recorded streams that touch the window. */
+  sessions: number;
+  /** Mean full length of those streams, start to end, in seconds. */
+  meanSeconds: number;
+};
+
+/**
+ * Average session airtime the way Stream Hatchet BI computes it (verified on
+ * six QA cells 2026-11-13, within 5 minutes each): the mean full duration of
+ * every recorded stream that overlaps the window, not the window's airtime
+ * divided by per-day blocks. A stream crossing UTC midnight used to count
+ * twice (Rubius 7D: 8 blocks vs BI's 5 sessions, 4:06 vs 6:42), and a stream
+ * that crosses the window's edge counts in full, as BI does.
+ *
+ * Streams are not merged: a simulcast is two recorded streams of about the
+ * same length, so the mean is unchanged, while merging would fold every
+ * stream into one month-long block for a creator with a 24/7 channel.
+ * Returns null when no stream touches the window.
+ */
+export function averageSessionAirtime(
+  spans: SessionSpan[],
+  window: Pick<StatsWindow, "start" | "end">,
+): SessionAverage | null {
+  const startMs = window.start.getTime();
+  const endMs = window.end.getTime();
+  const durationsMs = spans
+    .filter((s) => {
+      const begin = s.streamBeginsAt.getTime();
+      const end = s.streamEndsAt.getTime();
+      return end > begin && end > startMs && begin < endMs;
+    })
+    .map((s) => s.streamEndsAt.getTime() - s.streamBeginsAt.getTime());
+  if (durationsMs.length === 0) return null;
+  const totalMs = durationsMs.reduce((sum, d) => sum + d, 0);
+  return {
+    sessions: durationsMs.length,
+    meanSeconds: Math.round(totalMs / durationsMs.length / 1000),
+  };
+}
+
 function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
