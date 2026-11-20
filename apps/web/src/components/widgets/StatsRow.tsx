@@ -233,7 +233,7 @@ export function StatsRow({ profile, statsContext }: StatsRowProps) {
       ? withWindow(
           {
             ...CREATOR_STATS_INFO.newFollowers,
-            body: `${CREATOR_STATS_INFO.newFollowers.body} We started tracking this creator's followers after the period began, so this covers ${formatUtcDay(followersSince)} onward, not the whole period.`,
+            body: `${CREATOR_STATS_INFO.newFollowers.body} We started tracking this creator's followers after the period began, so this covers each platform from its first reading (the earliest on ${formatUtcDay(followersSince)}), not the whole period.`,
           },
           `${formatUtcDay(followersSince)} – ${formatUtcDay(streamingStats.periodEnd)}`,
         )

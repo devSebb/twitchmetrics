@@ -512,7 +512,8 @@ export type FollowerGain = {
   platforms: Platform[];
   /**
    * Set when the gain covers only part of the window: tracking started
-   * after the window did, so it runs from this reading to the window end.
+   * after the window did. The earliest reading the gain starts from; other
+   * platforms in the sum may start later.
    */
   since: Date | null;
 };
@@ -529,8 +530,9 @@ export type FollowerGain = {
  * is not "no change". Null-count readings (Kick polls) are skipped.
  *
  * With `partial` (6M / 1Y, where most tracking is younger than the window):
- * when no platform covers the whole window, the gain may instead run from a
- * later common start `since`, at least 30 days before the end, and says so.
+ * when no platform covers the whole window, each platform's gain may instead
+ * run from its own first reading, at least 30 days before its last; `since`
+ * is the earliest of those starts, and the tile says so.
  */
 export function computeFollowerGain(
   readings: FollowerReading[],
@@ -585,15 +587,19 @@ export function computeFollowerGain(
 }
 
 /**
- * The partial gain: platforms whose end is measured share one start, the
- * latest of their first in-window readings, so every platform in the sum
- * covers the same days. A platform without a reading near that start is
- * left out.
+ * The partial gain: every platform whose end is measured counts from its own
+ * first reading in the window, and `since` is the earliest of those starts.
+ * A first reading is a real measurement on its day, so the gain from it is
+ * exact however long ago it was.
  *
- * A platform that joined too recently to span the minimum is dropped rather
- * than allowed to set the shared start: one YouTube reading from the day the
- * channel was attached pulled every 6M/1Y start to that day and blanked the
- * tile over months of Twitch history (QA 2026-11, Caedrel and Rubius).
+ * Platforms used to share one start, the latest of their first readings, so
+ * that every platform covered the same days. Social accounts only got
+ * readings from 2026-10-01, which cut months of Twitch history off the sum:
+ * Caedrel's 6M (117K) came out below his own 3M (133K), Rubius's 1Y (39.7K)
+ * below his 6M (245.9K) (QA 2026-11).
+ *
+ * A platform tracked for less than the minimum span is left out: a channel
+ * attached days ago says nothing about a 6M or 1Y period.
  */
 function partialFollowerGain(
   readings: FollowerReading[],
@@ -602,53 +608,33 @@ function partialFollowerGain(
 ): FollowerGain {
   const startMs = window.start.getTime();
   const endMs = window.end.getTime();
-  const inWindow = readings
-    .filter(
-      (r) =>
-        r.followerCount !== null &&
-        r.snapshotAt.getTime() >= startMs &&
-        r.snapshotAt.getTime() < endMs,
-    )
-    .sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime());
-
   const series = new Map<Platform, FollowerReading[]>();
-  for (const r of inWindow) {
+  for (const r of readings) {
+    const at = r.snapshotAt.getTime();
+    if (r.followerCount === null || at < startMs || at >= endMs) continue;
     const list = series.get(r.platform) ?? [];
     list.push(r);
     series.set(r.platform, list);
   }
-  // Earliest-starting platform first; the pool shrinks from the late end.
-  const pool = [...series]
-    .filter(
-      ([, list]) =>
-        endMs - list[list.length - 1]!.snapshotAt.getTime() <= toleranceMs,
-    )
-    .sort(
-      (a, b) => a[1][0]!.snapshotAt.getTime() - b[1][0]!.snapshotAt.getTime(),
-    );
 
-  while (pool.length > 0) {
-    const sinceMs = pool[pool.length - 1]![1][0]!.snapshotAt.getTime();
-    let gain = 0;
-    const platforms: Platform[] = [];
-    let latestEndMs = 0;
-    for (const [platform, list] of pool) {
-      const start = list.filter((r) => r.snapshotAt.getTime() <= sinceMs).pop();
-      if (!start || sinceMs - start.snapshotAt.getTime() > toleranceMs)
-        continue;
-      const end = list[list.length - 1]!;
-      gain += Number(end.followerCount! - start.followerCount!);
-      platforms.push(platform);
-      latestEndMs = Math.max(latestEndMs, end.snapshotAt.getTime());
-    }
+  let gain = 0;
+  let sinceMs = Infinity;
+  const platforms: Platform[] = [];
+  for (const [platform, list] of series) {
+    list.sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime());
+    const start = list[0]!;
+    const end = list[list.length - 1]!;
+    if (endMs - end.snapshotAt.getTime() > toleranceMs) continue;
     if (
-      platforms.length > 0 &&
-      latestEndMs - sinceMs >= FOLLOWER_PARTIAL_MIN_DAYS * DAY_MS
+      end.snapshotAt.getTime() - start.snapshotAt.getTime() <
+      FOLLOWER_PARTIAL_MIN_DAYS * DAY_MS
     ) {
-      return { gain, platforms, since: new Date(sinceMs) };
+      continue;
     }
-    // The latest joiner made the span too short: measure without it.
-    pool.pop();
+    gain += Number(end.followerCount! - start.followerCount!);
+    platforms.push(platform);
+    sinceMs = Math.min(sinceMs, start.snapshotAt.getTime());
   }
-  return { gain: null, platforms: [], since: null };
+  if (platforms.length === 0) return { gain: null, platforms: [], since: null };
+  return { gain, platforms, since: new Date(sinceMs) };
 }

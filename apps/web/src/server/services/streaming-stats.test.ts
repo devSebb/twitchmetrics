@@ -701,7 +701,7 @@ describe("computeFollowerGain, partial (6M / 1Y)", () => {
     });
   });
 
-  it("starts every platform at the same, later first reading", () => {
+  it("counts every platform from its own first reading", () => {
     const result = computeFollowerGain(
       [
         reading("twitch", "2026-04-22T06:00:00Z", 1_000),
@@ -713,13 +713,14 @@ describe("computeFollowerGain, partial (6M / 1Y)", () => {
       year,
       { partial: true },
     );
-    // Twitch from its Jul 19 reading, not Apr 22: one shared start date.
-    expect(result.gain).toBe(600 + 1_000);
+    // Twitch from Apr 22, not from YouTube's Jul 19 start: a late-tracked
+    // platform must not cut months off another one's history.
+    expect(result.gain).toBe(1_000 + 1_000);
     expect(result.platforms.sort()).toEqual(["twitch", "youtube"]);
-    expect(result.since).toEqual(new Date("2026-07-19T06:00:00Z"));
+    expect(result.since).toEqual(new Date("2026-04-22T06:00:00Z"));
   });
 
-  it("leaves out a platform with no reading near the shared start", () => {
+  it("counts a change-only platform from its one early reading", () => {
     const result = computeFollowerGain(
       [
         // Twitch: change-only, nothing between March and October.
@@ -731,11 +732,11 @@ describe("computeFollowerGain, partial (6M / 1Y)", () => {
       year,
       { partial: true },
     );
-    expect(result).toEqual({
-      gain: 500,
-      platforms: ["youtube"],
-      since: new Date("2026-06-01T00:00:00Z"),
-    });
+    // The March reading is a real count on that day, so 800 since then is
+    // exact even with nothing in between.
+    expect(result.gain).toBe(800 + 500);
+    expect(result.platforms.sort()).toEqual(["twitch", "youtube"]);
+    expect(result.since).toEqual(new Date("2026-03-01T00:00:00Z"));
   });
 
   it("drops a platform that joined too recently instead of blanking the tile", () => {
@@ -773,9 +774,28 @@ describe("computeFollowerGain, partial (6M / 1Y)", () => {
       sixMonths,
       { partial: true },
     );
-    expect(result.gain).toBe(600 + 1_000);
+    expect(result.gain).toBe(1_000 + 1_000);
     expect(result.platforms.sort()).toEqual(["twitch", "youtube"]);
-    expect(result.since).toEqual(new Date("2026-10-01T06:00:00Z"));
+    expect(result.since).toEqual(new Date("2026-06-13T12:00:00Z"));
+  });
+
+  it("is never smaller than a shorter period because social tracking started late", () => {
+    // QA 2026-11, Caedrel 6M: Twitch since Jun 13, socials since Oct 1. The
+    // shared start used to be Oct 1, which left 6M (117K) below 3M (133K).
+    const sixMonths = completeDayWindow(180, new Date("2026-11-11T00:00:00Z"));
+    const result = computeFollowerGain(
+      [
+        reading("twitch", "2026-06-13T12:00:00Z", 1_575_385),
+        reading("twitch", "2026-10-01T00:00:00Z", 1_690_000),
+        reading("twitch", "2026-11-11T18:00:00Z", 1_796_392),
+        reading("youtube", "2026-10-01T00:00:00Z", 263_506),
+        reading("youtube", "2026-11-09T00:00:00Z", 267_240),
+      ],
+      sixMonths,
+      { partial: true },
+    );
+    expect(result.gain).toBe(221_007 + 3_734);
+    expect(result.since).toEqual(new Date("2026-06-13T12:00:00Z"));
   });
 
   it("needs at least 30 days of tracking", () => {
