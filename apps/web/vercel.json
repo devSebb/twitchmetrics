@@ -2,5 +2,39 @@
   "installCommand": "cd ../../ && pnpm install --frozen-lockfile",
   "buildCommand": "pnpm build",
   "outputDirectory": ".next",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/dispatch/game",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/hourly",
+      "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/kick-channels",
+      "schedule": "15 */3 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/discovery",
+      "schedule": "35 */6 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/daily",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/tier1",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/tier2",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/tier3",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

@@ -17,6 +17,9 @@ function isPasswordExempt(pathname: string): boolean {
   if (pathname.startsWith("/api/auth/")) return true;
   // Inngest endpoint
   if (pathname.startsWith("/api/inngest")) return true;
+  // Vercel Cron: it sends `Authorization: Bearer $CRON_SECRET`, which the
+  // route checks itself (and which would fail the Basic check here).
+  if (pathname.startsWith("/api/cron/")) return true;
   // Webhooks (Twitch EventSub, Kick, etc.)
   if (pathname.startsWith("/api/webhooks/")) return true;
   return false;

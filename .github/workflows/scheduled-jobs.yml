@@ -6,22 +6,28 @@
 # one process that runs the same handler as the Inngest function
 # (workers/run-job.ts fn <id>), writing the same IngestionRun rows.
 #
-# Schedule -> jobs (same slots as the old Inngest crons, jobs of one slot run
-# one after the other; a failed job doesn't stop the next ones):
-#   */30          game-snapshot                       (Twitch live game stats)
-#   20 * * * *    kick-category-snapshot, streamhatchet-live-games-snapshot,
-#                 streamhatchet-live-channels-snapshot
-#   15 */3 * * *  kick-channel-snapshot
-#   35 */6 * * *  kick-category-discovery, streamhatchet-game-discovery-snapshot
-#   0 4 * * *     enrich-creators, demote-inactive-creators, discover-games,
-#                 enrich-games, discover-creators, enrich-claimed-profiles,
-#                 finalize-stale-ingestion-runs
-#
-# GitHub starts scheduled runs late (minutes, sometimes more) and can skip one
-# under load. A late game-snapshot is stamped with the 30-min slot it started
-# in, so a skipped run is a missing point on the game charts, never a
-# duplicate. If the gaps matter, have an external scheduler call
-# workflow_dispatch (starts within about a minute) and drop `schedule` here.
+# WHO STARTS IT. Not GitHub's `schedule`: it starts this repo's runs 6-8
+# hours late (the 01:15 UTC daily import started 07:47-09:09 all of
+# 2026-11), and none of the 30-min slots fired in the first hour after this
+# file landed. A dispatch starts within seconds, so Vercel Cron
+# (apps/web/vercel.json) calls /api/cron/dispatch/<slot> on time and the app
+# sends a workflow_dispatch with the slot's job ids. The slot table (what
+# runs when, in which order) is
+# apps/web/src/server/services/github-dispatch.ts:
+#   game           */30          game-snapshot (Twitch live game stats)
+#   hourly         20 * * * *    kick-category-snapshot,
+#                                streamhatchet-live-games-snapshot,
+#                                streamhatchet-live-channels-snapshot
+#   kick-channels  15 */3 * * *  kick-channel-snapshot
+#   discovery      35 */6 * * *  kick-category-discovery,
+#                                streamhatchet-game-discovery-snapshot
+#   daily          0 4 * * *     enrich-creators, demote-inactive-creators,
+#                                discover-games, enrich-games,
+#                                discover-creators, enrich-claimed-profiles,
+#                                finalize-stale-ingestion-runs
+# Jobs of one run go one after the other; a failed job doesn't stop the next.
+# Each game snapshot is stamped with the 30-min slot it started in, so a
+# missed dispatch is a missing point on the game charts, never a duplicate.
 #
 # Still on Inngest: refresh-tokens (needs every OAuth client secret), the
 # github-jobs-watchdog (must not depend on GitHub) and the app's events
@@ -42,12 +48,6 @@
 name: Scheduled jobs
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
-    - cron: "20 * * * *"
-    - cron: "15 */3 * * *"
-    - cron: "35 */6 * * *"
-    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       jobs:
@@ -74,8 +74,7 @@ env:
   # Helix pacing (adapters/twitch-rate.ts): the default background scope,
   # as on Inngest. game-snapshot enters its own "game" scope per step.
   TWITCH_RATE_PRIORITY: job
-  SCHEDULE: ${{ github.event.schedule }}
-  INPUT_JOBS: ${{ inputs.jobs }}
+  JOBS: ${{ inputs.jobs }}
   # Not `&& ''`: an empty string is falsy here and would always pick --write.
   WRITE_FLAG: ${{ inputs.dry_run && '--dry-run' || '--write' }}
 
@@ -85,25 +84,12 @@ jobs:
     # The daily slot is the longest (discovery + enrichment); the others
     # finish in minutes.
     timeout-minutes: 120
-    # One group per slot: a late run waits for the previous run of the same
-    # slot instead of overlapping it; different slots run side by side.
+    # One group per set of jobs: a run waits for the previous run of the
+    # same slot instead of overlapping it; different slots run side by side.
     concurrency:
-      group: scheduled-jobs-${{ github.event.schedule || inputs.jobs }}
+      group: scheduled-jobs-${{ inputs.jobs }}
       cancel-in-progress: false
     steps:
-      - name: Pick the jobs of this slot
-        id: pick
-        run: |
-          case "$SCHEDULE" in
-            "*/30 * * * *") jobs="game-snapshot" ;;
-            "20 * * * *") jobs="kick-category-snapshot streamhatchet-live-games-snapshot streamhatchet-live-channels-snapshot" ;;
-            "15 */3 * * *") jobs="kick-channel-snapshot" ;;
-            "35 */6 * * *") jobs="kick-category-discovery streamhatchet-game-discovery-snapshot" ;;
-            "0 4 * * *") jobs="enrich-creators demote-inactive-creators discover-games enrich-games discover-creators enrich-claimed-profiles finalize-stale-ingestion-runs" ;;
-            "") jobs="$INPUT_JOBS" ;;
-            *) echo "::error::no jobs mapped to schedule '$SCHEDULE'"; exit 1 ;;
-          esac
-          echo "jobs=$jobs" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -114,9 +100,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm --filter @twitchmetrics/database db:generate
-      - name: Run ${{ steps.pick.outputs.jobs }}
-        env:
-          JOBS: ${{ steps.pick.outputs.jobs }}
+      - name: Run ${{ inputs.jobs }}
         # $JOBS unquoted on purpose: one argument per job id.
         run: |
           npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts fn $JOBS $WRITE_FLAG
