@@ -44,12 +44,6 @@ export const functions = [
   // and the watchdog checks the GitHub jobs so it can't run on GitHub.
   refreshTokens,
   githubJobsWatchdog,
-  // Crons here until the Stream Hatchet API token is also a GitHub secret
-  // (2026-11-19: only Vercel has a valid one). Then move them to
-  // scheduled-jobs.yml like the rest.
-  streamHatchetGameDiscoverySnapshot,
-  streamHatchetLiveChannelsSnapshot,
-  streamHatchetLiveGamesSnapshot,
   // Manual tools, started by sending their event from the Inngest dashboard.
   discoverSocialLinks,
   youtubeCrosslinkBackfill,
@@ -70,6 +64,9 @@ export const githubFunctions = [
   kickChannelSnapshot,
   kickCategoryDiscovery,
   kickCategorySnapshot,
+  streamHatchetGameDiscoverySnapshot,
+  streamHatchetLiveChannelsSnapshot,
+  streamHatchetLiveGamesSnapshot,
   streamHatchetS3DailySessions,
   streamHatchetCreatorRollups,
   demoteInactiveCreators,

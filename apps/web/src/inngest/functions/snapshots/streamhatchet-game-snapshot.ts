@@ -765,12 +765,9 @@ async function invalidateGames(games: Pick<GameMatch, "slug">[]) {
 
 export const streamHatchetGameDiscoverySnapshot = inngest.createFunction(
   { id: "streamhatchet-game-discovery-snapshot", concurrency: { limit: 1 } },
-  // Cron on Inngest: the Stream Hatchet API token is only valid in Vercel
-  // (see functions/index.ts).
-  [
-    { cron: "35 */6 * * *" },
-    { event: "snapshots/streamhatchet-game-discovery" },
-  ],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "snapshots/streamhatchet-game-discovery" },
   async ({ step }) => {
     return executeIngestionRun(
       {
@@ -863,12 +860,9 @@ export const streamHatchetGameDiscoverySnapshot = inngest.createFunction(
 
 export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
   { id: "streamhatchet-live-channels-snapshot", concurrency: { limit: 1 } },
-  // Cron on Inngest: the Stream Hatchet API token is only valid in Vercel
-  // (see functions/index.ts).
-  [
-    { cron: "45 */1 * * *" },
-    { event: "snapshots/streamhatchet-live-channels" },
-  ],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "snapshots/streamhatchet-live-channels" },
   async ({ step }) => {
     return executeIngestionRun(
       {
@@ -1004,9 +998,9 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
 // go stale after 2 h, so hourly keeps one on the page between runs.
 export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
   { id: "streamhatchet-live-games-snapshot", concurrency: { limit: 1 } },
-  // Cron on Inngest: the Stream Hatchet API token is only valid in Vercel
-  // (see functions/index.ts).
-  [{ cron: "25 */1 * * *" }, { event: "snapshots/streamhatchet-live-games" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "snapshots/streamhatchet-live-games" },
   async ({ step }) => {
     return executeIngestionRun(
       {

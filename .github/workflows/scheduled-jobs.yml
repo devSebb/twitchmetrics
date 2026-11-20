@@ -9,9 +9,10 @@
 # Schedule -> jobs (same slots as the old Inngest crons, jobs of one slot run
 # one after the other; a failed job doesn't stop the next ones):
 #   */30          game-snapshot                       (Twitch live game stats)
-#   20 * * * *    kick-category-snapshot
+#   20 * * * *    kick-category-snapshot, streamhatchet-live-games-snapshot,
+#                 streamhatchet-live-channels-snapshot
 #   15 */3 * * *  kick-channel-snapshot
-#   35 */6 * * *  kick-category-discovery
+#   35 */6 * * *  kick-category-discovery, streamhatchet-game-discovery-snapshot
 #   0 4 * * *     enrich-creators, demote-inactive-creators, discover-games,
 #                 enrich-games, discover-creators, enrich-claimed-profiles,
 #                 finalize-stale-ingestion-runs
@@ -23,14 +24,8 @@
 # workflow_dispatch (starts within about a minute) and drop `schedule` here.
 #
 # Still on Inngest: refresh-tokens (needs every OAuth client secret), the
-# github-jobs-watchdog (must not depend on GitHub), the app's events (claims,
-# connect), and the three streamhatchet-* snapshots (live games, live
-# channels, game discovery): the STREAMHATCHET_API_KEY secret here is
-# rejected by their API (401, 2026-11-20); only Vercel has a valid token.
-# Once the secret is right, test it with a manual run of
-# streamhatchet-live-games-snapshot, then add the three back to the 20 and 35
-# slots and drop their crons on Inngest. About 20K executions a month until
-# then, under the 50K cap.
+# github-jobs-watchdog (must not depend on GitHub) and the app's events
+# (claims, connect). Together a few hundred executions a month.
 #
 # No Upstash secrets on purpose: cache calls are skipped
 # (services/cache.ts isCacheConfigured) and cached responses expire on their
@@ -41,8 +36,8 @@
 #
 # Required repository secrets: DATABASE_URL, DIRECT_URL, TWITCH_CLIENT_ID,
 # TWITCH_CLIENT_SECRET, KICK_CLIENT_ID, KICK_CLIENT_SECRET, YOUTUBE_API_KEY,
-# TWITTER_BEARER_TOKEN, ENCRYPTION_KEY; STREAMHATCHET_API_KEY (manual
-# streamhatchet-* runs only, see above).
+# TWITTER_BEARER_TOKEN, ENCRYPTION_KEY, STREAMHATCHET_API_KEY (the REST API
+# token; verified from a runner 2026-11-20, the API is not IP-restricted).
 
 name: Scheduled jobs
 
@@ -101,9 +96,9 @@ jobs:
         run: |
           case "$SCHEDULE" in
             "*/30 * * * *") jobs="game-snapshot" ;;
-            "20 * * * *") jobs="kick-category-snapshot" ;;
+            "20 * * * *") jobs="kick-category-snapshot streamhatchet-live-games-snapshot streamhatchet-live-channels-snapshot" ;;
             "15 */3 * * *") jobs="kick-channel-snapshot" ;;
-            "35 */6 * * *") jobs="kick-category-discovery" ;;
+            "35 */6 * * *") jobs="kick-category-discovery streamhatchet-game-discovery-snapshot" ;;
             "0 4 * * *") jobs="enrich-creators demote-inactive-creators discover-games enrich-games discover-creators enrich-claimed-profiles finalize-stale-ingestion-runs" ;;
             "") jobs="$INPUT_JOBS" ;;
             *) echo "::error::no jobs mapped to schedule '$SCHEDULE'"; exit 1 ;;
