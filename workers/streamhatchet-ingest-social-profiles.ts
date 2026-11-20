@@ -91,6 +91,11 @@ import {
 import { recomputeCreatorAggregatesMany } from "@twitchmetrics/core/creator-aggregates";
 import { canonicalProfileId } from "../apps/web/src/server/services/identity/canonical-profile";
 import { normalizePlatformUrlForStorage } from "../apps/web/src/lib/platform-profile-url";
+import {
+  assignContactChannels,
+  otherChannelsFollowers,
+  type OtherChannelAssignments,
+} from "../apps/web/src/server/services/streamhatchet/other-channels";
 
 const args = process.argv.slice(2);
 const BUCKET = "streamhatchet-social-profiles-data";
@@ -872,30 +877,9 @@ type SocialLink = {
 };
 type AttachTarget = {
   canonicalId: string;
+  /** Empty for a profile that only takes part in the other-channels pass. */
   links: SocialLink[];
-  /** Every channel the contact has, per platform (deduped by user_id). */
-  channels: Map<string, Map<string, number>>;
 };
-
-/**
- * Followers of the creator's other channels on an account's platform, as
- * Stream Hatchet BI adds them in. Null when the contact lists no other
- * channel, or when the account's own channel is not among the contact's
- * (then we can't be sure the two lists describe the same creator).
- */
-function otherChannelsFor(
-  target: AttachTarget,
-  platform: string,
-  platformUserId: string,
-): bigint | null {
-  const channels = target.channels.get(platform);
-  if (!channels || !channels.has(platformUserId)) return null;
-  let other = 0;
-  for (const [userId, reach] of channels) {
-    if (userId !== platformUserId) other += reach;
-  }
-  return other > 0 ? BigInt(other) : null;
-}
 type SocialAccountCreate = {
   creatorProfileId: string;
   platform: Platform;
@@ -924,6 +908,12 @@ function reachToBigInt(reach: number | null): bigint | null {
  * gets a MetricSnapshot at the export date when its count changed or it has
  * no social follower history yet (seeds the series). Totals count link-only
  * accounts and other channels, so each chunk ends with an aggregate recompute.
+ *
+ * Other channels (otherChannelsFollowerCount) cover every contact, also one
+ * that maps to several of our profiles: see services/streamhatchet/
+ * other-channels.ts for who gets them. Links stay limited to contacts with a
+ * single profile. Every changed value is listed in
+ * <work-dir>/other-channels-changes.csv, on a dry run too.
  */
 async function attachSocialLinks(
   plan: PlanGroup[],
@@ -938,7 +928,19 @@ async function attachSocialLinks(
 
   // Resolve each contact to its single canonical creator + best link per platform.
   const targets: AttachTarget[] = [];
+  const otherChannels: OtherChannelAssignments = new Map();
+  const sharedContactProfiles = new Set<string>();
   for (const group of groups) {
+    assignContactChannels(
+      otherChannels,
+      group.members.map((m) => ({
+        platform: m.platform,
+        userId: m.user_id,
+        reach: m.reach,
+        creatorProfileId:
+          m.in_catalog && m.creator_profile_id ? m.creator_profile_id : null,
+      })),
+    );
     const canonicalIds = [
       ...new Set(
         group.members
@@ -947,21 +949,13 @@ async function attachSocialLinks(
       ),
     ];
     // Post-merge, a contact maps to exactly one canonical. If not (a merge was
-    // skipped), don't guess which creator owns the socials — skip.
-    if (canonicalIds.length !== 1) continue;
-    const canonicalId = canonicalIds[0]!;
-
-    const channels = new Map<string, Map<string, number>>();
-    for (const m of group.members) {
-      if (!m.user_id) continue;
-      const reach =
-        m.reach != null && Number.isFinite(m.reach)
-          ? Math.max(0, Math.trunc(m.reach))
-          : 0;
-      const byUser = channels.get(m.platform) ?? new Map<string, number>();
-      byUser.set(m.user_id, Math.max(byUser.get(m.user_id) ?? 0, reach));
-      channels.set(m.platform, byUser);
+    // skipped), don't guess which creator owns the socials: no links, only
+    // the other-channels pass below.
+    if (canonicalIds.length !== 1) {
+      for (const id of canonicalIds) sharedContactProfiles.add(id);
+      continue;
     }
+    const canonicalId = canonicalIds[0]!;
 
     const bestByPlatform = new Map<string, SocialLink>();
     for (const m of group.members) {
@@ -980,12 +974,19 @@ async function attachSocialLinks(
     targets.push({
       canonicalId,
       links: [...bestByPlatform.values()],
-      channels,
     });
+  }
+  const linkTargetIds = new Set(targets.map((t) => t.canonicalId));
+  let otherChannelsOnlyProfiles = 0;
+  for (const canonicalId of sharedContactProfiles) {
+    if (linkTargetIds.has(canonicalId)) continue;
+    targets.push({ canonicalId, links: [] });
+    otherChannelsOnlyProfiles++;
   }
 
   log("info", "Social-link targets resolved", {
-    contactsWithLinks: targets.length,
+    contactsWithLinks: targets.length - otherChannelsOnlyProfiles,
+    otherChannelsOnlyProfiles,
     totalLinks: targets.reduce((n, t) => n + t.links.length, 0),
   });
 
@@ -999,6 +1000,9 @@ async function attachSocialLinks(
   let youtubeLinksPlanned = 0;
   let otherChannelsChanged = 0;
   let otherChannelsSet = 0;
+  const otherChannelsChanges: string[] = [
+    "creator_profile_id,platform,username,followers,other_before,other_after",
+  ];
 
   for (let i = 0; i < targets.length; i += READ_CHUNK) {
     const chunk = targets.slice(i, i + READ_CHUNK);
@@ -1086,17 +1090,20 @@ async function attachSocialLinks(
             creatorProfileId: true,
             platform: true,
             platformUserId: true,
+            platformUsername: true,
+            followerCount: true,
             otherChannelsFollowerCount: true,
           },
         }),
       );
-      const targetById = new Map(chunk.map((t) => [t.canonicalId, t]));
       // Links about to be created count as held, so their siblings are known.
       const pendingLinks = toCreate.map((c) => ({
         id: null as string | null,
         creatorProfileId: c.creatorProfileId,
         platform: c.platform,
         platformUserId: c.platformUserId,
+        platformUsername: c.platformUsername,
+        followerCount: c.followerCount,
         otherChannelsFollowerCount: null as bigint | null,
       }));
       const otherUpdates: {
@@ -1106,10 +1113,23 @@ async function attachSocialLinks(
         value: bigint | null;
       }[] = [];
       for (const a of [...accounts, ...pendingLinks]) {
-        const t = targetById.get(a.creatorProfileId);
-        if (!t) continue;
-        const value = otherChannelsFor(t, a.platform, a.platformUserId);
+        const value = otherChannelsFollowers(
+          otherChannels,
+          a.creatorProfileId,
+          a.platform,
+          a.platformUserId,
+        );
         if (value !== a.otherChannelsFollowerCount) {
+          otherChannelsChanges.push(
+            [
+              a.creatorProfileId,
+              a.platform,
+              `"${a.platformUsername.replace(/"/g, '""')}"`,
+              a.followerCount ?? "",
+              a.otherChannelsFollowerCount ?? "",
+              value ?? "",
+            ].join(","),
+          );
           otherUpdates.push({
             id: a.id,
             creatorProfileId: a.creatorProfileId,
@@ -1280,9 +1300,14 @@ async function attachSocialLinks(
     });
   }
 
+  const changesPath = `${config.workDir}/other-channels-changes.csv`;
+  writeFileSync(changesPath, otherChannelsChanges.join("\n"));
+
   log("info", "Social-link attach complete", {
     write: config.write,
-    contactsWithLinks: targets.length,
+    contactsWithLinks: targets.length - otherChannelsOnlyProfiles,
+    otherChannelsOnlyProfiles,
+    otherChannelsChangesFile: changesPath,
     created,
     updated,
     skippedExisting,
