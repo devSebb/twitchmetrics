@@ -46,7 +46,10 @@ import { executeIngestionRun } from "../apps/web/src/server/services/ingestion/r
 import { supportsCreatorSnapshots } from "../apps/web/src/server/services/ingestion/constants";
 import { TIER_SNAPSHOT_JOB_TYPE } from "../apps/web/src/server/services/ingestion/job-types";
 import { getTwitchRateStats } from "../apps/web/src/server/adapters/twitch-rate";
-import { functions as inngestFunctions } from "../apps/web/src/inngest/functions";
+import {
+  functions as inngestServedFunctions,
+  githubFunctions,
+} from "../apps/web/src/inngest/functions";
 import { withDefaultTwitchPriority } from "../apps/web/src/inngest/middleware/twitch-priority";
 
 const args = process.argv.slice(2);
@@ -182,16 +185,15 @@ async function tierJob() {
  * Inngest functions keep an event trigger only. Not here: the tiers (job
  * `tier`), the SH daily import (its own workflow), and what stays on
  * Inngest: refresh-tokens (needs every OAuth client secret), the
- * github-jobs-watchdog (must not depend on GitHub) and the app's events.
+ * github-jobs-watchdog (must not depend on GitHub), the app's events, and
+ * the three streamhatchet-* snapshots until GitHub has a valid Stream
+ * Hatchet API token (MANUAL_FUNCTION_IDS below: `fn` still runs them by hand).
  */
 export const CRON_FUNCTION_IDS = [
   "game-snapshot",
   "kick-category-snapshot",
   "kick-category-discovery",
   "kick-channel-snapshot",
-  "streamhatchet-live-games-snapshot",
-  "streamhatchet-live-channels-snapshot",
-  "streamhatchet-game-discovery-snapshot",
   "enrich-creators",
   "demote-inactive-creators",
   "discover-games",
@@ -200,6 +202,19 @@ export const CRON_FUNCTION_IDS = [
   "enrich-claimed-profiles",
   "finalize-stale-ingestion-runs",
 ] as const;
+
+/** Not scheduled on GitHub; `fn` accepts them for a manual run, e.g. to
+ * test a new STREAMHATCHET_API_KEY secret. */
+const MANUAL_FUNCTION_IDS = [
+  "streamhatchet-live-games-snapshot",
+  "streamhatchet-live-channels-snapshot",
+  "streamhatchet-game-discovery-snapshot",
+] as const;
+const RUNNABLE_IDS: readonly string[] = [
+  ...CRON_FUNCTION_IDS,
+  ...MANUAL_FUNCTION_IDS,
+];
+const allFunctions = [...githubFunctions, ...inngestServedFunctions];
 
 type InlineHandler = (ctx: {
   step: typeof step;
@@ -215,17 +230,15 @@ type InlineHandler = (ctx: {
 async function fnJob() {
   const ids = args.slice(1).filter((arg) => !arg.startsWith("--"));
   if (ids.length === 0) {
-    throw new Error(`fn needs an id. Ids: ${CRON_FUNCTION_IDS.join(", ")}`);
+    throw new Error(`fn needs an id. Ids: ${RUNNABLE_IDS.join(", ")}`);
   }
   const handlers = ids.map((id) => {
-    const fn = (CRON_FUNCTION_IDS as readonly string[]).includes(id)
-      ? inngestFunctions.find((candidate) => candidate.opts.id === id)
+    const fn = RUNNABLE_IDS.includes(id)
+      ? allFunctions.find((candidate) => candidate.opts.id === id)
       : undefined;
     const handler = (fn as unknown as { fn?: InlineHandler } | undefined)?.fn;
     if (typeof handler !== "function") {
-      throw new Error(
-        `unknown fn '${id}'. Ids: ${CRON_FUNCTION_IDS.join(", ")}`,
-      );
+      throw new Error(`unknown fn '${id}'. Ids: ${RUNNABLE_IDS.join(", ")}`);
     }
     return { id, handler };
   });

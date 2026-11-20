@@ -30,7 +30,39 @@ import { youtubeCrosslinkBackfill } from "./discovery/youtube-crosslink-backfill
 import { finalizeStaleIngestionRuns } from "./maintenance/finalize-stale-runs";
 import { githubJobsWatchdog } from "./maintenance/github-jobs-watchdog";
 
+/**
+ * What Inngest runs (served by /api/inngest). Everything Inngest shows in
+ * its dashboard comes from this list.
+ */
 export const functions = [
+  // App events: someone is waiting on these.
+  processClaim,
+  verifyChallenge,
+  enrichOnClaim,
+  onConnectSnapshot,
+  // Crons that stay here: token refresh needs every OAuth client secret,
+  // and the watchdog checks the GitHub jobs so it can't run on GitHub.
+  refreshTokens,
+  githubJobsWatchdog,
+  // Crons here until the Stream Hatchet API token is also a GitHub secret
+  // (2026-11-19: only Vercel has a valid one). Then move them to
+  // scheduled-jobs.yml like the rest.
+  streamHatchetGameDiscoverySnapshot,
+  streamHatchetLiveChannelsSnapshot,
+  streamHatchetLiveGamesSnapshot,
+  // Manual tools, started by sending their event from the Inngest dashboard.
+  discoverSocialLinks,
+  youtubeCrosslinkBackfill,
+];
+
+/**
+ * Cron jobs that run on GitHub Actions (.github/workflows/scheduled-jobs.yml
+ * and creator-snapshots.yml), through workers/run-job.ts. Not registered
+ * with Inngest: they are Inngest function objects only so the runner can
+ * call the same handler. The SH daily import and creator rollups are here
+ * for the same reason: sh-daily-sessions.yml does that work.
+ */
+export const githubFunctions = [
   tier1Snapshot,
   tier2Snapshot,
   tier3Snapshot,
@@ -38,24 +70,13 @@ export const functions = [
   kickChannelSnapshot,
   kickCategoryDiscovery,
   kickCategorySnapshot,
-  streamHatchetGameDiscoverySnapshot,
-  streamHatchetLiveChannelsSnapshot,
-  streamHatchetLiveGamesSnapshot,
   streamHatchetS3DailySessions,
   streamHatchetCreatorRollups,
   demoteInactiveCreators,
-  onConnectSnapshot,
-  processClaim,
-  verifyChallenge,
-  refreshTokens,
   enrichClaimedProfiles,
-  enrichOnClaim,
   enrichGames,
   enrichCreators,
   discoverCreators,
   discoverGames,
-  discoverSocialLinks,
-  youtubeCrosslinkBackfill,
   finalizeStaleIngestionRuns,
-  githubJobsWatchdog,
 ];
