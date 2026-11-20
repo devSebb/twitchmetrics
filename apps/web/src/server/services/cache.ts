@@ -29,6 +29,7 @@ export const CACHE_TTL = {
  * Never throws — always falls through to DB on failure.
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
+  if (!isCacheConfigured()) return null;
   try {
     const value = await redis.get<T>(key);
     if (value !== null) {
@@ -50,6 +51,7 @@ export async function cacheSet<T>(
   value: T,
   ttlSeconds: number,
 ): Promise<void> {
+  if (!isCacheConfigured()) return;
   try {
     await redis.set(key, value, { ex: ttlSeconds });
   } catch (err) {
@@ -66,6 +68,9 @@ export async function cacheSet<T>(
  *   "creator:ninja:*"   — all keys for this creator
  */
 export async function cacheInvalidate(pattern: string): Promise<number> {
+  // A GitHub runner has no Upstash secrets: skip instead of one failed,
+  // retried request per key. Cached responses expire on their TTL (<= 10 min).
+  if (!isCacheConfigured()) return 0;
   try {
     return await cacheInvalidateOrThrow(pattern);
   } catch (err) {

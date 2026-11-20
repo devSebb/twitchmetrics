@@ -32,6 +32,13 @@
 name: Creator snapshots
 
 on:
+  # Same slots as the old Inngest crons (cut over 2026-11-19; the Inngest
+  # functions keep an event trigger only). GitHub starts these late, hours
+  # at times: tier1's 100 min budget still fits between two 6 h slots.
+  schedule:
+    - cron: "0 */6 * * *" # tier1
+    - cron: "0 2 * * *" # tier2
+    - cron: "0 3 * * *" # tier3
   workflow_dispatch:
     inputs:
       tier:
@@ -74,7 +81,7 @@ env:
 
 jobs:
   tier1:
-    if: ${{ inputs.tier == 'tier1' }}
+    if: ${{ inputs.tier == 'tier1' || github.event.schedule == '0 */6 * * *' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     concurrency:
@@ -98,7 +105,7 @@ jobs:
             ${RESUME_SINCE:+--resume-since "$RESUME_SINCE"} $WRITE_FLAG
 
   tier2:
-    if: ${{ inputs.tier == 'tier2' }}
+    if: ${{ inputs.tier == 'tier2' || github.event.schedule == '0 2 * * *' }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
     concurrency:
@@ -125,7 +132,7 @@ jobs:
   # Twitch bucket twice as hard. fail-fast off, so shard 1 still runs when
   # shard 0 fails.
   tier3:
-    if: ${{ inputs.tier == 'tier3' }}
+    if: ${{ inputs.tier == 'tier3' || github.event.schedule == '0 3 * * *' }}
     runs-on: ubuntu-latest
     timeout-minutes: 220
     # One group per shard: in a shared group, a second run's shard 0 could

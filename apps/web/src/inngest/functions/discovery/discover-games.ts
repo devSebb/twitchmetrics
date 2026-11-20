@@ -24,7 +24,9 @@ function slugify(name: string): string {
  */
 export const discoverGames = inngest.createFunction(
   { id: "discover-games", concurrency: { limit: 1 } },
-  [{ cron: "0 5 * * *" }, { event: "games/discover" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "games/discover" },
   async ({ step }) => {
     return executeIngestionRun(
       {

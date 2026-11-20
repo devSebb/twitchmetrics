@@ -38,7 +38,9 @@ function tierFromViewers(viewers: number): "tier1" | "tier2" | "tier3" {
  */
 export const discoverCreators = inngest.createFunction(
   { id: "discover-creators", concurrency: { limit: 1 } },
-  [{ cron: "0 6 * * *" }, { event: "creators/discover" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "creators/discover" },
   async ({ step }) => {
     return executeIngestionRun(
       {

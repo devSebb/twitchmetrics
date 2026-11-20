@@ -16,7 +16,9 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
  */
 export const demoteInactiveCreators = inngest.createFunction(
   { id: "demote-inactive-creators", name: "Demote Inactive Creators" },
-  { cron: "0 4 * * *" }, // Daily at 4am UTC (after snapshot jobs)
+  // Daily at 4am UTC (after snapshot jobs), scheduled on GitHub
+  // (.github/workflows/scheduled-jobs.yml); the event is for manual runs.
+  { event: "creators/demote-inactive" },
   async ({ step }) => {
     return executeIngestionRun(
       {

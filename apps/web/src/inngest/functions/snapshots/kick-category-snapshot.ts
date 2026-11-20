@@ -60,7 +60,9 @@ function hasKickCredentials() {
 
 export const kickCategoryDiscovery = inngest.createFunction(
   { id: "kick-category-discovery", concurrency: { limit: 1 } },
-  [{ cron: "10 */6 * * *" }, { event: "snapshots/kick-category-discovery" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "snapshots/kick-category-discovery" },
   async ({ step }) => {
     return executeIngestionRun(
       {
@@ -125,7 +127,9 @@ const SNAPSHOT_CHUNK_SIZE = 100;
 
 export const kickCategorySnapshot = inngest.createFunction(
   { id: "kick-category-snapshot", concurrency: { limit: 1 } },
-  [{ cron: "20 */1 * * *" }, { event: "snapshots/kick-categories" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "snapshots/kick-categories" },
   async ({ step }) => {
     return executeIngestionRun(
       {

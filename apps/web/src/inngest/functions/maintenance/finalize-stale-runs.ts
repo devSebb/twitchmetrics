@@ -22,7 +22,9 @@ const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
  */
 export const finalizeStaleIngestionRuns = inngest.createFunction(
   { id: "finalize-stale-ingestion-runs", concurrency: { limit: 1 } },
-  [{ cron: "40 6 * * *" }, { event: "maintenance/finalize-stale-runs" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "maintenance/finalize-stale-runs" },
   async ({ step }) => {
     const finalized = await step.run("finalize-stale-runs", async () => {
       const cutoff = new Date(Date.now() - STALE_AFTER_MS);

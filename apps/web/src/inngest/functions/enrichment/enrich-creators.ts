@@ -16,7 +16,9 @@ const BATCH_SIZE = 500;
  */
 export const enrichCreators = inngest.createFunction(
   { id: "enrich-creators", concurrency: { limit: 1 } },
-  [{ cron: "0 4 * * *" }, { event: "creators/enrich" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "creators/enrich" },
   async ({ step }) => {
     return executeIngestionRun(
       {

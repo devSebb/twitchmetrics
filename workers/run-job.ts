@@ -23,8 +23,17 @@
  * Needs the app's path aliases, so run it with the app tsconfig:
  *   npx tsx --tsconfig apps/web/tsconfig.json workers/run-job.ts tier --tier tier3 --shard 0/2 --write
  *
+ *   fn <id> [<id> ...]              any other cron job, by its Inngest
+ *                                   function id (CRON_FUNCTION_IDS below):
+ *                                   runs the function's own handler, in
+ *                                   order, one after the other. A failed job
+ *                                   doesn't stop the next ones; the process
+ *                                   exits 1 at the end if any failed.
+ *        --write                    without it: only lists what would run
+ *
  * Twitch pacing: the workflow sets TWITCH_RATE_PRIORITY=tier; the tier code
- * also enters the "tier" scope itself.
+ * also enters the "tier" scope itself. `fn` jobs run each step in the "job"
+ * scope like on Inngest; game-snapshot enters its own scope.
  */
 import { prisma, type SnapshotTier } from "@twitchmetrics/database";
 import {
@@ -37,6 +46,8 @@ import { executeIngestionRun } from "../apps/web/src/server/services/ingestion/r
 import { supportsCreatorSnapshots } from "../apps/web/src/server/services/ingestion/constants";
 import { TIER_SNAPSHOT_JOB_TYPE } from "../apps/web/src/server/services/ingestion/job-types";
 import { getTwitchRateStats } from "../apps/web/src/server/adapters/twitch-rate";
+import { functions as inngestFunctions } from "../apps/web/src/inngest/functions";
+import { withDefaultTwitchPriority } from "../apps/web/src/inngest/middleware/twitch-priority";
 
 const args = process.argv.slice(2);
 const job = args[0];
@@ -166,9 +177,95 @@ async function tierJob() {
   }
 }
 
+/**
+ * The cron jobs that run on GitHub through `fn` (scheduled-jobs.yml). Their
+ * Inngest functions keep an event trigger only. Not here: the tiers (job
+ * `tier`), the SH daily import (its own workflow), and what stays on
+ * Inngest: refresh-tokens (needs every OAuth client secret), the
+ * github-jobs-watchdog (must not depend on GitHub) and the app's events.
+ */
+export const CRON_FUNCTION_IDS = [
+  "game-snapshot",
+  "kick-category-snapshot",
+  "kick-category-discovery",
+  "kick-channel-snapshot",
+  "streamhatchet-live-games-snapshot",
+  "streamhatchet-live-channels-snapshot",
+  "streamhatchet-game-discovery-snapshot",
+  "enrich-creators",
+  "demote-inactive-creators",
+  "discover-games",
+  "enrich-games",
+  "discover-creators",
+  "enrich-claimed-profiles",
+  "finalize-stale-ingestion-runs",
+] as const;
+
+type InlineHandler = (ctx: {
+  step: typeof step;
+  event: { name: string; data: Record<string, never> };
+}) => Promise<unknown>;
+
+/**
+ * Run Inngest functions' handlers in this process. `fn` is the handler
+ * passed to `inngest.createFunction` (private in the SDK's types, a plain
+ * property at runtime); these handlers only use `step.run` / `step.sleep`
+ * and write their own IngestionRun row.
+ */
+async function fnJob() {
+  const ids = args.slice(1).filter((arg) => !arg.startsWith("--"));
+  if (ids.length === 0) {
+    throw new Error(`fn needs an id. Ids: ${CRON_FUNCTION_IDS.join(", ")}`);
+  }
+  const handlers = ids.map((id) => {
+    const fn = (CRON_FUNCTION_IDS as readonly string[]).includes(id)
+      ? inngestFunctions.find((candidate) => candidate.opts.id === id)
+      : undefined;
+    const handler = (fn as unknown as { fn?: InlineHandler } | undefined)?.fn;
+    if (typeof handler !== "function") {
+      throw new Error(
+        `unknown fn '${id}'. Ids: ${CRON_FUNCTION_IDS.join(", ")}`,
+      );
+    }
+    return { id, handler };
+  });
+
+  if (!WRITE) {
+    log("dry run: would run", { ids });
+    return;
+  }
+
+  const inlineStep = withDefaultTwitchPriority(step);
+  const failed: string[] = [];
+  for (const { id, handler } of handlers) {
+    const startedAt = Date.now();
+    log("start", { fn: id });
+    try {
+      const result = await handler({
+        step: inlineStep,
+        event: { name: `github/${id}`, data: {} },
+      });
+      log("finished", {
+        fn: id,
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+        result: result as Record<string, unknown>,
+      });
+    } catch (error) {
+      failed.push(id);
+      console.error(error);
+      console.log(`::error::${id} failed: ${(error as Error).message}`);
+    }
+  }
+  log("twitch", { twitch: getTwitchRateStats() });
+  if (failed.length > 0) {
+    throw new Error(`failed: ${failed.join(", ")}`);
+  }
+}
+
 async function main() {
   if (job === "tier") return tierJob();
-  throw new Error(`unknown job '${job ?? ""}'. Jobs: tier`);
+  if (job === "fn") return fnJob();
+  throw new Error(`unknown job '${job ?? ""}'. Jobs: tier, fn`);
 }
 
 main()

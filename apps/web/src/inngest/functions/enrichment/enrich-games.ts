@@ -28,7 +28,9 @@ function shouldReplaceCoverImage(
 
 export const enrichGames = inngest.createFunction(
   { id: "enrich-games", concurrency: { limit: 1 } },
-  [{ cron: "30 5 * * *" }, { event: "games/enrich" }],
+  // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
+  // for manual runs.
+  { event: "games/enrich" },
   async ({ step }) => {
     return executeIngestionRun(
       {

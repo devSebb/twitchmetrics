@@ -12,7 +12,7 @@ const SNAPSHOT_BATCH_SIZE = 5;
 // Games per Inngest step. A full run is ~0.5 s/game, so 100 games ≈ 50–60 s —
 // well inside the 300 s maxDuration a single step request gets.
 const GAMES_PER_STEP = 100;
-// Matches the */30 cron: every snapshot of a run is stamped with its slot.
+// Matches the */30 schedule: every snapshot of a run is stamped with its slot.
 const SLOT_MS = 30 * 60 * 1000;
 // One game's DB writes (snapshot, metrics, languages, top channels) commit
 // together, so a killed step can no longer leave a game stripped of rows.
@@ -301,10 +301,12 @@ async function snapshotTrackedGame(
   };
 }
 
-// Cron: every 30 minutes — fetch live stats for all tracked games and write snapshots
+// Every 30 minutes — fetch live stats for all tracked games and write snapshots.
+// Scheduled on GitHub (.github/workflows/scheduled-jobs.yml, run-job.ts fn);
+// the event is for manual runs.
 export const gameSnapshot = inngest.createFunction(
   { id: "game-snapshot", concurrency: { limit: 1 } },
-  { cron: "*/30 * * * *" },
+  { event: "snapshots/game" },
   async ({ step }) => {
     return executeIngestionRun(
       {

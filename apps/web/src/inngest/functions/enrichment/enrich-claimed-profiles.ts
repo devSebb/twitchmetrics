@@ -10,7 +10,9 @@ const log = createLogger("enrich-claimed-profiles");
 
 export const enrichClaimedProfiles = inngest.createFunction(
   { id: "enrich-claimed-profiles", retries: 2 },
-  { cron: "0 6 * * *" },
+  // Daily, scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the
+  // event is for manual runs.
+  { event: "creators/enrich-claimed" },
   async ({ step }) => {
     return executeIngestionRun(
       {
