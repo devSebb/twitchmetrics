@@ -1,5 +1,6 @@
 import type { Platform, PrismaClient } from "@twitchmetrics/database";
 import { Prisma } from "@twitchmetrics/database";
+import { mergeIntervals, totalMinutes } from "@twitchmetrics/core/rollups";
 import {
   gameIdForName,
   indexGamesByName,
@@ -10,6 +11,7 @@ import {
 export { normalizePopularGameName };
 
 export const POPULAR_GAMES_WINDOW_DAYS = 30;
+const SESSION_LOOKBACK_DAYS = 3;
 
 type StreamHatchetPlatform = "kick" | "twitch" | "yt" | "ytg";
 
@@ -22,7 +24,136 @@ type PopularGameContribution = {
   sessionCount: number;
   observationCount: number;
   estimated: boolean;
+  /** Daily rollup rows only: the UTC day and the channel they describe. */
+  dayKey?: string;
+  channelKey?: string;
 };
+
+/** Minute ranges from 00:00Z of one UTC day. */
+type DayIntervals = [number, number][];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A game's airtime on one day across several channels, counting time once.
+ *
+ * Adding the channels up counts a simulcast twice (TheBurntPeanut's Rob Run
+ * on Twitch + Kick: 6.05 days against Stream Hatchet BI's 3.0) and adds a
+ * 24/7 rerun channel on top of the live one (HasanAbi's Just Chatting: 34
+ * days in a 30-day window). BI's combined view counts the time once.
+ *
+ * We store how long each channel had the game that day, not when. So each
+ * channel's game time is spread evenly over the time it was live, and where
+ * channels were live together the larger share counts. Exact when the
+ * channels show the same thing or never overlap, an estimate in between;
+ * never below the largest channel nor above the plain sum. A channel with no
+ * known live time is added in full.
+ */
+export function overlapFreeGameAirtime(
+  channels: { airtimeMinutes: number; live: DayIntervals }[],
+): number {
+  const sum = channels.reduce((total, c) => total + c.airtimeMinutes, 0);
+  if (channels.length < 2) return sum;
+
+  let unplaced = 0;
+  const placed: { share: number; live: DayIntervals }[] = [];
+  const edges = new Set<number>();
+  for (const channel of channels) {
+    const live = mergeIntervals(channel.live);
+    const liveMinutes = totalMinutes(live);
+    if (liveMinutes <= 0) {
+      unplaced += channel.airtimeMinutes;
+      continue;
+    }
+    placed.push({
+      share: Math.min(1, channel.airtimeMinutes / liveMinutes),
+      live,
+    });
+    for (const [start, end] of live) {
+      edges.add(start);
+      edges.add(end);
+    }
+  }
+
+  const sorted = [...edges].sort((a, b) => a - b);
+  let total = unplaced;
+  for (let i = 0; i + 1 < sorted.length; i++) {
+    const start = sorted[i]!;
+    const end = sorted[i + 1]!;
+    let share = 0;
+    for (const channel of placed) {
+      if (
+        channel.share > share &&
+        channel.live.some(([from, to]) => from <= start && to >= end)
+      ) {
+        share = channel.share;
+      }
+    }
+    total += share * (end - start);
+  }
+  return Math.min(sum, total);
+}
+
+/** Live minute ranges per `${dayKey} ${channelKey}`, split at UTC midnight. */
+export function liveIntervalsByDayAndChannel(
+  sessions: { channelKey: string; beginsAt: Date; endsAt: Date }[],
+): Map<string, DayIntervals> {
+  const byKey = new Map<string, DayIntervals>();
+  for (const session of sessions) {
+    const end = session.endsAt.getTime();
+    let cursor = session.beginsAt.getTime();
+    while (cursor < end) {
+      const dayStart = Math.floor(cursor / DAY_MS) * DAY_MS;
+      const sliceEnd = Math.min(end, dayStart + DAY_MS);
+      const key = `${new Date(dayStart).toISOString().slice(0, 10)} ${session.channelKey}`;
+      const list = byKey.get(key) ?? [];
+      list.push([(cursor - dayStart) / 60_000, (sliceEnd - dayStart) / 60_000]);
+      byKey.set(key, list);
+      cursor = sliceEnd;
+    }
+  }
+  return byKey;
+}
+
+/**
+ * Scales the daily rollup contributions of a game down to its overlap-free
+ * airtime, day by day. Call once names are final, so two spellings of one
+ * game on two channels are seen as the same game.
+ */
+export function removeGameAirtimeOverlap(
+  contributions: PopularGameContribution[],
+  liveByDayAndChannel: Map<string, DayIntervals>,
+): void {
+  const groups = new Map<string, PopularGameContribution[]>();
+  for (const contribution of contributions) {
+    if (!contribution.dayKey || !contribution.channelKey) continue;
+    const key = `${contribution.dayKey}\u0000${normalizePopularGameName(contribution.gameName)}`;
+    const group = groups.get(key) ?? [];
+    group.push(contribution);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    const minutesByChannel = new Map<string, number>();
+    for (const c of group) {
+      minutesByChannel.set(
+        c.channelKey!,
+        (minutesByChannel.get(c.channelKey!) ?? 0) + c.airtimeMinutes,
+      );
+    }
+    if (minutesByChannel.size < 2) continue;
+    const dayKey = group[0]!.dayKey!;
+    const sum = group.reduce((total, c) => total + c.airtimeMinutes, 0);
+    if (sum <= 0) continue;
+    const airtime = overlapFreeGameAirtime(
+      [...minutesByChannel].map(([channelKey, airtimeMinutes]) => ({
+        airtimeMinutes,
+        live: liveByDayAndChannel.get(`${dayKey} ${channelKey}`) ?? [],
+      })),
+    );
+    const factor = airtime / sum;
+    for (const c of group) c.airtimeMinutes *= factor;
+  }
+}
 
 export type RankedPopularGame = {
   gameName: string;
@@ -225,7 +356,8 @@ export function rankPopularGameContributions(
           gameName: game.gameName,
           twitchGameIds: [...game.twitchGameIdSet].sort(),
           minutesWatched: game.minutesWatched,
-          airtimeMinutes: game.airtimeMinutes,
+          // Overlap removal leaves fractions of a minute.
+          airtimeMinutes: Math.round(game.airtimeMinutes),
           sessionCount: game.sessionCount,
           observationCount: game.observationCount,
           measurement:
@@ -310,6 +442,8 @@ export async function getPopularGames(
       },
       select: {
         platform: true,
+        platformUserId: true,
+        date: true,
         gameName: true,
         sessionCount: true,
         airtimeMinutes: true,
@@ -318,7 +452,12 @@ export async function getPopularGames(
     }),
     prisma.streamSessionFact.findMany({
       where: {
-        streamBeginsAt: { gte: since },
+        // A few days earlier than the window: a stream that began before it
+        // can still be live inside it (Twitch streams run up to 48 h), and
+        // its live time is needed to remove overlap below.
+        streamBeginsAt: {
+          gte: new Date(since.getTime() - SESSION_LOOKBACK_DAYS * DAY_MS),
+        },
         OR: [
           { creatorProfileId: options.creatorProfileId },
           ...sessionIdentities,
@@ -326,6 +465,9 @@ export async function getPopularGames(
       },
       select: {
         platform: true,
+        platformUserId: true,
+        streamBeginsAt: true,
+        streamEndsAt: true,
         primaryGameName: true,
         airtimeMinutes: true,
         minutesWatched: true,
@@ -360,6 +502,9 @@ export async function getPopularGames(
         sessionCount: rollup.sessionCount,
         observationCount: 0,
         estimated: false,
+        dayKey: rollup.date.toISOString().slice(0, 10),
+        // "yt" and "ytg" rows of one YouTube channel are one channel.
+        channelKey: `${platform ?? rollup.platform}:${rollup.platformUserId}`,
       },
     ];
   });
@@ -368,6 +513,7 @@ export async function getPopularGames(
   for (const session of sessions) {
     const platform = internalPlatform(session.platform);
     if (!platform || rollupPlatforms.has(platform)) continue;
+    if (session.streamBeginsAt < since) continue;
     const gameName = session.primaryGameName?.trim();
     if (!gameName) continue;
     sessionPlatforms.add(platform);
@@ -408,6 +554,17 @@ export async function getPopularGames(
     const catalogName = gameId ? catalogNameById.get(gameId) : undefined;
     if (catalogName) contribution.gameName = catalogName.trim();
   }
+
+  removeGameAirtimeOverlap(
+    contributions,
+    liveIntervalsByDayAndChannel(
+      sessions.map((session) => ({
+        channelKey: `${internalPlatform(session.platform) ?? session.platform}:${session.platformUserId}`,
+        beginsAt: session.streamBeginsAt,
+        endsAt: session.streamEndsAt,
+      })),
+    ),
+  );
 
   const ranked = rankPopularGameContributions(contributions, options.limit);
   if (ranked.length === 0) return [];

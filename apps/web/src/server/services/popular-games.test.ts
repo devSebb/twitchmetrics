@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@twitchmetrics/database";
 import {
   getPopularGames,
+  liveIntervalsByDayAndChannel,
   normalizePopularGameName,
+  overlapFreeGameAirtime,
+  removeGameAirtimeOverlap,
   popularGamesWindowStart,
   rankPopularGameContributions,
   snapshotToPopularGameContribution,
@@ -193,7 +196,13 @@ describe("popular game ranking", () => {
     );
     expect(sessionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ streamBeginsAt: { gte: since } }),
+        // Three days earlier: streams that began before the window can
+        // still be live inside it.
+        where: expect.objectContaining({
+          streamBeginsAt: {
+            gte: new Date(since.getTime() - 3 * 24 * 60 * 60 * 1000),
+          },
+        }),
       }),
     );
     expect(snapshotFindMany).toHaveBeenCalledWith(
@@ -214,6 +223,8 @@ describe("popular game ranking", () => {
   it("ranks SH's names for one game as one row, linked to the catalog game", async () => {
     const rollup = (gameName: string, minutesWatched: bigint) => ({
       platform: "twitch",
+      platformUserId: "channel-1",
+      date: new Date("2026-07-10T00:00:00.000Z"),
       gameName,
       sessionCount: 1,
       airtimeMinutes: 60,
@@ -264,5 +275,134 @@ describe("popular game ranking", () => {
         airtimeMinutes: 120,
       }),
     ]);
+  });
+});
+
+/**
+ * A creator's game airtime counts time once across channels, as Stream
+ * Hatchet BI's combined view does (QA round 3, 2026-11).
+ */
+describe("overlapFreeGameAirtime", () => {
+  it("leaves a single channel as it is", () => {
+    expect(
+      overlapFreeGameAirtime([{ airtimeMinutes: 200, live: [[0, 300]] }]),
+    ).toBe(200);
+  });
+
+  it("counts a simulcast once", () => {
+    // TheBurntPeanut: the same 4 h stream on Twitch and Kick, half of it
+    // on this game.
+    expect(
+      overlapFreeGameAirtime([
+        { airtimeMinutes: 120, live: [[600, 840]] },
+        { airtimeMinutes: 120, live: [[600, 840]] },
+      ]),
+    ).toBeCloseTo(120);
+  });
+
+  it("does not add a live stream on top of a 24/7 channel", () => {
+    // HasanAbi: 8 h live while the waiting room runs all day.
+    expect(
+      overlapFreeGameAirtime([
+        { airtimeMinutes: 480, live: [[900, 1380]] },
+        { airtimeMinutes: 1440, live: [[0, 1440]] },
+      ]),
+    ).toBeCloseTo(1440);
+  });
+
+  it("adds channels that were live at different times", () => {
+    expect(
+      overlapFreeGameAirtime([
+        { airtimeMinutes: 180, live: [[0, 180]] },
+        { airtimeMinutes: 180, live: [[600, 780]] },
+      ]),
+    ).toBeCloseTo(360);
+  });
+
+  it("stays between the largest channel and the sum on a partial overlap", () => {
+    const airtime = overlapFreeGameAirtime([
+      { airtimeMinutes: 100, live: [[0, 200]] },
+      { airtimeMinutes: 300, live: [[100, 400]] },
+    ]);
+    expect(airtime).toBeGreaterThanOrEqual(300);
+    expect(airtime).toBeLessThanOrEqual(400);
+    // 0-100 at half share, 100-400 at full share.
+    expect(airtime).toBeCloseTo(350);
+  });
+
+  it("adds a channel with no known live time in full", () => {
+    expect(
+      overlapFreeGameAirtime([
+        { airtimeMinutes: 60, live: [] },
+        { airtimeMinutes: 90, live: [[0, 90]] },
+      ]),
+    ).toBeCloseTo(150);
+  });
+});
+
+describe("liveIntervalsByDayAndChannel", () => {
+  it("splits a stream at UTC midnight", () => {
+    const live = liveIntervalsByDayAndChannel([
+      {
+        channelKey: "twitch:1",
+        beginsAt: new Date("2026-11-10T22:00:00Z"),
+        endsAt: new Date("2026-11-11T03:00:00Z"),
+      },
+    ]);
+    expect(live.get("2026-11-10 twitch:1")).toEqual([[1320, 1440]]);
+    expect(live.get("2026-11-11 twitch:1")).toEqual([[0, 180]]);
+  });
+});
+
+describe("removeGameAirtimeOverlap", () => {
+  const row = (
+    channelKey: string,
+    gameName: string,
+    airtimeMinutes: number,
+    dayKey = "2026-11-10",
+  ) => ({
+    gameName,
+    platform: "twitch" as const,
+    minutesWatched: 1000n,
+    airtimeMinutes,
+    sessionCount: 1,
+    observationCount: 0,
+    estimated: false,
+    dayKey,
+    channelKey,
+  });
+
+  it("scales a game's rows of one day down and keeps watch time", () => {
+    const rows = [
+      row("twitch:main", "Rob Run", 120),
+      row("kick:main", "rob run", 120),
+      row("twitch:main", "Rob Run", 120, "2026-11-11"),
+    ];
+    removeGameAirtimeOverlap(
+      rows,
+      new Map([
+        ["2026-11-10 twitch:main", [[600, 720]]],
+        ["2026-11-10 kick:main", [[600, 720]]],
+      ]),
+    );
+    expect(rows[0]!.airtimeMinutes + rows[1]!.airtimeMinutes).toBeCloseTo(120);
+    // Another day, one channel: untouched.
+    expect(rows[2]!.airtimeMinutes).toBe(120);
+    expect(rows.every((r) => r.minutesWatched === 1000n)).toBe(true);
+  });
+
+  it("leaves different games on overlapping channels alone", () => {
+    const rows = [
+      row("twitch:main", "Rob Run", 120),
+      row("twitch:reruns", "Always On", 1440),
+    ];
+    removeGameAirtimeOverlap(
+      rows,
+      new Map([
+        ["2026-11-10 twitch:main", [[600, 720]]],
+        ["2026-11-10 twitch:reruns", [[0, 1440]]],
+      ]),
+    );
+    expect(rows.map((r) => r.airtimeMinutes)).toEqual([120, 1440]);
   });
 });
