@@ -1,5 +1,10 @@
 import { Prisma, type PrismaClient } from "@twitchmetrics/database";
 import { buildRollups } from "./build";
+import {
+  CONTINUATION_PLATFORMS,
+  continuationFacts,
+  continuationPossible,
+} from "./continuation";
 import { buildCreatorRollups, type CreatorRollupFact } from "./creator";
 import type { RollupFact } from "./types";
 
@@ -77,6 +82,109 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 const SCAN_MARGIN_DAYS = 30;
 
+/** Full 72 h blocks are stored as 4,319 airtime minutes, give or take. */
+const BLOCK_AIRTIME_MINUTES = { gte: 4310, lte: 4330 };
+
+/**
+ * Assumed streams for the 24/7 channels whose next 72 h block is not in the
+ * feed yet (./continuation), for one day. Reads nothing beyond the newest
+ * export day for any day older than two days, so a backfill pays one
+ * indexed lookup per day and platform.
+ */
+export async function loadContinuationFacts(
+  db: Pick<PrismaClient, "streamSessionFact">,
+  input: {
+    source: string;
+    /** One SH platform code, or every platform a continuation applies to. */
+    platform?: string;
+    dayStart: Date;
+    /** Creator rollups only read channels matched to a profile. */
+    matchedOnly?: boolean;
+    retry?: <T>(fn: () => Promise<T>) => Promise<T>;
+  },
+): Promise<(RollupFact & { platform: string })[]> {
+  const { source, dayStart } = input;
+  const run = input.retry ?? (<T>(fn: () => Promise<T>) => fn());
+  const platforms = CONTINUATION_PLATFORMS.filter(
+    (code) => !input.platform || code === input.platform,
+  );
+  const continued: (RollupFact & { platform: string })[] = [];
+
+  for (const platform of platforms) {
+    const newest = await run(() =>
+      db.streamSessionFact.findFirst({
+        where: { source, platform },
+        orderBy: { partitionDate: "desc" },
+        select: { partitionDate: true },
+      }),
+    );
+    if (!newest || !continuationPossible(dayStart, newest.partitionDate)) {
+      continue;
+    }
+
+    // The block before the one that would cover this day ended at most
+    // three days before the day does.
+    const endedAfter = new Date(dayStart.getTime() - 3 * DAY_MS);
+    const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+    const partitionDate = {
+      gte: new Date(dayStart.getTime() - 5 * DAY_MS),
+      lte: newest.partitionDate,
+    };
+    const blocks = (await run(() =>
+      db.streamSessionFact.findMany({
+        where: {
+          source,
+          platform,
+          partitionDate,
+          airtimeMinutes: BLOCK_AIRTIME_MINUTES,
+          streamEndsAt: { gt: endedAfter, lte: dayEnd },
+          ...(input.matchedOnly ? { creatorProfileId: { not: null } } : {}),
+        },
+        select: ROLLUP_FACT_SELECT,
+      }),
+    )) as RollupFact[];
+    if (blocks.length === 0) continue;
+
+    // Any newer row of those channels, of any length, ends the assumption.
+    const latestEndByChannel = new Map<string, number>();
+    const channelIds = [...new Set(blocks.map((b) => b.platformUserId))];
+    for (const ids of chunk(channelIds, WRITE_BATCH)) {
+      const latest = await run(() =>
+        db.streamSessionFact.groupBy({
+          by: ["platformUserId"],
+          where: {
+            source,
+            platform,
+            partitionDate,
+            platformUserId: { in: ids },
+          },
+          _max: { streamEndsAt: true },
+        }),
+      );
+      for (const row of latest) {
+        if (row._max.streamEndsAt) {
+          latestEndByChannel.set(
+            row.platformUserId,
+            row._max.streamEndsAt.getTime(),
+          );
+        }
+      }
+    }
+
+    for (const fact of continuationFacts(
+      blocks,
+      latestEndByChannel,
+      newest.partitionDate,
+    )) {
+      // Only what touches this day, like the facts query of the caller.
+      if (fact.streamBeginsAt < dayEnd && fact.streamEndsAt > dayStart) {
+        continued.push({ ...fact, platform });
+      }
+    }
+  }
+  return continued;
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size)
@@ -144,6 +252,16 @@ export async function recomputeRollups(
       select: ROLLUP_FACT_SELECT,
     }),
   )) as RollupFact[];
+  // 24/7 channels whose current block is not delivered yet. They end last,
+  // so appending keeps the order the builder relies on.
+  facts.push(
+    ...(await loadContinuationFacts(db, {
+      source,
+      platform,
+      dayStart,
+      ...(input.retry ? { retry: input.retry } : {}),
+    })),
+  );
 
   const where = { source, platform, date: partitionDate };
   await run(() =>
@@ -219,6 +337,14 @@ export async function recomputeCreatorRollups(
       select: { ...ROLLUP_FACT_SELECT, platform: true },
     }),
   )) as (RollupFact & { platform: string })[];
+  facts.push(
+    ...(await loadContinuationFacts(db, {
+      source,
+      dayStart,
+      matchedOnly: true,
+      ...(input.retry ? { retry: input.retry } : {}),
+    })),
+  );
 
   const rows = buildCreatorRollups(
     facts.map(

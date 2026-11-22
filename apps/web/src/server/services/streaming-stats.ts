@@ -244,6 +244,49 @@ export type SessionAverage = {
   meanSeconds: number;
 };
 
+/** Stream Hatchet reports a stream that is still live over its last 3 days. */
+const BI_SESSION_WINDOW_DAYS = 3;
+/**
+ * Above this a stored stream is several of BI's sessions. Over 72 h on
+ * purpose: a Twitch 24/7 channel arrives as 72 h 01 m blocks, which BI
+ * lists one to one.
+ */
+const BI_LONG_SESSION_MS = BI_SESSION_WINDOW_DAYS * DAY_MS + 60 * 60 * 1000;
+
+/**
+ * One stored stream as the sessions Stream Hatchet BI lists for it, as
+ * [begin, end] in ms.
+ *
+ * Every daily export shows a stream that is still live over the last three
+ * days, and BI lists each of those sightings as its own session: a
+ * YouTube 24/7 stream is a new 72 h session every day, each overlapping the
+ * one before (BI Sessions tab, TheBurntPeanut 24/7, 2026-11-21: Nov 11-13,
+ * Nov 12-14, ...). The import merges the sightings into one row
+ * (rollups/facts.ts), which is right for airtime and wrong for this tile:
+ * his merged stream of 5,010 h made the average 70 h against BI's 27 h 50 m.
+ * So a stream longer than the window is taken apart again, one session per
+ * UTC day it was live on, from two days before that day to its end.
+ */
+function biSessions(span: SessionSpan): [number, number][] {
+  const begin = span.streamBeginsAt.getTime();
+  const end = span.streamEndsAt.getTime();
+  if (end - begin <= BI_LONG_SESSION_MS) return [[begin, end]];
+  const sessions: [number, number][] = [];
+  // The stream's last instant belongs to the day it ended on.
+  const lastDayStart = Math.floor((end - 1) / DAY_MS) * DAY_MS;
+  for (
+    let dayStart = Math.floor(begin / DAY_MS) * DAY_MS;
+    dayStart <= lastDayStart;
+    dayStart += DAY_MS
+  ) {
+    sessions.push([
+      Math.max(begin, dayStart - (BI_SESSION_WINDOW_DAYS - 1) * DAY_MS),
+      Math.min(end, dayStart + DAY_MS),
+    ]);
+  }
+  return sessions;
+}
+
 /**
  * Average session airtime the way Stream Hatchet BI computes it (verified on
  * six QA cells 2026-11-13, within 5 minutes each): the mean full duration of
@@ -255,7 +298,9 @@ export type SessionAverage = {
  * Streams are not merged: a simulcast is two recorded streams of about the
  * same length, so the mean is unchanged, while merging would fold every
  * stream into one month-long block for a creator with a 24/7 channel.
- * Returns null when no stream touches the window.
+ *
+ * A stream longer than BI's 3-day window counts as BI lists it: see
+ * biSessions. Returns null when no stream touches the window.
  */
 export function averageSessionAirtime(
   spans: SessionSpan[],
@@ -263,13 +308,14 @@ export function averageSessionAirtime(
 ): SessionAverage | null {
   const startMs = window.start.getTime();
   const endMs = window.end.getTime();
-  const durationsMs = spans
-    .filter((s) => {
-      const begin = s.streamBeginsAt.getTime();
-      const end = s.streamEndsAt.getTime();
-      return end > begin && end > startMs && begin < endMs;
-    })
-    .map((s) => s.streamEndsAt.getTime() - s.streamBeginsAt.getTime());
+  const durationsMs: number[] = [];
+  for (const span of spans) {
+    for (const [begin, end] of biSessions(span)) {
+      if (end > begin && end > startMs && begin < endMs) {
+        durationsMs.push(end - begin);
+      }
+    }
+  }
   if (durationsMs.length === 0) return null;
   const totalMs = durationsMs.reduce((sum, d) => sum + d, 0);
   return {

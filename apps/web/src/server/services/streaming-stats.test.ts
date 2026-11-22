@@ -365,6 +365,53 @@ describe("averageSessionAirtime", () => {
     expect(result).toEqual({ sessions: 2, meanSeconds: 235 * 60 });
   });
 
+  // BI lists a stream that is still live once per daily export, over its
+  // last three days (Sessions tab, TheBurntPeanut 24/7, 2026-11-21).
+  it("counts a 24/7 stream as one 72 h session per day, like BI", () => {
+    // Live since April and still live after the window. The sessions of
+    // 6 to 12 Nov end inside it, and those of 13 and 14 Nov began inside it
+    // (11 and 12 Nov): nine, all 72 h but the last, cut a minute short.
+    const result = averageSessionAirtime(
+      [span("2026-04-08T00:00:00Z", "2026-11-14T23:59:00Z")],
+      week,
+    );
+    expect(result).toEqual({
+      sessions: 9,
+      meanSeconds: Math.round((9 * 72 * 3600 - 60) / 9),
+    });
+  });
+
+  it("lets a 24/7 stream's first days grow up to 72 h", () => {
+    // Began 8 Nov 12:00, ended 12 Nov 06:00 (90 h): 12 h, 36 h, 60 h, 72 h
+    // and a last one from 10 Nov to its end, 54 h.
+    const result = averageSessionAirtime(
+      [span("2026-11-08T12:00:00Z", "2026-11-12T06:00:00Z")],
+      week,
+    );
+    expect(result).toEqual({
+      sessions: 5,
+      meanSeconds: ((12 + 36 + 60 + 72 + 54) * 3600) / 5,
+    });
+  });
+
+  it("keeps a Twitch 24/7 block of 72 h 01 m as one session", () => {
+    const result = averageSessionAirtime(
+      [span("2026-11-07T00:00:00Z", "2026-11-10T00:01:00Z")],
+      week,
+    );
+    expect(result).toEqual({ sessions: 1, meanSeconds: 72 * 3600 + 60 });
+  });
+
+  it("drops the daily sessions of a long stream that fall outside the window", () => {
+    // Ended 3 Nov; its last session (1-3 Nov) is before the window.
+    expect(
+      averageSessionAirtime(
+        [span("2026-10-01T00:00:00Z", "2026-11-03T12:00:00Z")],
+        week,
+      ),
+    ).toBeNull();
+  });
+
   it("ignores streams outside the window and empty spans", () => {
     expect(
       averageSessionAirtime(
