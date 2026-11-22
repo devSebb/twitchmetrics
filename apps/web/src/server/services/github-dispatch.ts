@@ -17,7 +17,10 @@ export const GITHUB_REPO = "devSebb/twitchmetrics";
 export type DispatchSlot = {
   /** Vercel cron expression (UTC), repeated in vercel.json. */
   cron: string;
-  workflow: "scheduled-jobs.yml" | "creator-snapshots.yml";
+  workflow:
+    | "scheduled-jobs.yml"
+    | "creator-snapshots.yml"
+    | "sh-daily-sessions.yml";
   inputs: Record<string, string>;
 };
 
@@ -70,6 +73,14 @@ export const DISPATCH_SLOTS = {
     cron: "0 3 * * *",
     workflow: "creator-snapshots.yml",
     inputs: { tier: "tier3" },
+  },
+  // Stream Hatchet's daily sessions import and every rollup. SH writes a
+  // day's files at ~04:07 UTC the next day; the window re-reads the last
+  // four days, so a file that is late one morning is picked up the next.
+  "sh-daily": {
+    cron: "30 5 * * *",
+    workflow: "sh-daily-sessions.yml",
+    inputs: { days: "4" },
   },
 } as const satisfies Record<string, DispatchSlot>;
 

@@ -31,11 +31,14 @@
 #   5. a read-only health check over what is actually in the database. It does
 #      not trust any run's own status, so a hung job still turns this red.
 #
-# Schedule: SH writes a day's files at ~23:07 UTC that day. GitHub starts
-# scheduled runs hours late (an "08:40" schedule started 12:24-15:51 UTC), so
-# this is set early to land the data in the morning.
+# WHO STARTS IT. Vercel Cron at 05:30 UTC, through
+# /api/cron/dispatch/sh-daily (apps/web/src/server/services/github-dispatch.ts).
+# SH writes a day's files at ~04:07 UTC the next day (S3 LastModified,
+# checked 2026-11-20). There is no `schedule` here: GitHub started this
+# repo's scheduled runs 6-8 hours late (the 01:15 UTC schedule started
+# 07:47-09:09 all of 2026-11), so the day's data landed in the afternoon.
 #
-# A failed scheduled run emails the workflow's last committer — that is the
+# A failed run emails the workflow's last committer — that is the
 # alert. Manual runs: Actions tab -> this workflow -> Run workflow.
 #
 # Required repository secrets: DATABASE_URL, DIRECT_URL, SH_AWS_ACCESS_KEY_ID,
@@ -44,8 +47,6 @@
 name: SH daily sessions
 
 on:
-  schedule:
-    - cron: "15 1 * * *"
   workflow_dispatch:
     inputs:
       days:

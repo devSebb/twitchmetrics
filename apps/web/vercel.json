@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/dispatch/tier3",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/sh-daily",
+      "schedule": "30 5 * * *"
     }
   ]
 }
