@@ -5,12 +5,13 @@ import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { formatNumber } from "@/lib/utils/format";
 import {
   getGamePlatformMetrics,
-  getGameWindowMetrics,
+  captionSince,
 } from "@/server/services/game-platform-metrics";
 import {
-  deriveGameMetrics,
-  summarizeViewerSeries,
-} from "@/server/services/game-metrics";
+  getGameSeries,
+  summarizeGameSeries,
+  type SeriesFigures,
+} from "@/server/services/game-viewer-series";
 import {
   liveTopChannelWhere,
   selectDisplayTopChannels,
@@ -20,9 +21,8 @@ import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-sta
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
   GameHeader,
-  GameViewerChart,
+  GamePlatformChart,
   BroadcastLanguages,
-  ViewerChannelActivityChart,
   GameTopChannels,
   GameClips,
 } from "@/components/game";
@@ -32,8 +32,8 @@ type PageProps = {
 };
 
 // ISR: one game-snapshot run (*/30). The header and both charts are built from
-// the same snapshots and the charts ask for the window ending at the page's
-// newest snapshot, so a cached page still agrees with itself.
+// the same series (game-viewer-series.ts) and the charts ask for the window
+// ending at the page's newest snapshot, so a cached page agrees with itself.
 // Empty generateStaticParams opts the route into on-demand static
 // generation — without it every request re-renders from scratch.
 export const revalidate = 1800;
@@ -71,21 +71,16 @@ async function getGame(slug: string) {
   return serializeBigInt(game);
 }
 
-/**
- * The 7 days of snapshots ending at the newest one. The header's 7d average
- * and 24h peak are derived from exactly these rows, and the charts open on the
- * same window, so the page's numbers agree with each other.
- */
-async function getWeekSeries(gameId: string, until: Date | null) {
-  if (!until) return [];
-  return db.gameViewerSnapshot.findMany({
-    where: {
-      gameId,
-      snapshotAt: { gte: new Date(until.getTime() - WEEK_MS), lte: until },
-    },
-    orderBy: { snapshotAt: "asc" },
-    select: { snapshotAt: true, totalViewers: true, totalChannels: true },
-  });
+/** Header rows for one figure: a platform that starts late says since when. */
+function headerRows(figures: SeriesFigures) {
+  return {
+    rows: figures.rows.map((row) => ({
+      platform: row.platform,
+      value: row.value,
+      caption: row.since ? captionSince(new Date(row.since)) : null,
+    })),
+    total: figures.total,
+  };
 }
 
 export async function generateMetadata({
@@ -146,31 +141,23 @@ export default async function GamePage({ params }: PageProps) {
   const until = latestSnapshot
     ? new Date(String(latestSnapshot.snapshotAt))
     : null;
-  const [platformMetrics, weekSeries, mostWatched] = await Promise.all([
+  const [platformMetrics, series, mostWatched] = await Promise.all([
     getGamePlatformMetrics({ gameId: game.id }),
-    getWeekSeries(game.id, until),
+    // The 7 days ending at the newest snapshot, every platform.
+    until
+      ? getGameSeries(db, {
+          gameId: game.id,
+          since: new Date(until.getTime() - WEEK_MS),
+          until,
+        })
+      : null,
     // One card's data: a failure empties the card, not the page.
     getLastCompleteStatsDay()
       .then((lastDay) => getGameMostWatched(db, game, lastDay))
       .catch(() => null),
   ]);
-  const metrics =
-    until && weekSeries.length > 0
-      ? deriveGameMetrics(weekSeries, until)
-      : null;
-  // Kick and YouTube for the same 7 days, next to the Twitch figures above.
-  const windowMetrics =
-    until && metrics
-      ? await getGameWindowMetrics({
-          gameId: game.id,
-          until,
-          twitch: {
-            avgViewers: metrics.avgViewers7d,
-            peakViewers24h: metrics.peakViewers24h,
-            avgChannels: metrics.avgLiveChannels,
-          },
-        })
-      : null;
+  const summary =
+    series && series.slots.length > 0 ? summarizeGameSeries(series) : null;
 
   // Shape header data
   const headerData = {
@@ -182,26 +169,23 @@ export default async function GamePage({ params }: PageProps) {
     releaseDate: game.releaseDate ? String(game.releaseDate) : null,
     currentViewers: latestSnapshot?.totalViewers ?? game.currentViewers,
     currentChannels: latestSnapshot?.totalChannels ?? game.currentChannels,
-    peakViewers24h: metrics?.peakViewers24h ?? game.peakViewers24h,
-    avgViewers7d: metrics?.avgViewers7d ?? game.avgViewers7d,
-    avgLiveChannels: metrics?.avgLiveChannels ?? game.avgLiveChannels,
+    peakViewers24h: game.peakViewers24h,
+    avgViewers7d: game.avgViewers7d,
+    avgLiveChannels: game.avgLiveChannels,
     lastUpdatedAt: latestSnapshot ? String(latestSnapshot.snapshotAt) : null,
     platformMetrics,
-    windowMetrics,
+    windowMetrics: summary
+      ? {
+          avgViewers: headerRows(summary.avgViewers),
+          peakViewers: headerRows(summary.peakViewers24h),
+          avgChannels: headerRows(summary.avgChannels),
+        }
+      : null,
   };
 
   const chartUntil = until?.toISOString() ?? null;
 
-  const chartData = weekSeries.map((s) => ({
-    date: s.snapshotAt.toISOString(),
-    totalViewers: s.totalViewers,
-  }));
-
-  const activityData = weekSeries.map((s) => ({
-    date: s.snapshotAt.toISOString(),
-    viewers: s.totalViewers,
-    channels: s.totalChannels,
-  }));
+  const chartSeries = series && summary ? { series, summary } : null;
 
   // VideoGame JSON-LD for rich results
   const jsonLd = {
@@ -254,22 +238,26 @@ export default async function GamePage({ params }: PageProps) {
 
       <GameHeader game={headerData} />
 
-      {/* Broadcast languages + activity chart */}
+      {/* Broadcast languages + viewers by platform */}
       <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
         <BroadcastLanguages languages={game.broadcastLanguages} />
-        <ViewerChannelActivityChart
+        <GamePlatformChart
           slug={game.slug}
+          metric="viewers"
           until={chartUntil}
-          initialData={activityData}
+          initialData={chartSeries}
         />
       </div>
 
-      <GameViewerChart
-        slug={game.slug}
-        until={chartUntil}
-        initialData={chartData}
-        initialSummary={summarizeViewerSeries(weekSeries)}
-      />
+      <div className="mt-4">
+        <GamePlatformChart
+          slug={game.slug}
+          metric="channels"
+          until={chartUntil}
+          initialData={chartSeries}
+          height={260}
+        />
+      </div>
 
       <GameTopChannels
         channels={selectDisplayTopChannels(game.topChannels)}

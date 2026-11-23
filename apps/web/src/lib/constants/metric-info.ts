@@ -135,46 +135,45 @@ export const CREATOR_LIST_INFO = {
   },
 } satisfies Record<string, MetricInfo>;
 
-const TWITCH_GAME_READING =
-  "Twitch API, every 30 minutes: viewers added up across the game's live streams (the top 5,000 at most).";
+/** Where the game page's header figures and both charts come from. */
+const GAME_SERIES_SOURCE =
+  "Stream Hatchet live data for Twitch, Kick and YouTube, every 30 minutes. When it has no reading: Twitch API (every 30 minutes) and Kick API (hourly).";
 
 export const GAME_INFO = {
   avgViewers7d: {
     title: "Avg Viewers · 7d",
-    body: "Average number of people watching the game at any moment over the last 7 complete days, per platform. The total adds the platforms together. A stream that played several games counts equally toward each of them, so a game's figure is an estimate.",
-    source: `Stream Hatchet's daily totals, which run a day or two behind, so each row names the days it covers. If Stream Hatchet has nothing for a platform: ${TWITCH_GAME_READING} Kick API, hourly.`,
+    body: "Average number of people watching the game at any moment over the last 7 days, per platform. The total adds the platforms together. A platform whose readings start partway into the 7 days says since when.",
+    source: GAME_SERIES_SOURCE,
   },
   peakViewers24h: {
     title: "Peak Viewers · 24h",
-    body: "The highest reading in the last 24 hours, per platform. Readings are hourly or every 30 minutes, so a shorter spike between two readings isn't caught. There's no total: the platforms peak at different moments, so adding their peaks would count an audience that was never there at once. YouTube only shows a peak for games with Stream Hatchet live data.",
-    source: `Stream Hatchet live data, hourly, for the biggest games. ${TWITCH_GAME_READING} Kick API, hourly (the top 100 channels per Kick category).`,
+    body: "The highest reading in the last 24 hours, per platform. Combined is the most people watching on all platforms at the same moment; it is lower than the rows added up when they peak at different times. Readings are 30 minutes apart, so a shorter spike between two readings isn't caught.",
+    source: GAME_SERIES_SOURCE,
   },
   liveViewers: {
     title: "Live Viewers",
     body: "People watching the game right now, per platform, from each platform's latest reading (no older than 2 hours). When there's no recent YouTube reading, its row is the latest daily average, dated.",
-    source: `Stream Hatchet live data, hourly, for the biggest games. Other games: ${TWITCH_GAME_READING} Kick API, hourly (the top 100 channels per Kick category). YouTube: Stream Hatchet's daily averages.`,
+    source: `${GAME_SERIES_SOURCE} YouTube without a live reading: Stream Hatchet's daily averages.`,
   },
   liveChannels: {
     title: "Live Channels",
     body: "Channels streaming the game right now, per platform, from each platform's latest reading (no older than 2 hours). When there's no recent YouTube reading, its row is a daily average of channels live at once, dated.",
-    source:
-      "Stream Hatchet live data, hourly, for the biggest games. Other games: Twitch API, every 30 minutes (the top 5,000 streams at most). Kick API, hourly (the top 100 channels per Kick category). YouTube: Stream Hatchet's daily averages.",
+    source: `${GAME_SERIES_SOURCE} YouTube without a live reading: Stream Hatchet's daily averages.`,
   },
   avgChannels7d: {
     title: "Avg Live Channels · 7d",
-    body: "Average number of channels streaming the game at any moment over the last 7 days, per platform. The total adds the platforms together. Twitch counts stop at the top 5,000 streams and Kick counts at the top 100 channels per Kick category, so the biggest games read low.",
-    source:
-      "Twitch API, every 30 minutes. Kick API, hourly. YouTube: Stream Hatchet's daily averages.",
+    body: "Average number of channels streaming the game at any moment over the last 7 days, per platform. The total adds the platforms together.",
+    source: `${GAME_SERIES_SOURCE} Twitch's and Kick's own counts stop at the top 5,000 streams and the top 100 channels per category, so a count at that limit is left out.`,
   },
-  viewershipHistory: {
-    title: "Twitch Viewership History",
-    body: "Viewers watching the game on Twitch over time, one reading every 30 minutes. A spike shorter than that can fall between two readings, so peaks can look lower than in tools that measure more often. The average line comes from these readings, so it can differ from the Twitch figure in the header, which uses Stream Hatchet's daily totals. Kick and YouTube aren't in this chart.",
-    source: TWITCH_GAME_READING,
+  viewership: {
+    title: "Viewership",
+    body: "People watching the game over time, stacked by platform, so the top edge is the total. One reading every 30 minutes; a spike shorter than that can fall between two readings. The average and peak above the chart use the same readings as the header. Click a platform in the legend to hide it. A platform appears from its first reading; the note under the chart says when.",
+    source: GAME_SERIES_SOURCE,
   },
-  activity: {
-    title: "Twitch Viewership & Channel Activity",
-    body: "Twitch viewers and the number of live Twitch channels for the game, side by side. Kick and YouTube aren't in this chart.",
-    source: "Twitch API, every 30 minutes.",
+  channelActivity: {
+    title: "Live Channels",
+    body: "Channels streaming the game over time, stacked by platform, so the top edge is the total. One reading every 30 minutes. Click a platform in the legend to hide it.",
+    source: `${GAME_SERIES_SOURCE} Twitch's and Kick's own counts stop at the top 5,000 streams and the top 100 channels per category, so a count at that limit is left out.`,
   },
   mostWatched: {
     title: "Most Watched Channels",

@@ -14,10 +14,10 @@
 # sends a workflow_dispatch with the slot's job ids. The slot table (what
 # runs when, in which order) is
 # apps/web/src/server/services/github-dispatch.ts:
-#   game           */30          game-snapshot (Twitch live game stats)
-#   hourly         20 * * * *    kick-category-snapshot,
-#                                streamhatchet-live-games-snapshot,
-#                                streamhatchet-live-channels-snapshot
+#   game           */30          streamhatchet-live-games-snapshot (every
+#                                platform), game-snapshot (Twitch)
+#   hourly         20 * * * *    streamhatchet-live-channels-snapshot,
+#                                kick-category-snapshot
 #   kick-channels  15 */3 * * *  kick-channel-snapshot
 #   discovery      35 */6 * * *  kick-category-discovery,
 #                                streamhatchet-game-discovery-snapshot

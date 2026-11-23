@@ -42,11 +42,12 @@ const STREAMHATCHET_CALL_GAP_SECONDS = 11;
 // so YouTube game viewership stopped. Wait out the window and try again.
 const LIVE_GAMES_ATTEMPTS = 3;
 const LIVE_GAMES_MAX_WAIT_SECONDS = 60;
-// SH says /live/games covers the top 10k games (2026-11-04). Without a limit
-// it returned 25. Ask for all of them, and record what comes back and how
-// fast, to size a more frequent poller; keep rows for the top 100 for now.
+// SH says /live/games covers the top 10k games (2026-11-04); without a limit
+// it returned 25. One call returns about 3,950 games in under a second, and
+// every one we know is kept (until 2026-11-23 only the top 100 were, so the
+// game charts had YouTube for the biggest games alone).
 const LIVE_GAMES_REQUEST_LIMIT = 10_000;
-const LIVE_GAMES_PERSIST_LIMIT = 100;
+const LIVE_SOURCE = "streamhatchet_live";
 const LIVE_GAMES_TIMEOUT_MS = 45_000;
 const STREAMHATCHET_MAPPING_PREFIX = "streamhatchet:";
 
@@ -73,9 +74,8 @@ type LiveChannelsFetchResult =
 type LiveGamesFetchResult =
   | {
       ok: true;
-      /** The biggest LIVE_GAMES_PERSIST_LIMIT games, by total viewers. */
+      /** Every game returned, cut down to the fields a snapshot row needs. */
       rows: StreamHatchetLiveGame[];
-      /** What the whole response held, before trimming. */
       returned: number;
       bytes: number;
       fetchMs: number;
@@ -206,10 +206,10 @@ function matchLiveGame(
   return name ? lookupGame(lookup, name, "twitch") : null;
 }
 
+/** Every game: one that is only big on Kick or YouTube must match too. */
 async function loadGames() {
   return prisma.game.findMany({
     orderBy: [{ currentViewers: "desc" }, { avgViewers7d: "desc" }],
-    take: 1_000,
     select: {
       id: true,
       name: true,
@@ -286,10 +286,29 @@ async function safeFetchLiveChannels(
   }
 }
 
-function liveGameTotalViewers(row: StreamHatchetLiveGame): number {
-  return typeof row.total_viewers === "number"
-    ? row.total_viewers
-    : liveGamePlatformRows(row).reduce((sum, p) => sum + p.viewers, 0);
+/**
+ * A game's name and its per-platform counts. The response repeats genres,
+ * publishers and ratios on every platform entry (1.5 MB in all); none of it
+ * is stored.
+ */
+export function slimLiveGame(
+  row: StreamHatchetLiveGame,
+): StreamHatchetLiveGame {
+  const perPlatform = Array.isArray(row.platforms)
+    ? row.platforms
+    : row.platform_data;
+  if (!Array.isArray(perPlatform)) return row;
+  return {
+    game: row.game ?? null,
+    game_id: row.game_id ?? null,
+    platforms: perPlatform.map((entry) => ({
+      platform: entry.platform,
+      viewers: entry.viewers ?? null,
+      current_viewers: entry.current_viewers ?? null,
+      channels: entry.channels ?? null,
+      live_channels: entry.live_channels ?? null,
+    })),
+  };
 }
 
 async function safeFetchLiveGames(): Promise<LiveGamesFetchResult> {
@@ -301,14 +320,9 @@ async function safeFetchLiveGames(): Promise<LiveGamesFetchResult> {
       timeoutMs: LIVE_GAMES_TIMEOUT_MS,
     });
     const fetchMs = Date.now() - startedAt;
-    // Inngest stores a step's return value (a few MB at most), so the full
-    // response is measured here and only the top games leave the step.
-    const rows = [...all]
-      .sort((a, b) => liveGameTotalViewers(b) - liveGameTotalViewers(a))
-      .slice(0, LIVE_GAMES_PERSIST_LIMIT);
     return {
       ok: true,
-      rows,
+      rows: all.map(slimLiveGame),
       returned: all.length,
       bytes: JSON.stringify(all).length,
       fetchMs,
@@ -710,44 +724,33 @@ async function persistLiveGameRows(
     }
   }
 
-  for (const entry of pending.values()) {
-    const row = entry.top;
-    const platformGameId =
-      row.game_id === null || row.game_id === undefined
+  const data = [...pending.values()].map((entry) => ({
+    gameId: entry.gameId,
+    platform: entry.platform,
+    platformGameId:
+      entry.top.game_id === null || entry.top.game_id === undefined
         ? null
-        : `${STREAMHATCHET_MAPPING_PREFIX}${String(row.game_id)}`;
-    const platformGameName = typeof row.game === "string" ? row.game : null;
-    await prisma.gamePlatformViewerSnapshot.upsert({
+        : `${STREAMHATCHET_MAPPING_PREFIX}${String(entry.top.game_id)}`,
+    platformGameName:
+      typeof entry.top.game === "string" ? entry.top.game : null,
+    snapshotAt,
+    bucketStartedAt,
+    viewers: entry.viewers,
+    channels: entry.channels,
+    source: LIVE_SOURCE,
+  }));
+  // A few thousand rows per run, written at once. A second run in the same
+  // 30-minute slot replaces the first one's rows.
+  await prisma.$transaction([
+    prisma.gamePlatformViewerSnapshot.deleteMany({
       where: {
-        gameId_platform_source_bucketStartedAt: {
-          gameId: entry.gameId,
-          platform: entry.platform,
-          source: "streamhatchet_live",
-          bucketStartedAt,
-        },
-      },
-      update: {
-        platformGameId,
-        platformGameName,
-        snapshotAt,
-        viewers: entry.viewers,
-        channels: entry.channels,
-        metadata: row as Prisma.InputJsonValue,
-      },
-      create: {
-        gameId: entry.gameId,
-        platform: entry.platform,
-        platformGameId,
-        platformGameName,
-        snapshotAt,
+        platform: { in: ["twitch", "youtube", "kick"] },
+        source: LIVE_SOURCE,
         bucketStartedAt,
-        viewers: entry.viewers,
-        channels: entry.channels,
-        source: "streamhatchet_live",
-        metadata: row as Prisma.InputJsonValue,
       },
-    });
-  }
+    }),
+    prisma.gamePlatformViewerSnapshot.createMany({ data }),
+  ]);
 
   return { written: pending.size, skipped };
 }
@@ -993,9 +996,10 @@ export const streamHatchetLiveChannelsSnapshot = inngest.createFunction(
 
 // /live/games answered 429 to every call from 2026-05-18 to 2026-10-16
 // (3,647 runs, not one row): our key's access was misconfigured on Stream
-// Hatchet's side. Restored 2026-11. Hourly at :25, clear of discovery (:35)
-// and live channels (:45), so the three never share a 10 s window. Live rows
-// go stale after 2 h, so hourly keeps one on the page between runs.
+// Hatchet's side. Restored 2026-11. Runs first in the 30-minute `game`
+// slot (:00 and :30), so its rows carry the same slot as the Twitch snapshot
+// that follows and the game charts can add the platforms up. Clear of live
+// channels (:20) and discovery (:35): the three never share a 10 s window.
 export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
   { id: "streamhatchet-live-games-snapshot", concurrency: { limit: 1 } },
   // Scheduled on GitHub (.github/workflows/scheduled-jobs.yml); the event is
@@ -1127,7 +1131,9 @@ export const streamHatchetLiveGamesSnapshot = inngest.createFunction(
               timedOut,
               retryAfterSeconds,
               requestedLimit: LIVE_GAMES_REQUEST_LIMIT,
-              ...(probe ? probe : {}),
+              // Every game returned was kept: a game without a row in this
+              // slot had nobody streaming it (game-viewer-series.ts).
+              ...(probe ? { ...probe, allGames: true } : {}),
               ...(sample !== undefined ? { sample } : {}),
             },
           },

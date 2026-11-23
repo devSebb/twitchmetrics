@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { liveGamePlatformRows } from "./streamhatchet-game-snapshot";
+import {
+  liveGamePlatformRows,
+  slimLiveGame,
+} from "./streamhatchet-game-snapshot";
 
 /**
  * The first /live/games call that wasn't a 429 (2026-11-04 01:25) returned 25
@@ -55,5 +58,22 @@ describe("liveGamePlatformRows", () => {
         ],
       }),
     ).toEqual([{ platform: "youtube", viewers: 1200, channels: 30 }]);
+  });
+});
+
+describe("slimLiveGame", () => {
+  it("keeps the name and the counts, and nothing else", () => {
+    const slim = slimLiveGame({ ...JUST_CHATTING, game_id: 509658 });
+    expect(liveGamePlatformRows(slim)).toEqual(
+      liveGamePlatformRows(JUST_CHATTING),
+    );
+    expect(slim.game).toBe("Just Chatting");
+    expect(slim.game_id).toBe(509658);
+    expect(JSON.stringify(slim)).not.toContain("genres");
+  });
+
+  it("leaves a row without a per-platform list as it is", () => {
+    const flat = { game: "Chess", platform: "twitch", viewers: 900 };
+    expect(slimLiveGame(flat)).toBe(flat);
   });
 });

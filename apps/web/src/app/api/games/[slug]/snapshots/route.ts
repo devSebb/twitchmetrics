@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
-import { summarizeViewerSeries } from "@/server/services/game-metrics";
+import {
+  getGameSeries,
+  summarizeGameSeries,
+} from "@/server/services/game-viewer-series";
 
-const VALID_METRICS = ["viewers", "channels", "all"] as const;
 const VALID_PERIODS = ["24h", "7d", "30d"] as const;
 
 const PERIOD_MS: Record<(typeof VALID_PERIODS)[number], number> = {
@@ -26,33 +28,21 @@ function parseUntil(value: string | null): { until: Date; fixed: boolean } {
     : { until: now, fixed: false };
 }
 
+/**
+ * A game's viewers and live channels per platform for one period: the series
+ * both game-page charts draw, with the same summary arithmetic as the header.
+ */
 export async function GET(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
   const { searchParams } = new URL(request.url);
-  const metric = searchParams.get("metric") ?? "viewers";
-  const period = searchParams.get("period") ?? "24h";
-
-  if (!VALID_METRICS.includes(metric as (typeof VALID_METRICS)[number])) {
-    return NextResponse.json(
-      {
-        data: [],
-        meta: {},
-        error: "Invalid metric. Use viewers, channels, or all",
-      },
-      { status: 400 },
-    );
-  }
+  const period = searchParams.get("period") ?? "7d";
 
   if (!VALID_PERIODS.includes(period as (typeof VALID_PERIODS)[number])) {
     return NextResponse.json(
-      {
-        data: [],
-        meta: {},
-        error: "Invalid period. Use 24h, 7d, or 30d",
-      },
+      { data: null, meta: {}, error: "Invalid period. Use 24h, 7d, or 30d" },
       { status: 400 },
     );
   }
@@ -60,7 +50,7 @@ export async function GET(
   const { until, fixed } = parseUntil(searchParams.get("until"));
   const periodMs = PERIOD_MS[period as (typeof VALID_PERIODS)[number]];
   // A page-supplied end is fixed, so it is part of the key; "now" is not.
-  const cacheKey = `game:${slug}:snapshots:${metric}:${period}:${fixed ? until.toISOString() : "latest"}`;
+  const cacheKey = `game:${slug}:series:${period}:${fixed ? until.toISOString() : "latest"}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -73,55 +63,23 @@ export async function GET(
 
   if (!game) {
     return NextResponse.json(
-      {
-        data: [],
-        meta: {},
-        error: "Game not found",
-      },
+      { data: null, meta: {}, error: "Game not found" },
       { status: 404 },
     );
   }
 
-  const snapshots = await db.gameViewerSnapshot.findMany({
-    where: {
-      gameId: game.id,
-      snapshotAt: {
-        gte: new Date(until.getTime() - periodMs),
-        lte: until,
-      },
-    },
-    orderBy: { snapshotAt: "asc" },
-    select: {
-      snapshotAt: true,
-      totalViewers: true,
-      totalChannels: true,
-    },
+  const series = await getGameSeries(db, {
+    gameId: game.id,
+    since: new Date(until.getTime() - periodMs),
+    until,
   });
 
-  const data =
-    metric === "all"
-      ? snapshots.map((snapshot) => ({
-          date: snapshot.snapshotAt.toISOString(),
-          viewers: snapshot.totalViewers,
-          channels: snapshot.totalChannels,
-        }))
-      : snapshots.map((snapshot) => ({
-          date: snapshot.snapshotAt.toISOString(),
-          value:
-            metric === "channels"
-              ? snapshot.totalChannels
-              : snapshot.totalViewers,
-        }));
-
   const response = {
-    data,
+    data: series,
     meta: {
       period,
-      metric,
-      dataPoints: data.length,
       until: until.toISOString(),
-      // Same arithmetic as the header's 7d average and 24h peak.
-      viewers: summarizeViewerSeries(snapshots),
+      summary: summarizeGameSeries(series),
     },
   };
 

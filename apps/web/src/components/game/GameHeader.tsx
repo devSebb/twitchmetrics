@@ -9,7 +9,7 @@ import { GameCoverImage } from "@/components/games/GameCoverImage";
 type PlatformMetricRow = {
   platform: Platform;
   value: number;
-  /** Set when the figure is a daily average rather than a live reading. */
+  /** Set when the figure needs a note: a daily average, a late start. */
   caption?: string | null;
 };
 
@@ -36,7 +36,7 @@ type GameHeaderProps = {
       latestViewers: PlatformMetricGroup;
       latestChannels: PlatformMetricGroup;
     };
-    /** Per-platform 7d averages and 24h peaks; null without Twitch history. */
+    /** Per-platform 7d averages and 24h peaks; null without any reading. */
     windowMetrics: {
       avgViewers: PlatformMetricGroup;
       peakViewers: PlatformMetricGroup;
@@ -50,15 +50,15 @@ function KpiCard({
   info,
   value,
   platformRows,
-  showTotal = true,
+  totalLabel = "Total",
   className,
 }: {
   label: string;
   info: MetricInfo;
   value: number;
   platformRows?: PlatformMetricRow[] | undefined;
-  /** Off for peaks: platforms peak at different moments, so a sum is no one's peak. */
-  showTotal?: boolean;
+  /** The peak's total is the highest combined moment, not the rows' sum. */
+  totalLabel?: string;
   className?: string;
 }) {
   const rows = platformRows?.filter((row) => row.value > 0) ?? [];
@@ -99,10 +99,10 @@ function KpiCard({
           </span>
         )}
       </div>
-      {showTotal && rows.length > 1 && (
+      {rows.length > 1 && (
         <div className="flex items-center justify-between border-t border-[#3F4147] pt-1.5">
           <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
-            Total
+            {totalLabel}
           </span>
           <span className="text-sm font-bold text-[#DBDEE1]">
             {formatNumber(value)}
@@ -201,9 +201,9 @@ export function GameHeader({ game }: GameHeaderProps) {
         <KpiCard
           label={GAME_KPI_LABELS.peakViewers24h}
           info={GAME_INFO.peakViewers24h}
-          value={game.peakViewers24h}
+          value={game.windowMetrics?.peakViewers.total ?? game.peakViewers24h}
           platformRows={game.windowMetrics?.peakViewers.rows}
-          showTotal={false}
+          totalLabel="Combined"
         />
 
         {/* Pro CTA — col 4, spans rows 1–2 */}

@@ -27,17 +27,20 @@ export type DispatchSlot = {
 /** Job ids are workers/run-job.ts CRON_FUNCTION_IDS; a slot's jobs run one
  * after the other, in this order. */
 export const DISPATCH_SLOTS = {
-  // Twitch live game stats; each snapshot is stamped with its 30-min slot.
+  // Live game stats, every platform on the same 30-min slot: Stream Hatchet's
+  // one call first (seconds), then the Twitch snapshot (minutes).
   game: {
     cron: "*/30 * * * *",
     workflow: "scheduled-jobs.yml",
-    inputs: { jobs: "game-snapshot" },
+    inputs: { jobs: "streamhatchet-live-games-snapshot game-snapshot" },
   },
+  // Live channels first: its Stream Hatchet calls are done by :22, clear of
+  // the live games call at :30.
   hourly: {
     cron: "20 * * * *",
     workflow: "scheduled-jobs.yml",
     inputs: {
-      jobs: "kick-category-snapshot streamhatchet-live-games-snapshot streamhatchet-live-channels-snapshot",
+      jobs: "streamhatchet-live-channels-snapshot kick-category-snapshot",
     },
   },
   "kick-channels": {
