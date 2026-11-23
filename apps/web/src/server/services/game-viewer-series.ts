@@ -188,6 +188,73 @@ export function buildGameSeries(input: {
   return series;
 }
 
+export type SlotReading = {
+  platform: SeriesPlatform;
+  source: string;
+  bucketStartedAt: Date;
+  viewers: number;
+  channels: number | null;
+};
+
+export type SlotTotals = {
+  kickViewers: number;
+  kickChannels: number;
+  youtubeViewers: number;
+  youtubeChannels: number;
+  totalViewers: number;
+  totalChannels: number;
+};
+
+/**
+ * All platforms' viewers and channels for the slot the Twitch snapshot just
+ * read: what the game lists rank and print (browse, home, search), so a game
+ * that is big on Kick or YouTube no longer ranks by its Twitch audience
+ * alone. Per platform: Stream Hatchet's newest reading among `recent` (the
+ * last hour), else the platform's own.
+ */
+export function slotTotals(
+  twitch: { viewers: number; channels: number },
+  recent: SlotReading[],
+): SlotTotals {
+  const best = new Map<SeriesPlatform, SlotReading>();
+  for (const reading of recent) {
+    const current = best.get(reading.platform);
+    const isLive = reading.source === LIVE_SOURCE;
+    const currentIsLive = current?.source === LIVE_SOURCE;
+    if (
+      !current ||
+      (isLive && !currentIsLive) ||
+      (isLive === currentIsLive &&
+        reading.bucketStartedAt > current.bucketStartedAt)
+    ) {
+      best.set(reading.platform, reading);
+    }
+  }
+  const twitchLive = best.get("twitch");
+  const twitchBest =
+    twitchLive?.source === LIVE_SOURCE
+      ? {
+          viewers: twitchLive.viewers,
+          channels: twitchLive.channels ?? twitch.channels,
+        }
+      : twitch;
+  const kick = best.get("kick");
+  const youtube = best.get("youtube");
+  const totals = {
+    kickViewers: kick?.viewers ?? 0,
+    kickChannels: kick?.channels ?? 0,
+    youtubeViewers: youtube?.viewers ?? 0,
+    youtubeChannels: youtube?.channels ?? 0,
+  };
+  return {
+    ...totals,
+    totalViewers:
+      twitchBest.viewers + totals.kickViewers + totals.youtubeViewers,
+    totalChannels:
+      twitchBest.channels + totals.kickChannels + totals.youtubeChannels,
+  };
+}
+
 export type PlatformFigure = {
   platform: SeriesPlatform;
   value: number;
@@ -223,7 +290,7 @@ function mean(values: Values): number | null {
 }
 
 /** Each slot's sum over the platforms that have a value; null when none has. */
-export function slotTotals(
+export function columnTotals(
   columns: Partial<Record<SeriesPlatform, Values>>,
   slotCount: number,
 ): Values {
@@ -275,7 +342,7 @@ export function summarizeGameSeries(series: GameSeries): GameSeriesSummary {
     if (!values) continue;
     peakRows.push({ platform, value: highest(values, dayStart), since: null });
   }
-  const totals = slotTotals(series.viewers, slotCount);
+  const totals = columnTotals(series.viewers, slotCount);
 
   return {
     avgViewers: averages(series.viewers),

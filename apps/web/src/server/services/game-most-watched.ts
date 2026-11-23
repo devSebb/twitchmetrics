@@ -76,11 +76,45 @@ export async function getGameMostWatched(
   const rows = await prisma.$queryRaw<RankedRow[]>(rankQuery(reads, window));
   const ranked = mergeYouTubeFeeds(rows).slice(0, MOST_WATCHED_LIMIT);
 
-  const profileIds = [
-    ...new Set(ranked.flatMap((row) => row.creatorProfileId ?? [])),
-  ];
+  const links = await loadChannelLinks(
+    prisma,
+    ranked.flatMap((row) => row.creatorProfileId ?? []),
+  );
+
+  return {
+    ...days,
+    channels: ranked.map((row) => {
+      const link = row.creatorProfileId
+        ? links.get(row.creatorProfileId)
+        : undefined;
+      return {
+        platform: row.platform,
+        platformUserId: row.platformUserId,
+        name: row.name,
+        slug: link?.slug ?? null,
+        avatarUrl: link?.avatarUrl ?? null,
+        hoursWatched: Math.round(Number(row.minutesWatched) / 60),
+        airtimeMinutes: Number(row.airtimeMinutes),
+      };
+    }),
+  };
+}
+
+export type ChannelLink = { slug: string | null; avatarUrl: string | null };
+
+/**
+ * Where a channel's row links to, per profile id. A merged stub links to the
+ * profile it was merged into. Only listed profiles are linked: these cards
+ * are a public directory.
+ */
+export async function loadChannelLinks(
+  prisma: PrismaClient,
+  creatorProfileIds: string[],
+): Promise<Map<string, ChannelLink>> {
+  const ids = [...new Set(creatorProfileIds)];
+  if (ids.length === 0) return new Map();
   const profiles = await prisma.creatorProfile.findMany({
-    where: { id: { in: profileIds } },
+    where: { id: { in: ids } },
     select: {
       id: true,
       slug: true,
@@ -89,28 +123,18 @@ export async function getGameMostWatched(
       mergedInto: { select: { slug: true, avatarUrl: true, listed: true } },
     },
   });
-  const profileById = new Map(profiles.map((p) => [p.id, p]));
-
-  return {
-    ...days,
-    channels: ranked.map((row) => {
-      const profile = row.creatorProfileId
-        ? profileById.get(row.creatorProfileId)
-        : undefined;
-      // A merged stub links to the profile it was merged into. Only listed
-      // profiles are linked: this card is a public directory.
-      const target = profile?.mergedInto ?? profile;
-      return {
-        platform: row.platform,
-        platformUserId: row.platformUserId,
-        name: row.name,
-        slug: target?.listed ? target.slug : null,
-        avatarUrl: target?.avatarUrl ?? null,
-        hoursWatched: Math.round(Number(row.minutesWatched) / 60),
-        airtimeMinutes: Number(row.airtimeMinutes),
-      };
+  return new Map(
+    profiles.map((profile) => {
+      const target = profile.mergedInto ?? profile;
+      return [
+        profile.id,
+        {
+          slug: target.listed ? target.slug : null,
+          avatarUrl: target.avatarUrl ?? null,
+        },
+      ];
     }),
-  };
+  );
 }
 
 /** One index read per (platform, name) and day. */

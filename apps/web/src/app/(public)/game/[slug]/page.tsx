@@ -17,6 +17,7 @@ import {
   selectDisplayTopChannels,
 } from "@/server/services/game-top-channels";
 import { getGameMostWatched } from "@/server/services/game-most-watched";
+import { getGameRecentStreams } from "@/server/services/game-recent-streams";
 import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-stats";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import {
@@ -24,6 +25,7 @@ import {
   GamePlatformChart,
   BroadcastLanguages,
   GameTopChannels,
+  GameRecentStreams,
   GameClips,
 } from "@/components/game";
 
@@ -141,21 +143,26 @@ export default async function GamePage({ params }: PageProps) {
   const until = latestSnapshot
     ? new Date(String(latestSnapshot.snapshotAt))
     : null;
-  const [platformMetrics, series, mostWatched] = await Promise.all([
-    getGamePlatformMetrics({ gameId: game.id }),
-    // The 7 days ending at the newest snapshot, every platform.
-    until
-      ? getGameSeries(db, {
-          gameId: game.id,
-          since: new Date(until.getTime() - WEEK_MS),
-          until,
-        })
-      : null,
-    // One card's data: a failure empties the card, not the page.
-    getLastCompleteStatsDay()
-      .then((lastDay) => getGameMostWatched(db, game, lastDay))
-      .catch(() => null),
-  ]);
+  // One card's data each: a failure empties the card, not the page.
+  const lastCompleteDay = getLastCompleteStatsDay();
+  const [platformMetrics, series, mostWatched, recentStreams] =
+    await Promise.all([
+      getGamePlatformMetrics({ gameId: game.id }),
+      // The 7 days ending at the newest snapshot, every platform.
+      until
+        ? getGameSeries(db, {
+            gameId: game.id,
+            since: new Date(until.getTime() - WEEK_MS),
+            until,
+          })
+        : null,
+      lastCompleteDay
+        .then((lastDay) => getGameMostWatched(db, game, lastDay))
+        .catch(() => null),
+      lastCompleteDay
+        .then((lastDay) => getGameRecentStreams(db, game, lastDay))
+        .catch(() => null),
+    ]);
   const summary =
     series && series.slots.length > 0 ? summarizeGameSeries(series) : null;
 
@@ -263,6 +270,8 @@ export default async function GamePage({ params }: PageProps) {
         channels={selectDisplayTopChannels(game.topChannels)}
         mostWatched={mostWatched}
       />
+
+      <GameRecentStreams recent={recentStreams} />
 
       <GameClips clips={game.clips} />
     </div>

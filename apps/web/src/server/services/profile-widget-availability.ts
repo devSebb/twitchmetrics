@@ -92,7 +92,7 @@ async function hasViewerHistory(
     platform: profile.primaryPlatform,
     period: "30d",
   });
-  return history.points.length > 0;
+  return history.points.length > 0 || history.otherPlatforms.length > 0;
 }
 
 async function hasFollowerGrowth(

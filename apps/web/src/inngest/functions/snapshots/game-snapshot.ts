@@ -4,6 +4,12 @@ import { fetchClipsByGame, twitchAdapter } from "@/server/adapters/twitch";
 import { createLogger } from "@/lib/logger";
 import { cacheInvalidate } from "@/server/services/cache";
 import { deriveGameMetrics } from "@/server/services/game-metrics";
+import {
+  LIVE_SOURCE,
+  SERIES_PLATFORMS,
+  slotTotals,
+  type SlotReading,
+} from "@/server/services/game-viewer-series";
 import { executeIngestionRun } from "@/server/services/ingestion/runs";
 
 const log = createLogger("game-snapshot");
@@ -230,6 +236,26 @@ async function snapshotTrackedGame(
   const nextCoverImageUrl = catalogEntry?.boxArtUrl ?? game.coverImageUrl;
 
   await prisma.$transaction(async (tx) => {
+    // Kick and YouTube for the same slot: Stream Hatchet's live job runs
+    // just before this one, and the last hour covers a run it missed.
+    const otherPlatforms = await tx.gamePlatformViewerSnapshot.findMany({
+      where: {
+        gameId: game.id,
+        platform: { in: [...SERIES_PLATFORMS] },
+        source: { in: [LIVE_SOURCE, "kick_api"] },
+        bucketStartedAt: {
+          gt: new Date(slotAt.getTime() - 60 * 60 * 1000),
+          lte: slotAt,
+        },
+      },
+      select: {
+        platform: true,
+        source: true,
+        bucketStartedAt: true,
+        viewers: true,
+        channels: true,
+      },
+    });
     // Stamped with the run's slot: a retried step hits the
     // (gameId, snapshotAt) unique key and inserts nothing.
     await tx.gameViewerSnapshot.createMany({
@@ -239,8 +265,15 @@ async function snapshotTrackedGame(
           snapshotAt: slotAt,
           twitchViewers: liveStats.viewerCount,
           twitchChannels: liveStats.channelCount,
-          totalViewers: liveStats.viewerCount,
-          totalChannels: liveStats.channelCount,
+          // The totals are every platform's: they feed the Game counters
+          // the lists rank by (Twitch only until 2026-11-23).
+          ...slotTotals(
+            {
+              viewers: liveStats.viewerCount,
+              channels: liveStats.channelCount,
+            },
+            otherPlatforms as SlotReading[],
+          ),
         },
       ],
       skipDuplicates: true,

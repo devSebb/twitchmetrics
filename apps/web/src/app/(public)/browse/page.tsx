@@ -27,7 +27,7 @@ function verticalCopy(vertical: GameVerticalFilter): {
     return {
       title: "Top Categories",
       description:
-        "Browse every category on Twitch — gaming, IRL, music, and more — ranked by the latest observed viewers.",
+        "Browse every category on Twitch, Kick and YouTube — gaming, IRL, music, and more — ranked by the latest observed viewers.",
       noun: "categories",
     };
   }
@@ -35,14 +35,14 @@ function verticalCopy(vertical: GameVerticalFilter): {
     return {
       title: "Top Games",
       description:
-        "Browse the most-watched games on Twitch with the latest observed viewership and channel counts.",
+        "Browse the most-watched games on Twitch, Kick and YouTube with the latest observed viewership and channel counts.",
       noun: "games",
     };
   }
   const label = VERTICAL_LABELS[vertical];
   return {
     title: `Top ${label}`,
-    description: `Browse the most-watched ${label} categories on Twitch with the latest observed viewership and channel counts.`,
+    description: `Browse the most-watched ${label} categories on Twitch, Kick and YouTube with the latest observed viewership and channel counts.`,
     noun: "categories",
   };
 }

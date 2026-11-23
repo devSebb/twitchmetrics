@@ -3,6 +3,7 @@ import type { PrismaClient } from "@twitchmetrics/database";
 import { getViewerHistory } from "./viewer-history";
 
 type Rollup = {
+  platform: string;
   date: Date;
   averageViewers: number | null;
   peakViewers: number | null;
@@ -47,6 +48,7 @@ describe("getViewerHistory", () => {
       accounts: [{ platform: "twitch", platformUserId: "tw-1" }],
       rollups: [
         {
+          platform: "twitch",
           date: day("2026-10-14"),
           averageViewers: 64867.4,
           peakViewers: 127045,
@@ -82,12 +84,14 @@ describe("getViewerHistory", () => {
       accounts: [{ platform: "youtube", platformUserId: "yt-1" }],
       rollups: [
         {
+          platform: "yt",
           date: day("2026-10-20"),
           averageViewers: 300,
           peakViewers: 900,
           primaryGameName: "Minecraft",
         },
         {
+          platform: "ytg",
           date: day("2026-10-20"),
           averageViewers: 120,
           peakViewers: 1500,
@@ -134,13 +138,70 @@ describe("getViewerHistory", () => {
     ]);
   });
 
-  it("skips Stream Hatchet for platforms it doesn't cover", async () => {
-    const { prisma, client } = fakePrisma({});
+  it("returns the creator's other streaming platforms next to the requested one", async () => {
+    const { client } = fakePrisma({
+      accounts: [
+        { platform: "twitch", platformUserId: "tw-1" },
+        { platform: "youtube", platformUserId: "yt-1" },
+      ],
+      rollups: [
+        {
+          platform: "twitch",
+          date: day("2026-10-20"),
+          averageViewers: 36_000,
+          peakViewers: 51_000,
+          primaryGameName: "Just Chatting",
+        },
+        {
+          platform: "yt",
+          date: day("2026-10-20"),
+          averageViewers: 72_000,
+          peakViewers: 90_000,
+          primaryGameName: null,
+        },
+      ],
+    });
 
-    await getViewerHistory(client, { ...input, platform: "instagram" });
+    const history = await getViewerHistory(client, input);
 
-    expect(prisma.platformAccount.findMany).not.toHaveBeenCalled();
-    expect(prisma.channelDailyRollup.findMany).not.toHaveBeenCalled();
+    expect(history.points.map((point) => point.viewers)).toEqual([36_000]);
+    expect(history.otherPlatforms).toEqual([
+      {
+        platform: "youtube",
+        points: [
+          {
+            date: day("2026-10-20").toISOString(),
+            viewers: 72_000,
+            peak: 90_000,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("still shows the streaming platforms when the main one isn't covered", async () => {
+    const { client } = fakePrisma({
+      accounts: [{ platform: "kick", platformUserId: "k-1" }],
+      rollups: [
+        {
+          platform: "kick",
+          date: day("2026-10-20"),
+          averageViewers: 900,
+          peakViewers: null,
+          primaryGameName: null,
+        },
+      ],
+    });
+
+    const history = await getViewerHistory(client, {
+      ...input,
+      platform: "instagram",
+    });
+
+    expect(history.points).toEqual([]);
+    expect(history.otherPlatforms.map((entry) => entry.platform)).toEqual([
+      "kick",
+    ]);
   });
 
   it("shows the live badge from a fresh reading alongside SH data", async () => {
@@ -148,6 +209,7 @@ describe("getViewerHistory", () => {
       accounts: [{ platform: "twitch", platformUserId: "tw-1" }],
       rollups: [
         {
+          platform: "twitch",
           date: day("2026-10-14"),
           averageViewers: 5000,
           peakViewers: 8000,

@@ -180,6 +180,11 @@ export const GAME_INFO = {
     body: "Channels with the most hours watched on this game over the last 7 days with complete data (UTC), across Twitch, Kick and YouTube. A stream that played several games is split by the time spent on each, from Stream Hatchet's per-game data; its watch time is shared in the same proportions.",
     source: SH_DAILY,
   },
+  recentStreams: {
+    title: "Recent Streams",
+    body: "The five most watched streams of the game on each of the last 7 days with complete data (UTC), across Twitch, Kick and YouTube. A row is a channel's time on this game that day: a stream that played several games counts only its share, and one that ran past midnight shows on both days.",
+    source: SH_DAILY,
+  },
   emerging: {
     title: "Emerging Channels",
     body: "Twitch channels that went live in the last 12 hours, by current viewers, leaving out the six biggest live channels on the game right now. When there are fewer than five, the next-biggest live channels fill in.",

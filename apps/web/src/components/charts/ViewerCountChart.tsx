@@ -8,16 +8,25 @@ import { CHART_PLATFORM_COLORS } from "./theme";
 import { axisNumber, chartDateLabel, tooltipHtml } from "./format";
 import { formatNumber } from "@/lib/utils/format";
 import { THEME } from "@/lib/constants/theme";
+import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
+
+type ViewerPoint = {
+  date: string;
+  viewers: number;
+  /** True recorded peak for this point, when measured. */
+  peak?: number;
+  game?: string;
+};
 
 type ViewerCountChartProps = {
-  data: {
-    date: string;
-    viewers: number;
-    /** True recorded peak for this point, when measured. */
-    peak?: number;
-    game?: string;
-  }[];
+  data: ViewerPoint[];
   platform: Platform;
+  /**
+   * The creator's other platforms, one more line each. With several lines a
+   * legend replaces the average line and the peak marker, which would only
+   * describe one of them; clicking a platform in the legend hides it.
+   */
+  others?: { platform: Platform; data: ViewerPoint[] }[];
   loading?: boolean;
   height?: number;
   /** Tooltip noun for a point. Daily series are averages; snapshots are not. */
@@ -30,9 +39,103 @@ type ViewerCountChartProps = {
   summary?: { average: number; peak: number; windowLabel: string } | undefined;
 };
 
+/** One line per platform over the days any of them streamed. */
+function platformLinesOption(
+  lines: { platform: Platform; data: ViewerPoint[] }[],
+  valueLabel: string,
+): EChartsOption {
+  const dates = [
+    ...new Set(lines.flatMap((line) => line.data.map((point) => point.date))),
+  ].sort();
+  const byDate = lines.map(
+    (line) => new Map(line.data.map((point) => [point.date, point])),
+  );
+
+  return {
+    grid: { left: 60, right: 20, top: 36, bottom: 30 },
+    legend: {
+      top: 0,
+      right: 8,
+      icon: "roundRect",
+      itemWidth: 12,
+      itemHeight: 8,
+      textStyle: { fontSize: 11 },
+    },
+    xAxis: {
+      type: "category",
+      data: dates,
+      axisLabel: {
+        formatter: (val: string) => chartDateLabel(val, "compact"),
+      },
+      boundaryGap: false,
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: { formatter: axisNumber },
+      splitNumber: 4,
+    },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: unknown) => {
+        const items = (Array.isArray(params) ? params : [params]) as {
+          seriesIndex: number;
+          seriesName: string;
+          axisValue: string;
+          color: string;
+        }[];
+        const first = items[0];
+        if (!first) return "";
+        return tooltipHtml(
+          chartDateLabel(first.axisValue, "full"),
+          items.flatMap((item) => {
+            const point = byDate[item.seriesIndex]?.get(first.axisValue);
+            if (!point) return [];
+            const detail = [
+              point.peak !== undefined
+                ? `${formatNumber(point.peak)} peak`
+                : null,
+              point.game ?? null,
+            ].filter((part) => part !== null);
+            return [
+              {
+                bullet: item.color,
+                label: item.seriesName,
+                value: `${formatNumber(point.viewers)} ${valueLabel}`,
+              },
+              ...(detail.length > 0
+                ? [
+                    {
+                      value: detail.join(" · "),
+                      color: THEME.colors.textMuted,
+                      small: true,
+                      plain: true,
+                    },
+                  ]
+                : []),
+            ];
+          }),
+        );
+      },
+    },
+    series: lines.map((line, index) => ({
+      name: PLATFORM_CONFIG[line.platform].name,
+      type: "line" as const,
+      data: dates.map((date) => byDate[index]?.get(date)?.viewers ?? null),
+      // A platform has a point only on the days it streamed.
+      connectNulls: true,
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 4,
+      color: CHART_PLATFORM_COLORS[line.platform],
+      lineStyle: { width: 2 },
+    })),
+  };
+}
+
 export function ViewerCountChart({
   data,
   platform,
+  others,
   loading = false,
   height = 400,
   valueLabel = "avg viewers",
@@ -46,6 +149,9 @@ export function ViewerCountChart({
 
     if (values.length === 0) {
       return { series: [] };
+    }
+    if (others && others.length > 0) {
+      return platformLinesOption([{ platform, data }, ...others], valueLabel);
     }
 
     const avg =
@@ -198,7 +304,7 @@ export function ViewerCountChart({
         },
       ],
     };
-  }, [data, color, valueLabel, summary]);
+  }, [data, platform, others, color, valueLabel, summary]);
 
   return <BaseChart option={option} height={height} loading={loading} />;
 }

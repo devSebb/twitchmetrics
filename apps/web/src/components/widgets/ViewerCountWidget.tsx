@@ -30,7 +30,18 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
     period,
   });
 
-  const chartData = data?.points ?? [];
+  // Every platform the creator streams on, the main one first. When the main
+  // platform has nothing (an Instagram-first creator who streams on Kick),
+  // the first platform with data leads.
+  const lines = [
+    { platform: primaryPlatform, data: data?.points ?? [] },
+    ...(data?.otherPlatforms ?? []).map((other) => ({
+      platform: other.platform,
+      data: other.points,
+    })),
+  ].filter((line) => line.data.length > 0);
+  const [main, ...others] = lines;
+  const chartData = main?.data ?? [];
   const liveInfo = data?.liveInfo ?? null;
   const latestSnapshotAt = data?.latestAt ?? null;
 
@@ -82,7 +93,8 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
 
       <ViewerCountChart
         data={chartData}
-        platform={primaryPlatform}
+        platform={main?.platform ?? primaryPlatform}
+        others={others}
         loading={isLoading}
         height={320}
       />

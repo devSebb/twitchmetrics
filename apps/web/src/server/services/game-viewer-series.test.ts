@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGameSeries,
+  columnTotals,
   slotTotals,
   summarizeGameSeries,
   SLOT_MS,
@@ -267,10 +268,55 @@ describe("summarizeGameSeries", () => {
   });
 });
 
-describe("slotTotals", () => {
+describe("columnTotals", () => {
   it("adds the platforms that have a value and stays empty when none has", () => {
     expect(
-      slotTotals({ twitch: [1, null, null], kick: [2, 5, null] }, 3),
+      columnTotals({ twitch: [1, null, null], kick: [2, 5, null] }, 3),
     ).toEqual([3, 5, null]);
+  });
+});
+
+describe("slotTotals", () => {
+  const at = (index: number) => slot(index);
+  const row = (
+    platform: SeriesPlatform,
+    source: string,
+    index: number,
+    viewers: number,
+    channels: number | null,
+  ) => ({ platform, source, bucketStartedAt: at(index), viewers, channels });
+
+  it("adds Kick and YouTube to Twitch", () => {
+    expect(
+      slotTotals({ viewers: 1_000, channels: 50 }, [
+        row("kick", "streamhatchet_live", 2, 300, 20),
+        row("youtube", "streamhatchet_live", 2, 200, 5),
+      ]),
+    ).toEqual({
+      kickViewers: 300,
+      kickChannels: 20,
+      youtubeViewers: 200,
+      youtubeChannels: 5,
+      totalViewers: 1_500,
+      totalChannels: 75,
+    });
+  });
+
+  it("takes Stream Hatchet's reading over a newer one from the API", () => {
+    const totals = slotTotals({ viewers: 250_000, channels: 4_962 }, [
+      row("twitch", "streamhatchet_live", 1, 262_000, 12_300),
+      row("kick", "streamhatchet_live", 1, 9_000, 330),
+      row("kick", "kick_api", 2, 8_800, 100),
+    ]);
+    expect(totals.totalViewers).toBe(271_000);
+    expect(totals.totalChannels).toBe(12_630);
+    expect(totals.kickChannels).toBe(330);
+  });
+
+  it("is Twitch's own reading when nothing else was read", () => {
+    expect(slotTotals({ viewers: 80, channels: 3 }, [])).toMatchObject({
+      totalViewers: 80,
+      totalChannels: 3,
+    });
   });
 });

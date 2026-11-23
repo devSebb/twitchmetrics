@@ -2,8 +2,8 @@ import type { Platform, PrismaClient } from "@twitchmetrics/database";
 import { isRecentObservation } from "@/lib/metric-freshness";
 import { rollupWindowStart } from "@/server/services/streaming-stats";
 import {
-  STREAMHATCHET_SUPPORTED_PLATFORMS,
   getStreamHatchetAccounts,
+  internalPlatformForStreamHatchet,
   streamHatchetRollupIdentityWhere,
 } from "@/server/services/streamhatchet-identity";
 
@@ -17,7 +17,14 @@ export type ViewerHistoryPoint = {
 };
 
 export type ViewerHistory = {
+  /** The requested platform's series. */
   points: ViewerHistoryPoint[];
+  /**
+   * The creator's other streaming platforms with Stream Hatchet data in the
+   * period, so the chart shows every platform they stream on (until 2026-11
+   * it drew the main platform only).
+   */
+  otherPlatforms: { platform: Platform; points: ViewerHistoryPoint[] }[];
   liveInfo: { viewers: number | null } | null;
   latestAt: string | null;
   source: "snapshots" | "streamhatchet_rollups";
@@ -50,8 +57,8 @@ export async function getViewerHistory(
     snapshotAt: { gte: since },
   };
 
-  const [rollupPoints, latest] = await Promise.all([
-    getStreamHatchetDailyPoints(prisma, input, since),
+  const [rollupsByPlatform, latest] = await Promise.all([
+    getStreamHatchetDailyPoints(prisma, input.creatorProfileId, since),
     prisma.metricSnapshot.findFirst({
       where: snapshotWhere,
       select: { snapshotAt: true, extendedMetrics: true },
@@ -59,7 +66,13 @@ export async function getViewerHistory(
     }),
   ]);
 
-  let points = rollupPoints;
+  let points = rollupsByPlatform.get(input.platform) ?? [];
+  const otherPlatforms = [...rollupsByPlatform]
+    .filter(([platform]) => platform !== input.platform)
+    .map(([platform, platformPoints]) => ({
+      platform,
+      points: platformPoints,
+    }));
   let source: ViewerHistory["source"] = "streamhatchet_rollups";
   if (points.length === 0) {
     const snapshots = await prisma.metricSnapshot.findMany({
@@ -74,25 +87,29 @@ export async function getViewerHistory(
   const latestAt =
     latest?.snapshotAt.toISOString() ?? points[points.length - 1]?.date ?? null;
 
-  return { points, liveInfo: liveInfoFrom(latest), latestAt, source };
+  return {
+    points,
+    otherPlatforms,
+    liveInfo: liveInfoFrom(latest),
+    latestAt,
+    source,
+  };
 }
 
+/** Daily points per platform, for every channel the creator streams on. */
 async function getStreamHatchetDailyPoints(
   prisma: PrismaClient,
-  input: { creatorProfileId: string; platform: Platform },
+  creatorProfileId: string,
   since: Date,
-): Promise<ViewerHistoryPoint[]> {
-  if (!STREAMHATCHET_SUPPORTED_PLATFORMS.includes(input.platform)) return [];
-
-  const accounts = (
-    await getStreamHatchetAccounts(prisma, input.creatorProfileId)
-  ).filter((account) => account.platform === input.platform);
+): Promise<Map<Platform, ViewerHistoryPoint[]>> {
+  const accounts = await getStreamHatchetAccounts(prisma, creatorProfileId);
   const identity = streamHatchetRollupIdentityWhere(accounts);
-  if (identity.length === 0) return [];
+  if (identity.length === 0) return new Map();
 
   const rollups = await prisma.channelDailyRollup.findMany({
     where: { OR: identity, date: { gte: since } },
     select: {
+      platform: true,
       date: true,
       averageViewers: true,
       peakViewers: true,
@@ -102,12 +119,13 @@ async function getStreamHatchetDailyPoints(
   });
 
   // yt/ytg can both contribute rows for one day — keep the max.
-  const byDay = new Map<
-    string,
-    { viewers: number; peak: number | null; game: string | null }
-  >();
+  type Day = { viewers: number; peak: number | null; game: string | null };
+  const byPlatform = new Map<Platform, Map<string, Day>>();
   for (const rollup of rollups) {
-    if (rollup.averageViewers == null) continue;
+    const platform = internalPlatformForStreamHatchet(rollup.platform);
+    if (!platform || rollup.averageViewers == null) continue;
+    const byDay = byPlatform.get(platform) ?? new Map<string, Day>();
+    byPlatform.set(platform, byDay);
     const dayKey = rollup.date.toISOString();
     const viewers = Math.round(rollup.averageViewers);
     const existing = byDay.get(dayKey);
@@ -126,12 +144,17 @@ async function getStreamHatchetDailyPoints(
     }
   }
 
-  return [...byDay].map(([date, entry]) => ({
-    date,
-    viewers: entry.viewers,
-    ...(entry.peak !== null ? { peak: entry.peak } : {}),
-    ...(entry.game !== null ? { game: entry.game } : {}),
-  }));
+  return new Map(
+    [...byPlatform].map(([platform, byDay]) => [
+      platform,
+      [...byDay].map(([date, entry]) => ({
+        date,
+        viewers: entry.viewers,
+        ...(entry.peak !== null ? { peak: entry.peak } : {}),
+        ...(entry.game !== null ? { game: entry.game } : {}),
+      })),
+    ]),
+  );
 }
 
 function snapshotPoints(snapshots: SnapshotRow[]): ViewerHistoryPoint[] {
