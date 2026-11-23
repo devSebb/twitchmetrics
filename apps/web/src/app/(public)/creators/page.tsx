@@ -1,3 +1,5 @@
+import { Container } from "@/components/ui/Editorial";
+import { AppearanceProvider } from "@/components/ui/Appearance";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -235,42 +237,59 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
       : rankingTitle(sort, platform, game);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <ItemListJsonLd
-        creators={initialCreators}
-        page={page}
-        perPage={PER_PAGE}
-      />
-      <Suspense>
-        <div className="mb-6">
-          <CreatorPlatformPills />
-        </div>
-      </Suspense>
+    <AppearanceProvider>
+      <div className="noticed min-h-[60vh]">
+        <Container className="py-10 sm:py-16">
+          <ItemListJsonLd
+            creators={initialCreators}
+            page={page}
+            perPage={PER_PAGE}
+          />
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold text-[#F2F3F5]">{heading}</h1>
-          <p className="mt-2 text-sm text-[#949BA4]">
-            Browse creator profiles by platform, follow growth momentum, and
-            sort the directory by scale or recent movement.
-          </p>
-        </div>
-        <span className="text-sm text-[#949BA4]">
-          {formatNumber(total)} channels
-        </span>
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-2xl">
+              <p className="n-eyebrow mb-4 text-n-slate">Explore channels</p>
+              <h1 className="text-[clamp(2rem,4.5vw,4rem)] font-extrabold leading-tight tracking-[-.045em] text-n-ink">
+                {heading}
+              </h1>
+              <p className="mt-2 text-sm text-n-slate">
+                Browse creator profiles by platform, follow growth momentum, and
+                sort the directory by scale or recent movement.
+              </p>
+            </div>
+            <span className="text-sm text-n-slate">
+              {formatNumber(total)} channels
+            </span>
+          </div>
+
+          <Suspense>
+            <div className="mb-6">
+              <CreatorPlatformPills />
+            </div>
+          </Suspense>
+
+          <Suspense>
+            <div className="mb-8 flex flex-wrap items-center gap-4 border-y border-n-line py-5">
+              <CreatorViewToggle />
+              <CreatorGameFilter games={topGames} activeGame={game} />
+              <CreatorSortControls />
+            </div>
+          </Suspense>
+
+          <Suspense>
+            <CreatorGrid
+              initialData={initialCreators}
+              initialMeta={initialMeta}
+              initialFilters={{
+                platform: platform ?? "",
+                sort,
+                game: game?.slug ?? "",
+                page,
+              }}
+            />
+          </Suspense>
+        </Container>
       </div>
-
-      <Suspense>
-        <div className="mb-4 flex items-center gap-3">
-          <CreatorViewToggle />
-          <CreatorGameFilter games={topGames} activeGame={game} />
-          <CreatorSortControls />
-        </div>
-      </Suspense>
-
-      <Suspense>
-        <CreatorGrid initialData={initialCreators} initialMeta={initialMeta} />
-      </Suspense>
-    </div>
+    </AppearanceProvider>
   );
 }

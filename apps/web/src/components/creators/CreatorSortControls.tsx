@@ -46,8 +46,8 @@ export function CreatorSortControls() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-between gap-3">
-      <div className="flex w-fit gap-1 rounded-md bg-[#1E1F22] p-0.5">
+    <div className="flex min-w-0 basis-full flex-wrap items-center justify-between gap-3 lg:flex-1">
+      <div className="flex max-w-full flex-wrap gap-1 rounded-md bg-[var(--view-canvas,#1E1F22)] p-0.5">
         {SORTS.map((s) => {
           const isActive = currentSort === s.value;
           return (
@@ -55,11 +55,12 @@ export function CreatorSortControls() {
               key={s.value}
               type="button"
               onClick={() => handleSelect(s.value)}
+              aria-pressed={isActive}
               className={cn(
-                "rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                "min-h-11 rounded px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-[#383A40] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:text-[#DBDEE1]",
+                  ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
+                  : "text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#DBDEE1)]",
               )}
             >
               {s.label}
@@ -68,7 +69,7 @@ export function CreatorSortControls() {
         })}
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs text-[#949BA4]">
+      <div className="flex items-center gap-1.5 text-xs text-[var(--view-muted,#949BA4)]">
         <span>{status}</span>
       </div>
     </div>

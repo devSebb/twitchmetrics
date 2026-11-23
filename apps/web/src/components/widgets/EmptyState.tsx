@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui";
+import { useAppearance } from "@/components/ui/Appearance";
 
 type EmptyStateVariant = "no_data" | "locked";
 
@@ -58,6 +58,7 @@ export function EmptyState({
   compact = false,
   className,
 }: EmptyStateProps) {
+  const appearance = useAppearance();
   const isLocked = variant === "locked";
 
   return (
@@ -66,31 +67,38 @@ export function EmptyState({
         compact ? "py-6 px-4" : "py-10 px-6"
       } ${
         isLocked
-          ? "rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31]/50"
-          : "rounded-lg border border-dashed border-[#3F4147]"
+          ? "rounded-lg border border-dashed border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)]"
+          : "rounded-lg border border-dashed border-[var(--view-line,#3F4147)]"
       } ${className ?? ""}`}
     >
-      <div className={`mb-3 text-[#949BA4] ${isLocked ? "opacity-60" : ""}`}>
+      <div
+        className={`mb-3 text-[var(--view-muted,#949BA4)] ${isLocked ? "opacity-60" : ""}`}
+      >
         {icon ?? (isLocked ? <LockIcon /> : <EmptyIcon />)}
       </div>
 
       <h4
-        className={`text-sm font-semibold ${compact ? "text-xs" : "text-sm"} text-[#DBDEE1]`}
+        className={`text-sm font-semibold ${compact ? "text-xs" : "text-sm"} text-[var(--view-ink,#DBDEE1)]`}
       >
         {title}
       </h4>
 
       <p
-        className={`mt-1 max-w-xs text-[#949BA4] ${compact ? "text-xs" : "text-xs"}`}
+        className={`mt-1 max-w-xs text-[var(--view-muted,#949BA4)] ${compact ? "text-xs" : "text-xs"}`}
       >
         {message}
       </p>
 
       {actionLabel && actionHref ? (
-        <Link href={actionHref} className="mt-4">
-          <Button variant={isLocked ? "primary" : "secondary"} size="sm">
-            {actionLabel}
-          </Button>
+        <Link
+          href={actionHref}
+          className={
+            appearance === "noticed"
+              ? "n-button n-button-secondary mt-4"
+              : "mt-4 rounded-md bg-[#E32C19] px-4 py-2 text-sm font-semibold text-white"
+          }
+        >
+          {actionLabel}
         </Link>
       ) : null}
     </div>

@@ -8,6 +8,19 @@
 
 /* Opt-in during the migration. Legacy pages retain their existing palette. */
 .noticed {
+  --view-ink: var(--noticed-ink);
+  --view-muted: var(--noticed-slate);
+  --view-canvas: var(--noticed-canvas);
+  --view-surface: var(--noticed-surface);
+  --view-control: var(--noticed-control);
+  --view-line: var(--noticed-line);
+  --view-red: var(--noticed-red);
+  --view-red-hover: var(--noticed-red-hover);
+  --view-success: var(--noticed-success);
+  --view-error: var(--noticed-error);
+  --view-red-fill: #fbedee;
+  --view-error-fill: #fbedee;
+  --view-success-fill: #edf6f0;
   --chrome-line: var(--noticed-line);
   --chrome-ink: var(--noticed-ink);
   --chrome-slate: var(--noticed-slate);
@@ -160,4 +173,40 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Reused analytical modules inherit the new surface without changing owner screens. */
+.noticed-analytics :where(button:not([aria-label^="About"])) {
+  min-height: 36px;
+}
+.noticed-analytics :where(table) {
+  min-width: 640px;
+}
+.noticed-analytics .font-display {
+  font-family: inherit;
+}
+.noticed-analytics [data-widget-id] {
+  min-width: 0;
+}
+.noticed [data-platform="x"] {
+  filter: invert(1);
+}
+.noticed .n-dark [data-platform="x"] {
+  filter: none;
+}
+.noticed .n-dark {
+  --view-ink: #ffffff;
+  --view-muted: #d2d5d7;
+}
+.noticed .n-dark .text-red-400 {
+  color: #fca5a5;
+}
+.noticed :is(.text-red-400, .text-rose-400) {
+  color: var(--noticed-error);
+}
+.noticed .text-yellow-400 {
+  color: var(--noticed-warning);
+}
+.noticed-analytics :where(section[id]) {
+  scroll-margin-top: 11rem;
 }

@@ -1,5 +1,7 @@
 "use client";
+import { WidgetQueryError } from "./WidgetQueryError";
 
+import { useAppearance } from "@/components/ui/Appearance";
 import Link from "next/link";
 import type { Platform } from "@twitchmetrics/database";
 import { PlatformIcon } from "@/components/shared";
@@ -14,16 +16,33 @@ type PopularGamesWidgetProps = {
 };
 
 export function PopularGamesWidget({ profile }: PopularGamesWidgetProps) {
-  const { data: games, isLoading } = trpc.snapshot.getPopularGames.useQuery({
+  const noticed = useAppearance() === "noticed";
+  const {
+    data: games,
+    isLoading,
+    isError,
+    refetch,
+  } = trpc.snapshot.getPopularGames.useQuery({
     creatorProfileId: profile.id,
     limit: 6,
   });
+
+  if (isError)
+    return (
+      <WidgetQueryError
+        label="popular categories"
+        onRetry={() => void refetch()}
+      />
+    );
 
   if (isLoading) {
     return (
       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-12 animate-pulse rounded-lg bg-[#383A40]" />
+          <div
+            key={i}
+            className="h-12 animate-pulse rounded-lg bg-[var(--view-surface,#383A40)]"
+          />
         ))}
       </div>
     );
@@ -34,7 +53,13 @@ export function PopularGamesWidget({ profile }: PopularGamesWidgetProps) {
   }
 
   return (
-    <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1">
+    <div
+      className={
+        noticed
+          ? "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          : "flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1"
+      }
+    >
       {games.map((game) => (
         <GameCard key={game.gameName} game={game} />
       ))}
@@ -62,9 +87,9 @@ type GameCardProps = {
 
 function GameCard({ game }: GameCardProps) {
   const content = (
-    <div className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-[#383A40]">
+    <div className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--view-surface,#383A40)]">
       {/* Cover image */}
-      <div className="relative h-10 w-8 flex-shrink-0 overflow-hidden rounded bg-[#2B2D31]">
+      <div className="relative h-10 w-8 flex-shrink-0 overflow-hidden rounded bg-[var(--view-canvas,#2B2D31)]">
         <GameCoverImage
           src={game.coverImageUrl}
           name={game.gameName}
@@ -78,7 +103,7 @@ function GameCard({ game }: GameCardProps) {
       {/* Game info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <p className="truncate text-sm font-medium text-[#DBDEE1]">
+          <p className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
             {game.gameName}
           </p>
           {game.platforms && game.platforms.length > 0 && (
@@ -95,9 +120,9 @@ function GameCard({ game }: GameCardProps) {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-[#949BA4]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--view-muted,#949BA4)]">
           <span>
-            <span className="text-[#F2F3F5]">
+            <span className="text-[var(--view-ink,#F2F3F5)]">
               {formatNumber(game.avgViewers)}
             </span>{" "}
             Avg Viewers

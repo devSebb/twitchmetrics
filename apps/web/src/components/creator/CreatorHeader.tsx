@@ -26,7 +26,7 @@ type GrowthRollupData = {
   trendDirection: string;
 };
 
-type CreatorHeaderProps = {
+export type CreatorHeaderProps = {
   creator: {
     id: string;
     displayName: string;

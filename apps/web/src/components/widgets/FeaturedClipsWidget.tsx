@@ -1,4 +1,5 @@
 "use client";
+import { WidgetQueryError } from "./WidgetQueryError";
 
 import Image from "next/image";
 import { trpc } from "@/lib/trpc";
@@ -11,10 +12,16 @@ type Props = {
 };
 
 export function FeaturedClipsWidget({ profile }: Props) {
-  const { data, isLoading } = trpc.snapshot.getFeaturedClips.useQuery({
-    creatorProfileId: profile.id,
-    limit: 6,
-  });
+  const { data, isLoading, isError, refetch } =
+    trpc.snapshot.getFeaturedClips.useQuery({
+      creatorProfileId: profile.id,
+      limit: 6,
+    });
+
+  if (isError)
+    return (
+      <WidgetQueryError label="featured clips" onRetry={() => void refetch()} />
+    );
 
   if (isLoading) {
     return (
@@ -22,7 +29,7 @@ export function FeaturedClipsWidget({ profile }: Props) {
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="aspect-video animate-pulse rounded-lg bg-[#383A40]"
+            className="aspect-video animate-pulse rounded-lg bg-[var(--view-surface,#383A40)]"
           />
         ))}
       </div>
@@ -41,10 +48,10 @@ export function FeaturedClipsWidget({ profile }: Props) {
           href={clip.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="group overflow-hidden rounded-lg border border-[#3F4147] transition-colors hover:border-[#4E5058]"
+          className="group overflow-hidden rounded-lg border border-[var(--view-line,#3F4147)] transition-colors hover:border-[var(--view-control,#4E5058)]"
         >
           {/* Thumbnail */}
-          <div className="relative aspect-video bg-[#2B2D31]">
+          <div className="relative aspect-video bg-[var(--view-canvas,#2B2D31)]">
             <Image
               src={clip.thumbnailUrl}
               alt={clip.title}
@@ -61,11 +68,11 @@ export function FeaturedClipsWidget({ profile }: Props) {
           </div>
 
           {/* Info */}
-          <div className="p-2">
-            <p className="line-clamp-2 text-xs font-medium text-[#DBDEE1]">
+          <div className="p-4">
+            <p className="line-clamp-2 text-sm font-semibold text-[var(--view-ink,#DBDEE1)]">
               {clip.title}
             </p>
-            <p className="mt-1 text-[10px] text-[#949BA4]">
+            <p className="mt-2 text-xs text-[var(--view-muted,#949BA4)]">
               {formatRelativeTime(clip.createdAt)}
             </p>
           </div>

@@ -42,8 +42,10 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex h-48 animate-pulse items-center justify-center rounded-lg bg-[#383A40]">
-        <span className="text-sm text-[#949BA4]">Loading...</span>
+      <div className="flex h-48 animate-pulse items-center justify-center rounded-lg bg-[var(--view-surface,#383A40)]">
+        <span className="text-sm text-[var(--view-muted,#949BA4)]">
+          Loading...
+        </span>
       </div>
     );
   }
@@ -89,7 +91,7 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
           {tags.map((tag) => (
             <span
               key={tag}
-              className="rounded-md bg-[#383A40] px-2.5 py-1 text-xs text-[#DBDEE1]"
+              className="rounded-md bg-[var(--view-surface,#383A40)] px-2.5 py-1 text-xs text-[var(--view-ink,#DBDEE1)]"
             >
               {tag}
             </span>

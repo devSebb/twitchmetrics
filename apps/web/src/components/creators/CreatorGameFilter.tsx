@@ -43,7 +43,7 @@ export function CreatorGameFilter({
       value={active}
       onChange={(event) => handleChange(event.target.value)}
       aria-label="Filter by game"
-      className="rounded-md border border-[#3F4147] bg-[#1E1F22] px-3 py-1.5 text-xs font-medium text-[#DBDEE1] outline-none transition-colors hover:border-[#4E5058] focus:border-[#4E5058]"
+      className="n-input !w-auto max-w-full sm:max-w-[240px]"
     >
       <option value="">All games</option>
       {options.map((game) => (

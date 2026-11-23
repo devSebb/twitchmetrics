@@ -36,7 +36,7 @@ export function CreatorPlatformPills() {
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none sm:gap-3">
+    <div className="flex gap-2 overflow-x-auto pb-1 sm:gap-3">
       {PILLS.map((pill) => {
         const isActive = active === pill.value;
         return (
@@ -44,11 +44,12 @@ export function CreatorPlatformPills() {
             key={pill.value || "all"}
             type="button"
             onClick={() => handleSelect(pill.value)}
+            aria-pressed={isActive}
             className={cn(
-              "flex min-w-[110px] flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors sm:text-base",
+              "flex min-w-[100px] shrink-0 items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-medium transition-colors sm:text-base",
               isActive
-                ? "border-[#E32C19] bg-[#E32C19] text-white"
-                : "border-[#3F4147] bg-[#313338] text-[#DBDEE1] hover:border-[#4E5058] hover:bg-[#383A40]",
+                ? "border-[var(--view-red,#E32C19)] bg-[var(--view-red,#E32C19)] text-white"
+                : "border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#313338)] text-[var(--view-ink,#DBDEE1)] hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-surface,#383A40)]",
             )}
           >
             {pill.value ? (

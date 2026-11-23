@@ -1,3 +1,4 @@
+import { Container } from "@/components/ui/Editorial";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
@@ -145,7 +146,7 @@ async function searchDatabase(query: string, type: SearchType, page: number) {
 const TABS = [
   { label: "All", value: "all" },
   { label: "Creators", value: "creators" },
-  { label: "Games", value: "games" },
+  { label: "Categories", value: "games" },
 ] as const;
 
 export async function generateMetadata({
@@ -154,7 +155,7 @@ export async function generateMetadata({
   const { q } = await searchParams;
   const title = q ? `Search: ${q}` : "Search";
   const description = q
-    ? `Search results for "${q}" — find creators and games on TwitchMetrics.`
+    ? `Search results for "${q}" — find creators and games on Noticed.`
     : "Search for creators and games across Twitch, YouTube, and more.";
 
   return {
@@ -190,72 +191,127 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-      <h1 className="mb-6 text-2xl font-bold text-[#F2F3F5]">Search</h1>
+    <div className="noticed min-h-[60vh]">
+      <Container className="py-10 sm:py-16">
+        <p className="n-eyebrow text-n-slate">Search Noticed</p>
+        <h1 className="mb-8 mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">
+          Find your next favourite.
+        </h1>
 
-      <SearchBar
-        mode="full"
-        defaultQuery={query}
-        autoFocus={!hasQuery}
-        searchType={type}
-      />
+        <SearchBar
+          mode="full"
+          key={`${type}:${query}`}
+          appearance="noticed"
+          defaultQuery={query}
+          autoFocus={!hasQuery}
+          searchType={type}
+        />
 
-      {/* Filter tabs */}
-      {hasQuery && (
-        <div className="mt-6 flex gap-1 rounded-md bg-[#1E1F22] p-0.5 w-fit">
-          {TABS.map((tab) => (
-            <Link
-              key={tab.value}
-              href={buildSearchUrl(query, tab.value)}
-              className={`rounded px-4 py-1.5 text-sm font-medium transition-colors ${
-                type === tab.value
-                  ? "bg-[#383A40] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:text-[#DBDEE1]"
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </div>
-      )}
+        {/* Filter tabs */}
+        {hasQuery && (
+          <div className="mt-8 flex flex-wrap gap-2 border-b border-n-line pb-5">
+            {TABS.map((tab) => (
+              <Link
+                key={tab.value}
+                href={buildSearchUrl(query, tab.value)}
+                aria-current={type === tab.value ? "page" : undefined}
+                className={`min-h-11 rounded-full px-5 py-3 text-sm font-medium transition-colors ${
+                  type === tab.value
+                    ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
+                    : "text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#DBDEE1)]"
+                }`}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </div>
+        )}
 
-      {/* Server-rendered results */}
-      {results && (
-        <div className="mt-6">
-          {results.creators.length === 0 &&
-            results.games.length === 0 &&
-            results.untrackedCreators.length === 0 && (
-              <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-10 text-center">
-                <p className="text-lg font-medium text-[#DBDEE1]">
-                  No results for &ldquo;{query}&rdquo;
-                </p>
-                <p className="mt-1 text-sm text-[#949BA4]">
-                  Try a different search term or check the spelling
-                </p>
-              </div>
-            )}
+        {/* Server-rendered results */}
+        {results && (
+          <div className="mt-6">
+            {results.creators.length === 0 &&
+              results.games.length === 0 &&
+              results.untrackedCreators.length === 0 && (
+                <div className="rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#313338)] px-6 py-10 text-center">
+                  <p className="text-lg font-medium text-[var(--view-ink,#DBDEE1)]">
+                    No results for &ldquo;{query}&rdquo;
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--view-muted,#949BA4)]">
+                    Try a different search term or check the spelling
+                  </p>
+                </div>
+              )}
 
-          {/* Untracked Twitch suggestions — shown when we have no DB match */}
-          {results.creators.length === 0 &&
-            results.untrackedCreators.length > 0 && (
+            {/* Untracked Twitch suggestions — shown when we have no DB match */}
+            {results.creators.length === 0 &&
+              results.untrackedCreators.length > 0 && (
+                <div className="mb-8">
+                  <h2 className="mb-1 text-sm font-semibold uppercase text-[var(--view-muted,#949BA4)]">
+                    On Twitch — not tracked yet
+                  </h2>
+                  <p className="mb-3 text-xs text-[var(--view-muted,#72767D)]">
+                    These channels match your search but we haven&apos;t indexed
+                    them yet. Check back after our next refresh.
+                  </p>
+                  <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {results.untrackedCreators.map((c) => (
+                      <a
+                        key={c.platformUserId}
+                        href={`https://twitch.tv/${c.username}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 rounded-lg border border-dashed border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] p-3 transition-colors hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-canvas,#313338)]"
+                      >
+                        <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[var(--view-surface,#383A40)]">
+                          {c.avatarUrl ? (
+                            <Image
+                              src={c.avatarUrl}
+                              alt={c.displayName}
+                              fill
+                              className="object-cover"
+                              sizes="40px"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white bg-[#9146ff]">
+                              {c.displayName.charAt(0)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
+                              {c.displayName}
+                            </span>
+                            {c.isLive && (
+                              <span className="flex-shrink-0 rounded bg-[var(--view-red,#E32C19)] px-1 py-0.5 text-[9px] font-bold text-white">
+                                LIVE
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-[var(--view-muted,#72767D)]">
+                            @{c.username} · on twitch.tv ↗
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            {results.creators.length > 0 && (
               <div className="mb-8">
-                <h2 className="mb-1 text-sm font-semibold uppercase text-[#949BA4]">
-                  On Twitch — not tracked yet
+                <h2 className="mb-3 text-sm font-semibold uppercase text-[var(--view-muted,#949BA4)]">
+                  Creators ({results.creatorTotal})
                 </h2>
-                <p className="mb-3 text-xs text-[#72767D]">
-                  These channels match your search but we haven&apos;t indexed
-                  them yet. Check back after our next refresh.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {results.untrackedCreators.map((c) => (
-                    <a
-                      key={c.platformUserId}
-                      href={`https://twitch.tv/${c.username}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#313338]"
+                <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.creators.map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/creator/${c.slug}`}
+                      className="flex items-center gap-3 border-b border-n-line py-5 transition-colors hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-surface,#383A40)]"
                     >
-                      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
+                      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[var(--view-surface,#383A40)]">
                         {c.avatarUrl ? (
                           <Image
                             src={c.avatarUrl}
@@ -271,136 +327,89 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-medium text-[#DBDEE1]">
-                            {c.displayName}
-                          </span>
-                          {c.isLive && (
-                            <span className="flex-shrink-0 rounded bg-[#E32C19] px-1 py-0.5 text-[9px] font-bold text-white">
-                              LIVE
-                            </span>
-                          )}
+                        <div className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
+                          {c.displayName}
                         </div>
-                        <div className="text-xs text-[#72767D]">
-                          @{c.username} · on twitch.tv ↗
+                        <div className="text-xs text-[var(--view-muted,#949BA4)]">
+                          {formatNumber(Number(c.totalFollowers))} followers
                         </div>
                       </div>
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </div>
             )}
 
-          {results.creators.length > 0 && (
-            <div className="mb-8">
-              <h2 className="mb-3 text-sm font-semibold uppercase text-[#949BA4]">
-                Creators ({results.creatorTotal})
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {results.creators.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/creator/${c.slug}`}
-                    className="flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
-                  >
-                    <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
-                      {c.avatarUrl ? (
-                        <Image
-                          src={c.avatarUrl}
-                          alt={c.displayName}
-                          fill
+            {results.games.length > 0 && (
+              <div>
+                <h2 className="mb-3 text-sm font-semibold uppercase text-[var(--view-muted,#949BA4)]">
+                  Categories ({results.gameTotal})
+                </h2>
+                <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.games.map((g) => (
+                    <Link
+                      key={g.id}
+                      href={`/game/${g.slug}`}
+                      className="flex items-center gap-3 border-b border-n-line py-5 transition-colors hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-surface,#383A40)]"
+                    >
+                      <div className="relative h-10 w-14 flex-shrink-0 overflow-hidden rounded bg-[var(--view-surface,#383A40)]">
+                        <GameCoverImage
+                          src={g.coverImageUrl}
+                          name={g.name}
+                          sizes="56px"
                           className="object-cover"
-                          sizes="40px"
+                          fallbackClassName="[&>span]:hidden"
                         />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white bg-[#9146ff]">
-                          {c.displayName.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
+                          {g.name}
                         </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-[#DBDEE1]">
-                        {c.displayName}
+                        <div className="text-xs text-[var(--view-muted,#949BA4)]">
+                          {formatNumber(g.currentViewers)} viewers
+                        </div>
                       </div>
-                      <div className="text-xs text-[#949BA4]">
-                        {formatNumber(Number(c.totalFollowers))} followers
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {results.games.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-semibold uppercase text-[#949BA4]">
-                Games ({results.gameTotal})
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {results.games.map((g) => (
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-3">
+                {page > 1 ? (
                   <Link
-                    key={g.id}
-                    href={`/game/${g.slug}`}
-                    className="flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 transition-colors hover:border-[#4E5058] hover:bg-[#383A40]"
+                    href={pageUrl(page - 1)}
+                    className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-control,#4E5058)]"
                   >
-                    <div className="relative h-10 w-14 flex-shrink-0 overflow-hidden rounded bg-[#383A40]">
-                      <GameCoverImage
-                        src={g.coverImageUrl}
-                        name={g.name}
-                        sizes="56px"
-                        className="object-cover"
-                        fallbackClassName="[&>span]:hidden"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-[#DBDEE1]">
-                        {g.name}
-                      </div>
-                      <div className="text-xs text-[#949BA4]">
-                        {formatNumber(g.currentViewers)} viewers
-                      </div>
-                    </div>
+                    Previous
                   </Link>
-                ))}
+                ) : (
+                  <span className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] opacity-40 pointer-events-none">
+                    Previous
+                  </span>
+                )}
+                <span className="text-sm text-[var(--view-muted,#949BA4)]">
+                  Page {page} of {totalPages}
+                </span>
+                {page < totalPages ? (
+                  <Link
+                    href={pageUrl(page + 1)}
+                    className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-control,#4E5058)]"
+                  >
+                    Next
+                  </Link>
+                ) : (
+                  <span className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] opacity-40 pointer-events-none">
+                    Next
+                  </span>
+                )}
               </div>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-8 flex items-center justify-center gap-3">
-              {page > 1 ? (
-                <Link
-                  href={pageUrl(page - 1)}
-                  className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
-                >
-                  Previous
-                </Link>
-              ) : (
-                <span className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] opacity-40 pointer-events-none">
-                  Previous
-                </span>
-              )}
-              <span className="text-sm text-[#949BA4]">
-                Page {page} of {totalPages}
-              </span>
-              {page < totalPages ? (
-                <Link
-                  href={pageUrl(page + 1)}
-                  className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
-                >
-                  Next
-                </Link>
-              ) : (
-                <span className="rounded-md bg-[#383A40] px-4 py-2 text-sm font-medium text-[#DBDEE1] opacity-40 pointer-events-none">
-                  Next
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </Container>
     </div>
   );
 }

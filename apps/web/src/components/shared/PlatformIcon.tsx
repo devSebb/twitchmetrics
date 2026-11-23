@@ -70,6 +70,7 @@ export function PlatformIcon({
         <Image
           src={iconSrc}
           alt={config.name}
+          data-platform={platform}
           width={innerPx}
           height={innerPx}
           className="object-contain"
@@ -84,6 +85,7 @@ export function PlatformIcon({
       <Image
         src={iconSrc}
         alt={config.name}
+        data-platform={platform}
         width={pxSize}
         height={pxSize}
         className={cn(

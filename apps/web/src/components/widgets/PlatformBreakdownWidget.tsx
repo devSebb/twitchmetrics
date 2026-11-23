@@ -1,4 +1,5 @@
 "use client";
+import { useChartPalette } from "@/components/ui/Appearance";
 
 import type { EChartsOption } from "echarts";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
@@ -14,13 +15,14 @@ type Props = {
 };
 
 export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
+  const palette = useChartPalette();
   // Per platform as Stream Hatchet BI shows it: the channel we hold plus the
   // creator's other channels on that platform, the same figure as the header.
   const bars = profile.platformAccounts
     .map((a) => ({
       platform: a.platform,
       followerCount: Number(serializedPlatformFollowerCount(a) ?? 0n),
-      color: PLATFORM_CONFIG[a.platform].color,
+      color: palette.platforms[a.platform],
       name: PLATFORM_CONFIG[a.platform].name,
     }))
     .filter((bar) => bar.followerCount > 0)
@@ -40,7 +42,7 @@ export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
         return `${item.name}: ${formatNumber(item.value)}`;
       },
     },
-    grid: { left: 80, right: 20, top: 10, bottom: 10, containLabel: false },
+    grid: { left: 80, right: 65, top: 10, bottom: 10, containLabel: false },
     xAxis: {
       type: "value",
       show: false,
@@ -69,7 +71,7 @@ export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
               : Number(params.value ?? 0);
             return formatNumber(val);
           },
-          color: "#949BA4",
+          color: palette.muted,
           fontSize: 11,
         },
       },
@@ -81,7 +83,7 @@ export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
     <div className="flex flex-1 flex-col justify-center">
       <BaseChart option={option} height={Math.max(bars.length * 48, 120)} />
       {isOwner && bars.length === 1 && (
-        <p className="mt-2 text-center text-xs text-[#949BA4]">
+        <p className="mt-2 text-center text-xs text-[var(--view-muted,#949BA4)]">
           Connect more platforms to compare.
         </p>
       )}

@@ -1,4 +1,5 @@
 "use client";
+import { WidgetQueryError } from "./WidgetQueryError";
 
 import { useState, useCallback } from "react";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
@@ -30,7 +31,9 @@ const COLUMNS = [
 function SortArrow({ active, order }: { active: boolean; order: SortOrder }) {
   if (!active) return null;
   return (
-    <span className="ml-1 text-[#949BA4]">{order === "asc" ? "▲" : "▼"}</span>
+    <span className="ml-1 text-[var(--view-muted,#949BA4)]">
+      {order === "asc" ? "▲" : "▼"}
+    </span>
   );
 }
 
@@ -38,7 +41,10 @@ function SortArrow({ active, order }: { active: boolean; order: SortOrder }) {
 function ViewerCount({ value }: { value: number | null }) {
   if (value === null) {
     return (
-      <span className="text-[#949BA4]" title="No viewer data for this stream">
+      <span
+        className="text-[var(--view-muted,#949BA4)]"
+        title="No viewer data for this stream"
+      >
         &mdash;
       </span>
     );
@@ -51,13 +57,14 @@ export function RecentStreamsWidget({ profile }: Props) {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = trpc.snapshot.getRecentStreams.useQuery({
-    creatorProfileId: profile.id,
-    page,
-    pageSize: 10,
-    sortBy,
-    sortOrder,
-  });
+  const { data, isLoading, isError, refetch } =
+    trpc.snapshot.getRecentStreams.useQuery({
+      creatorProfileId: profile.id,
+      page,
+      pageSize: 10,
+      sortBy,
+      sortOrder,
+    });
 
   const handleSort = useCallback(
     (col: SortBy | "platform") => {
@@ -73,11 +80,19 @@ export function RecentStreamsWidget({ profile }: Props) {
     [sortBy],
   );
 
+  if (isError)
+    return (
+      <WidgetQueryError label="recent streams" onRetry={() => void refetch()} />
+    );
+
   if (isLoading) {
     return (
       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-10 animate-pulse rounded-lg bg-[#383A40]" />
+          <div
+            key={i}
+            className="h-10 animate-pulse rounded-lg bg-[var(--view-surface,#383A40)]"
+          />
         ))}
       </div>
     );
@@ -91,21 +106,45 @@ export function RecentStreamsWidget({ profile }: Props) {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div
+        className="flex-1 min-h-0 overflow-auto"
+        role="region"
+        aria-label="Recent streams"
+        tabIndex={0}
+      >
         <table className="w-full text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-[#313338]">
-            <tr className="border-b border-[#3F4147]">
+          <thead className="sticky top-0 z-10 bg-[var(--view-canvas,#313338)]">
+            <tr className="border-b border-[var(--view-line,#3F4147)]">
               {COLUMNS.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-3 py-2 text-xs font-medium text-[#949BA4] transition-colors ${
-                    col.sortable ? "cursor-pointer hover:text-[#DBDEE1]" : ""
+                  className={`px-3 py-2 text-xs font-medium text-[var(--view-muted,#949BA4)] transition-colors ${
+                    col.sortable
+                      ? "cursor-pointer hover:text-[var(--view-ink,#DBDEE1)]"
+                      : ""
                   }`}
-                  onClick={() => handleSort(col.key)}
+                  aria-sort={
+                    col.sortable && sortBy === col.key
+                      ? sortOrder === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : undefined
+                  }
                 >
-                  {col.label}
-                  {col.sortable && (
-                    <SortArrow active={sortBy === col.key} order={sortOrder} />
+                  {col.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSort(col.key)}
+                      className="inline-flex items-center py-1 text-left"
+                    >
+                      {col.label}
+                      <SortArrow
+                        active={sortBy === col.key}
+                        order={sortOrder}
+                      />
+                    </button>
+                  ) : (
+                    col.label
                   )}
                 </th>
               ))}
@@ -115,12 +154,12 @@ export function RecentStreamsWidget({ profile }: Props) {
             {data.sessions.map((session, i) => (
               <tr
                 key={i}
-                className="border-b border-[#3F4147]/50 transition-colors hover:bg-[#383A40]"
+                className="border-b border-[var(--view-line,#3F4147)] transition-colors hover:bg-[var(--view-surface,#383A40)]"
               >
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatDate(session.startedAt)}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   <span className="inline-flex items-center gap-1.5">
                     <span
                       className="h-2 w-2 rounded-full"
@@ -132,18 +171,20 @@ export function RecentStreamsWidget({ profile }: Props) {
                     {PLATFORM_CONFIG[session.platform].name}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {session.game ?? (
-                    <span className="text-[#949BA4]">&mdash;</span>
+                    <span className="text-[var(--view-muted,#949BA4)]">
+                      &mdash;
+                    </span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatDuration(session.durationMinutes * 60)}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {session.viewerData === "processing" ? (
                     <span
-                      className="rounded bg-[#383A40] px-1.5 py-0.5 text-[10px] font-medium text-[#949BA4]"
+                      className="rounded bg-[var(--view-surface,#383A40)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--view-muted,#949BA4)]"
                       title="Viewer stats arrive with Stream Hatchet's daily data, usually by the next morning (UTC)."
                     >
                       Processing
@@ -152,7 +193,7 @@ export function RecentStreamsWidget({ profile }: Props) {
                     <ViewerCount value={session.avgViewers} />
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   <ViewerCount value={session.peakViewers} />
                 </td>
               </tr>
@@ -164,7 +205,7 @@ export function RecentStreamsWidget({ profile }: Props) {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-3 flex shrink-0 items-center justify-between">
-          <span className="text-xs text-[#949BA4]">
+          <span className="text-xs text-[var(--view-muted,#949BA4)]">
             Page {data.page} of {totalPages} ({data.total} streams)
           </span>
           <div className="flex gap-2">
@@ -172,7 +213,7 @@ export function RecentStreamsWidget({ profile }: Props) {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
-              className="rounded-md border border-[#3F4147] px-3 py-1 text-xs text-[#DBDEE1] transition-colors hover:bg-[#383A40] disabled:opacity-40"
+              className="rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1 text-xs text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-surface,#383A40)] disabled:opacity-40"
             >
               Prev
             </button>
@@ -180,7 +221,7 @@ export function RecentStreamsWidget({ profile }: Props) {
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded-md border border-[#3F4147] px-3 py-1 text-xs text-[#DBDEE1] transition-colors hover:bg-[#383A40] disabled:opacity-40"
+              className="rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1 text-xs text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-surface,#383A40)] disabled:opacity-40"
             >
               Next
             </button>

@@ -54,7 +54,7 @@ function Avatar({
   const safe = getSafeImageSrc(avatarUrl);
   if (safe) {
     return (
-      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
+      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[var(--view-surface,#383A40)]">
         <Image
           src={safe}
           alt={displayName}
@@ -99,7 +99,7 @@ function PlatformLogos({
 }
 
 function EmDash() {
-  return <span className="text-[#949BA4]">—</span>;
+  return <span className="text-[var(--view-muted,#949BA4)]">—</span>;
 }
 
 function formatViewers(value: number | null | undefined) {
@@ -110,7 +110,8 @@ function formatAirtime(seconds: number | null | undefined) {
   return seconds != null ? formatDuration(seconds) : <EmDash />;
 }
 
-const HEADER_CLASS = "px-3 py-2 text-xs font-medium text-[#949BA4]";
+const HEADER_CLASS =
+  "px-3 py-2 text-xs font-medium text-[var(--view-muted,#949BA4)]";
 
 /**
  * Column header wired to the same `?sort=` mechanism as the sort pills, so
@@ -149,7 +150,9 @@ function SortableHeader({
           onClick={handleSelect}
           className={cn(
             "flex items-center gap-1 transition-colors",
-            isActive ? "text-[#F2F3F5]" : "hover:text-[#DBDEE1]",
+            isActive
+              ? "text-[var(--view-ink,#F2F3F5)]"
+              : "hover:text-[var(--view-ink,#DBDEE1)]",
           )}
         >
           {label}
@@ -181,10 +184,15 @@ export function CreatorList({ rows }: Props) {
   return (
     <>
       {/* Desktop table */}
-      <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full text-left text-sm">
+      <div
+        className="hidden overflow-x-auto sm:block"
+        role="region"
+        aria-label="Creator analytics table"
+        tabIndex={0}
+      >
+        <table className="n-table min-w-[900px]">
           <thead>
-            <tr className="border-b border-[#3F4147]">
+            <tr className="border-b border-[var(--view-line,#3F4147)]">
               <th className={HEADER_CLASS}>Channel</th>
               <th className={HEADER_CLASS}>Platforms</th>
               <SortableHeader
@@ -216,12 +224,12 @@ export function CreatorList({ rows }: Props) {
             {rows.map((row) => (
               <tr
                 key={row.slug}
-                className="border-b border-[#3F4147]/50 transition-colors hover:bg-[#383A40]"
+                className="border-b border-[var(--view-line,#3F4147)] transition-colors hover:bg-[var(--view-surface,#383A40)]"
               >
                 <td className="px-3 py-2.5">
                   <Link
                     href={`/creator/${row.slug}`}
-                    className="flex items-center gap-3 text-[#F2F3F5] hover:text-white"
+                    className="flex items-center gap-3 text-[var(--view-ink,#F2F3F5)] hover:underline"
                   >
                     <Avatar
                       displayName={row.displayName}
@@ -236,7 +244,7 @@ export function CreatorList({ rows }: Props) {
                 <td className="px-3 py-2.5">
                   <PlatformLogos accounts={row.platformAccounts} />
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatNumber(
                     Number(row.displayFollowers ?? row.totalFollowers),
                   )}
@@ -251,16 +259,16 @@ export function CreatorList({ rows }: Props) {
                     <EmDash />
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatAirtime(row.airTimeSeconds)}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatAirtime(row.avgAirTimeSeconds)}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatViewers(row.peakViewers)}
                 </td>
-                <td className="px-3 py-2.5 text-[#DBDEE1]">
+                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
                   {formatViewers(row.avgViewers)}
                 </td>
               </tr>
@@ -270,12 +278,12 @@ export function CreatorList({ rows }: Props) {
       </div>
 
       {/* Mobile stacked rows */}
-      <div className="divide-y divide-[#3F4147]/50 sm:hidden">
+      <div className="divide-y divide-[var(--view-line,#3F4147)] sm:hidden">
         {rows.map((row) => (
           <Link
             key={row.slug}
             href={`/creator/${row.slug}`}
-            className="flex items-center gap-3 py-3 transition-colors hover:bg-[#383A40]"
+            className="flex items-center gap-3 py-3 transition-colors hover:bg-[var(--view-surface,#383A40)]"
           >
             <Avatar
               displayName={row.displayName}
@@ -284,12 +292,12 @@ export function CreatorList({ rows }: Props) {
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium text-[#F2F3F5]">
+                <span className="truncate text-sm font-medium text-[var(--view-ink,#F2F3F5)]">
                   {row.displayName}
                 </span>
                 <PlatformLogos accounts={row.platformAccounts} />
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[#949BA4]">
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--view-muted,#949BA4)]">
                 <span>
                   {formatNumber(
                     Number(row.displayFollowers ?? row.totalFollowers),
@@ -303,8 +311,9 @@ export function CreatorList({ rows }: Props) {
                   />
                 )}
               </div>
-              <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#949BA4]">
+              <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[var(--view-muted,#949BA4)]">
                 <span>
+                  Airtime{" "}
                   {row.airTimeSeconds != null
                     ? formatDuration(row.airTimeSeconds)
                     : "—"}

@@ -1,13 +1,14 @@
 "use client";
+import { useChartPalette } from "@/components/ui/Appearance";
 
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import type { Platform } from "@twitchmetrics/database";
 import { BaseChart } from "./BaseChart";
-import { CHART_PLATFORM_COLORS } from "./theme";
+
 import { axisNumber, chartDateLabel, tooltipHtml } from "./format";
 import { formatNumber } from "@/lib/utils/format";
-import { THEME } from "@/lib/constants/theme";
+
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 
 type ViewerPoint = {
@@ -43,6 +44,7 @@ type ViewerCountChartProps = {
 function platformLinesOption(
   lines: { platform: Platform; data: ViewerPoint[] }[],
   valueLabel: string,
+  palette: ReturnType<typeof useChartPalette>,
 ): EChartsOption {
   const dates = [
     ...new Set(lines.flatMap((line) => line.data.map((point) => point.date))),
@@ -106,7 +108,7 @@ function platformLinesOption(
                 ? [
                     {
                       value: detail.join(" · "),
-                      color: THEME.colors.textMuted,
+                      color: palette.muted,
                       small: true,
                       plain: true,
                     },
@@ -126,7 +128,7 @@ function platformLinesOption(
       smooth: true,
       symbol: "circle",
       symbolSize: 4,
-      color: CHART_PLATFORM_COLORS[line.platform],
+      color: palette.platforms[line.platform],
       lineStyle: { width: 2 },
     })),
   };
@@ -141,7 +143,8 @@ export function ViewerCountChart({
   valueLabel = "avg viewers",
   summary,
 }: ViewerCountChartProps) {
-  const color = CHART_PLATFORM_COLORS[platform] ?? "#9146ff";
+  const palette = useChartPalette();
+  const color = palette.platforms[platform] ?? "#9146ff";
 
   const option = useMemo((): EChartsOption => {
     const dates = data.map((d) => d.date);
@@ -151,7 +154,11 @@ export function ViewerCountChart({
       return { series: [] };
     }
     if (others && others.length > 0) {
-      return platformLinesOption([{ platform, data }, ...others], valueLabel);
+      return platformLinesOption(
+        [{ platform, data }, ...others],
+        valueLabel,
+        palette,
+      );
     }
 
     const avg =
@@ -224,7 +231,7 @@ export function ViewerCountChart({
               ? [
                   {
                     value: `${formatNumber(point.peak)} peak`,
-                    color: THEME.colors.textMuted,
+                    color: palette.muted,
                     small: true,
                     plain: true,
                   },
@@ -234,7 +241,7 @@ export function ViewerCountChart({
               ? [
                   {
                     value: point.game,
-                    color: THEME.colors.textMuted,
+                    color: palette.muted,
                     small: true,
                     plain: true,
                   },
@@ -272,11 +279,11 @@ export function ViewerCountChart({
                 label: {
                   formatter: avgLabel,
                   position: "insideEndTop" as const,
-                  color: THEME.colors.textMuted,
+                  color: palette.muted,
                   fontSize: 11,
                 },
                 lineStyle: {
-                  color: THEME.colors.textMuted,
+                  color: palette.muted,
                   type: "dashed" as const,
                   width: 1,
                 },
@@ -295,7 +302,7 @@ export function ViewerCountChart({
                   show: true,
                   formatter: () => peakLabel,
                   position: "top" as const,
-                  color: THEME.colors.textHeader,
+                  color: palette.ink,
                   fontSize: 11,
                 },
               },
@@ -304,7 +311,7 @@ export function ViewerCountChart({
         },
       ],
     };
-  }, [data, platform, others, color, valueLabel, summary]);
+  }, [data, platform, others, color, valueLabel, summary, palette]);
 
   return <BaseChart option={option} height={height} loading={loading} />;
 }

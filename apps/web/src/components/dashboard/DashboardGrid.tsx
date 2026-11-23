@@ -1,5 +1,8 @@
 "use client";
 
+import { useAppearance } from "@/components/ui/Appearance";
+import { groupProfileWidgets } from "@/lib/profile-sections";
+import { EditorialSections } from "@/components/creator/EditorialSections";
 import { useState, useCallback, useMemo } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import {
@@ -350,6 +353,7 @@ export function DashboardGrid({
   customizeOpen,
   onCustomizeClose,
 }: DashboardGridProps) {
+  const appearance = useAppearance();
   const [enabledWidgets, setEnabledWidgets] = useState<WidgetId[]>(() =>
     getEnabledWidgets(widgetConfig),
   );
@@ -377,6 +381,50 @@ export function DashboardGrid({
     isOwner,
     dataAvailability,
   ]);
+
+  if (appearance === "noticed" && !isOwner) {
+    const widgets = enabledWidgets.filter((widgetId) =>
+      hasContent(widgetId, {
+        profile,
+        widgetConfig,
+        isClaimed,
+        isOwner,
+        dataAvailability,
+      }),
+    );
+    const groups = groupProfileWidgets(widgets);
+    return (
+      <EditorialSections
+        sections={groups.map((group) => ({
+          id: group.id,
+          title: group.title,
+          content: (
+            <div className="space-y-10">
+              {group.id === "partners" &&
+                profile.brandPartnerships.length > 0 && (
+                  <p className="text-sm text-n-slate">
+                    Partnerships added by the creator.
+                  </p>
+                )}
+              {group.widgets.map((widgetId) =>
+                renderGated(
+                  widgetId,
+                  isClaimed,
+                  renderWidget(
+                    widgetId,
+                    profile,
+                    isClaimed,
+                    false,
+                    statsContext,
+                  ),
+                ),
+              )}
+            </div>
+          ),
+        }))}
+      />
+    );
+  }
 
   return (
     <div>

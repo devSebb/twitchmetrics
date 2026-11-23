@@ -9,7 +9,7 @@ type SyncStatusProps = {
 export function SyncStatus({ lastSyncedAt }: SyncStatusProps) {
   if (!lastSyncedAt) {
     return (
-      <span className="text-xs text-[#8B8E94]">
+      <span className="text-xs text-[var(--view-muted,#8B8E94)]">
         Latest snapshot unavailable
       </span>
     );
@@ -20,7 +20,7 @@ export function SyncStatus({ lastSyncedAt }: SyncStatusProps) {
   const freshness = getMetricFreshness(date);
   if (!freshness) {
     return (
-      <span className="text-xs text-[#8B8E94]">
+      <span className="text-xs text-[var(--view-muted,#8B8E94)]">
         Latest snapshot unavailable
       </span>
     );
@@ -31,7 +31,7 @@ export function SyncStatus({ lastSyncedAt }: SyncStatusProps) {
       ? "text-red-400"
       : freshness.state === "possibly_outdated"
         ? "text-yellow-400"
-        : "text-[#8B8E94]";
+        : "text-[var(--view-muted,#8B8E94)]";
   const qualifier =
     freshness.state === "outdated"
       ? " · Outdated"

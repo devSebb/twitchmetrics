@@ -1,13 +1,13 @@
 "use client";
+import { useChartPalette } from "@/components/ui/Appearance";
 
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import type { Platform } from "@twitchmetrics/database";
 import { BaseChart } from "./BaseChart";
-import { CHART_PLATFORM_COLORS } from "./theme";
-import { axisNumber, chartDateLabel, tooltipHtml, trendColor } from "./format";
+
+import { axisNumber, chartDateLabel, tooltipHtml } from "./format";
 import { formatNumber } from "@/lib/utils/format";
-import { THEME } from "@/lib/constants/theme";
 
 const PERIODS = ["7d", "30d", "90d", "1y", "all"] as const;
 
@@ -26,7 +26,8 @@ export function FollowerGrowthChart({
   onPeriodChange,
   loading = false,
 }: FollowerGrowthChartProps) {
-  const color = CHART_PLATFORM_COLORS[platform] ?? "#9146ff";
+  const palette = useChartPalette();
+  const color = palette.platforms[platform] ?? "#9146ff";
 
   const option = useMemo((): EChartsOption => {
     const dates = data.map((d) => d.date);
@@ -78,7 +79,12 @@ export function FollowerGrowthChart({
             { value: formatNumber(val) },
             {
               value: `${sign}${formatNumber(diff)} from previous`,
-              color: trendColor(diff),
+              color:
+                diff > 0
+                  ? palette.success
+                  : diff < 0
+                    ? palette.error
+                    : palette.muted,
               small: true,
               plain: true,
             },
@@ -128,7 +134,7 @@ export function FollowerGrowthChart({
                   show: true,
                   formatter: () => formatNumber(peakValue),
                   position: "top" as const,
-                  color: THEME.colors.textHeader,
+                  color: palette.ink,
                   fontSize: 11,
                 },
               },
@@ -137,20 +143,21 @@ export function FollowerGrowthChart({
         },
       ],
     };
-  }, [data, color]);
+  }, [data, color, palette]);
 
   return (
     <div>
       {onPeriodChange && (
-        <div className="mb-3 flex gap-1">
+        <div className="mb-3 flex flex-wrap gap-1">
           {PERIODS.map((p) => (
             <button
               key={p}
+              aria-pressed={period === p}
               onClick={() => onPeriodChange(p)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 period === p
-                  ? "bg-[#383A40] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                  ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
+                  : "text-[var(--view-muted,#949BA4)] hover:bg-[var(--view-surface,#383A40)] hover:text-[var(--view-ink,#DBDEE1)]"
               }`}
             >
               {p === "all" ? "All" : p.toUpperCase()}

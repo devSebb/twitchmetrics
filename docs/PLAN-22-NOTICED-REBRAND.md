@@ -1,6 +1,6 @@
 # PLAN-22 — Noticed frontend rebrand
 
-**Status:** Implementation authorised by the user on 23 November 2026. Chunk 1 (design foundation and homepage) is complete and verified. Chunks 2–5 remain.
+**Status:** Implementation authorised by the user on 23 November 2026. Chunks 1 (design foundation and homepage) and 2 (channels and creator views) are implemented. Chunk 2's remaining mobile visual checks are explicitly recorded in `docs/noticed-design-system.md` for final integration. Chunks 3–5 remain.
 **Branch:** `codex/noticed-rebrand`. All five chunks stay on this branch. The user will merge; do not merge to main.
 **Audit date:** 23 November 2026.
 **Objective:** Apply the approved Noticed design system to the complete existing product, preserving its working information, interactions, data and architecture.
@@ -18,7 +18,7 @@ Confirmed with the user:
 - Start with design foundations, then the homepage, then channels, then categories/games. Complete the other existing screens using the same system.
 - Preserve ingestion, database structure, metric calculations, backend services, API contracts, authentication and permissions.
 - Defer the proposed standalone ranking-page system entirely. Do not implement or adapt the ranking-page template in this workstream.
-- Produce the plan now; do not implement the rebrand yet.
+- Planning is complete; the user subsequently authorised implementation in five chunks on one branch, with a brief and remaining steps after each.
 
 **Existing sorted discovery remains in scope.** The Channels directory already supports followers, viewership, peak, trending and recent sorting. Games already show most-watched and emerging channels. Preserve these existing capabilities and their calculations. The future generated ranking URLs, ranking badges and monthly ranking products remain out of scope. Some existing service filenames contain “ranking”; their names do not make the current directory a new ranking project.
 

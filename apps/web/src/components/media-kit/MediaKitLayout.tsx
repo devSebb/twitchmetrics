@@ -1,543 +1,312 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { AppearanceProvider } from "@/components/ui/Appearance";
+import { Container, ActionLink } from "@/components/ui/Editorial";
+import { EditorialCreatorHeader } from "@/components/creator/EditorialCreatorHeader";
+import {
+  EditorialSections,
+  type EditorialSection,
+} from "@/components/creator/EditorialSections";
+import type { PublicCreatorView } from "@/components/creator/CreatorProfileLayout";
+import { WidgetCard } from "@/components/dashboard/WidgetCard";
+import {
+  StatsRow,
+  FeaturedClipsWidget,
+  DemographicsWidget,
+  PopularGamesWidget,
+  BrandPartnersWidget,
+  PlatformBreakdownWidget,
+  hasPublicDemographics,
+} from "@/components/widgets";
 import {
   PLATFORM_CONFIG,
   sortByPlatformOrder,
-  type Platform,
 } from "@/lib/constants/platforms";
-import { formatNumber, formatPercent, formatDate } from "@/lib/utils/format";
-import { Badge, Button, Card } from "@/components/ui";
-import { getSafeImageSrc } from "@/lib/safeImage";
+import { getEnabledWidgets } from "@/lib/constants/widgets";
+import { formatNumber, formatPercent } from "@/lib/utils/format";
 import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
-import { PlatformIcon } from "@/components/shared";
+import { publicMediaKitUrl } from "@/lib/profile-sections";
+import { SITE_URL } from "@/lib/constants/seo";
+import { Wordmark } from "@/components/brand/Wordmark";
 
-type PlatformAccount = {
-  platform: Platform;
-  platformUsername: string;
-  platformUrl: string | null;
-  followerCount: string;
-  totalViews: string;
-};
-
-type GrowthRollup = {
-  platform: Platform;
-  followerCount: string;
-  delta30d: string;
-  pct30d: number | null;
-  trendDirection: string | null;
-};
-
-type Partnership = {
-  brandName: string;
-  brandLogoUrl: string | null;
-  campaignName: string | null;
-};
-
-type ProfileData = {
-  displayName: string;
-  slug: string;
-  avatarUrl: string | null;
-  bannerUrl: string | null;
-  bio: string | null;
-  country: string | null;
-  state: string;
-  totalFollowers: string;
-  totalViews: string;
-  platformAccounts: PlatformAccount[];
-  growthRollups: GrowthRollup[];
-  partnerships: Partnership[];
-};
-
-type AnalyticsData = {
-  ageGenderData: unknown;
-  countryData: unknown;
-} | null;
-
-type MediaKitLayoutProps = {
-  profile: ProfileData;
-  analytics: AnalyticsData;
-};
-
-function TrendArrow({ direction }: { direction: string | null }) {
-  if (direction === "up") {
-    return (
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="#22c55e"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="m18 15-6-6-6 6" />
-      </svg>
-    );
-  }
-  if (direction === "down") {
-    return (
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="#E32C19"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#949BA4"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M5 12h14" />
-    </svg>
+export function MediaKitLayout(view: PublicCreatorView) {
+  const { profile, headerData, isClaimed, dataAvailability, statsContext } =
+    view;
+  const [shareState, setShareState] = useState<"idle" | "copied" | "manual">(
+    "idle",
   );
-}
-
-export function MediaKitLayout({ profile, analytics }: MediaKitLayoutProps) {
-  const [copied, setCopied] = useState(false);
-  const isClaimed = profile.state === "claimed" || profile.state === "premium";
-  const avatarSrc = getSafeImageSrc(profile.avatarUrl);
-  const bannerSrc = getSafeImageSrc(profile.bannerUrl);
-
-  const handleShare = async () => {
+  const publicUrl = publicMediaKitUrl(SITE_URL, profile.slug);
+  const enabled = new Set(getEnabledWidgets(profile.widgetConfig));
+  const growth = new Map(
+    profile.growthRollups.map((item) => [item.platform, item]),
+  );
+  async function copyLink() {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(publicUrl);
+      setShareState("copied");
     } catch {
-      // Fallback: do nothing
+      setShareState("manual");
     }
-  };
-
-  const growthByPlatform = new Map(
-    profile.growthRollups.map((g) => [g.platform, g]),
-  );
-
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      {/* Hero Section */}
-      <Card className="relative overflow-hidden p-0">
-        {bannerSrc ? (
-          <div className="relative h-40 w-full sm:h-48">
-            <Image
-              src={bannerSrc}
-              alt=""
-              fill
-              className="object-cover"
-              priority
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#313338]" />
-          </div>
-        ) : (
-          <div className="h-24 w-full bg-gradient-to-r from-[#E32C19]/30 via-[#313338] to-[#9146ff]/30" />
-        )}
-
-        <div
-          className={cn("relative px-6 pb-6", bannerSrc ? "-mt-12" : "-mt-4")}
-        >
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
-            {avatarSrc ? (
-              <Image
-                src={avatarSrc}
-                alt={profile.displayName}
-                width={96}
-                height={96}
-                className="rounded-full border-4 border-[#313338] shadow-lg"
-                priority
-              />
-            ) : (
-              <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#313338] bg-[#383A40] text-2xl font-bold text-[#F2F3F5]">
-                {profile.displayName.charAt(0).toUpperCase()}
-              </div>
-            )}
-
-            <div className="flex-1 text-center sm:text-left">
-              <h1 className="text-2xl font-bold text-[#F2F3F5] sm:text-3xl">
-                {profile.displayName}
-              </h1>
-              {profile.bio && (
-                <p className="mt-1 max-w-lg text-sm text-[#949BA4]">
-                  {profile.bio}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                {profile.country && (
-                  <Badge variant="outline">{profile.country}</Badge>
-                )}
-                {isClaimed && (
-                  <Badge className="bg-[#22c55e]/20 text-[#22c55e]">
-                    Verified by TwitchMetrics
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={handleShare}>
-                {copied ? "Copied!" : "Share"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled
-                title="Coming soon"
-                className="cursor-not-allowed"
-              >
-                Download PDF
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Total Stats Bar */}
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Card className="text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
-            Total Followers
-          </p>
-          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
-            {formatNumber(Number(profile.totalFollowers))}
-          </p>
-        </Card>
-        <Card className="text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
-            Total Views
-          </p>
-          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
-            {formatNumber(Number(profile.totalViews))}
-          </p>
-        </Card>
-        <Card className="text-center sm:col-span-1 col-span-2">
-          <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
-            Platforms
-          </p>
-          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
-            {profile.platformAccounts.length}
-          </p>
-        </Card>
-      </div>
-
-      {/* Platform Breakdown */}
-      {profile.platformAccounts.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-lg font-semibold text-[#F2F3F5]">
-            Platform Breakdown
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {sortByPlatformOrder(profile.platformAccounts).map((account) => {
-              const config = PLATFORM_CONFIG[account.platform];
-              const growth = growthByPlatform.get(account.platform);
-              // Direction from the displayed value so a loss never renders
-              // green, even if the stored trendDirection disagrees.
-              const growthDirection =
-                growth?.pct30d != null
-                  ? growth.pct30d > 0
-                    ? "up"
-                    : growth.pct30d < 0
-                      ? "down"
-                      : null
-                  : (growth?.trendDirection ?? null);
-              const profileUrl = getPlatformProfileUrl(
-                account.platform,
-                account.platformUrl,
-                account.platformUsername,
-              );
-
-              return (
-                <Card
-                  key={account.platform}
-                  className="flex items-center gap-3 transition-colors hover:border-[#4E5058]"
-                >
-                  <PlatformIcon
-                    platform={account.platform}
-                    size="lg"
-                    rounded="lg"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-[#DBDEE1]">
-                        {config.name}
-                      </span>
-                      {profileUrl ? (
-                        <a
-                          href={profileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-[#949BA4] hover:text-[#DBDEE1]"
-                        >
-                          @{account.platformUsername}
-                        </a>
-                      ) : (
-                        <span
-                          className="text-xs text-[#949BA4]"
-                          title="External profile unavailable"
-                        >
-                          @{account.platformUsername}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-lg font-bold text-[#F2F3F5]">
-                        {formatNumber(Number(account.followerCount))}
-                      </span>
-                      {growth && (
-                        <span className="flex items-center gap-0.5 text-xs">
-                          <TrendArrow direction={growthDirection} />
-                          <span
-                            className={cn(
-                              "font-medium",
-                              growthDirection === "up" && "text-[#22c55e]",
-                              growthDirection === "down" && "text-[#E32C19]",
-                              growthDirection !== "up" &&
-                                growthDirection !== "down" &&
-                                "text-[#949BA4]",
-                            )}
-                          >
-                            {growth.pct30d !== null
-                              ? formatPercent(growth.pct30d)
-                              : "0.0%"}
-                          </span>
-                          <span className="text-[#949BA4]">30d</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Audience Demographics */}
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-[#F2F3F5]">
-          Audience Demographics
-        </h2>
-        {isClaimed && analytics ? (
-          <DemographicsDisplay analytics={analytics} />
-        ) : (
-          <Card className="relative overflow-hidden">
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="mb-3 rounded-lg bg-[#383A40] p-3">
-                <svg
-                  width="28"
-                  height="28"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#949BA4"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </div>
-              <p className="text-sm font-medium text-[#DBDEE1]">
-                Audience insights locked
-              </p>
-              <p className="mt-1 max-w-xs text-xs text-[#949BA4]">
-                {isClaimed
-                  ? "Audience data is still being collected. Check back soon."
-                  : "Claim this profile to unlock detailed audience demographics."}
-              </p>
-              {!isClaimed && (
-                <Link href={`/creator/${profile.slug}`} className="mt-3">
-                  <Button size="sm">View Profile</Button>
-                </Link>
-              )}
-            </div>
-          </Card>
-        )}
-      </div>
-
-      {/* Brand Partnerships */}
-      {profile.partnerships.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-lg font-semibold text-[#F2F3F5]">
-            Brand Partnerships
-          </h2>
-          <Card>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-              {profile.partnerships.map((partner, idx) => {
-                const logoSrc = getSafeImageSrc(partner.brandLogoUrl);
-                return (
-                  <div
-                    key={`${partner.brandName}-${idx}`}
-                    className="flex flex-col items-center gap-2 rounded-lg bg-[#2B2D31] p-3 text-center"
-                  >
-                    {logoSrc ? (
-                      <Image
-                        src={logoSrc}
-                        alt={partner.brandName}
-                        width={48}
-                        height={48}
-                        className="rounded-md object-contain"
-                      />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[#383A40] text-sm font-bold text-[#949BA4]">
-                        {partner.brandName.charAt(0)}
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-xs font-medium text-[#DBDEE1]">
-                        {partner.brandName}
-                      </p>
-                      {partner.campaignName && (
-                        <p className="text-[10px] text-[#949BA4]">
-                          {partner.campaignName}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="mt-8 border-t border-[#3F4147] pt-6 text-center">
-        <p className="text-xs text-[#949BA4]">
-          Generated by{" "}
-          <Link
-            href="/"
-            className="font-medium text-[#DBDEE1] hover:text-[#F2F3F5]"
-          >
-            TwitchMetrics
-          </Link>
-        </p>
-        <div className="mt-1 flex items-center justify-center gap-3">
-          <Link
-            href={`/creator/${profile.slug}`}
-            className="text-xs text-[#949BA4] hover:text-[#DBDEE1]"
-          >
-            View full profile
-          </Link>
-          <span className="text-[#3F4147]">|</span>
-          <span className="text-xs text-[#949BA4]">
-            {formatDate(new Date())}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DemographicsDisplay({
-  analytics,
-}: {
-  analytics: NonNullable<AnalyticsData>;
-}) {
-  const countryData = analytics.countryData as Record<string, number> | null;
-  const ageGenderData = analytics.ageGenderData as
-    | Record<string, Record<string, number>>
-    | Record<string, number>
-    | null;
-  const ageGenderRows =
-    ageGenderData && Object.keys(ageGenderData).length > 0
-      ? Object.entries(ageGenderData)
-          .map(([label, value]) => {
-            const percentage =
-              typeof value === "number"
-                ? value
-                : Object.values(value).reduce<number>(
-                    (sum, next) => sum + (typeof next === "number" ? next : 0),
-                    0,
-                  );
-            return { label, percentage };
-          })
-          .sort((a, b) => b.percentage - a.percentage)
-      : [];
-
-  const hasCountryData = countryData && Object.keys(countryData).length > 0;
-  const hasAgeGenderData = ageGenderRows.length > 0;
-
-  if (!hasCountryData && !hasAgeGenderData) {
-    return (
-      <Card className="py-8 text-center">
-        <p className="text-sm text-[#949BA4]">
-          Audience data is still being collected. Check back soon.
-        </p>
-      </Card>
-    );
   }
+  const sections: EditorialSection[] = [
+    {
+      id: "overview",
+      title: "At a glance.",
+      keepVisible: true,
+      content: (
+        <>
+          <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
+            <p className="max-w-xl text-xl leading-relaxed tracking-tight sm:text-2xl">
+              <strong>{profile.displayName}</strong> has{" "}
+              {formatNumber(Number(profile.totalFollowers))} followers across{" "}
+              {profile.platformAccounts.length} tracked{" "}
+              {profile.platformAccounts.length === 1 ? "platform" : "platforms"}
+              . Explore the audience, recent content and platform performance
+              below.
+            </p>
+            <dl className="grid grid-cols-2 gap-6 border-t border-n-line pt-5">
+              <div>
+                <dt className="n-eyebrow text-n-slate">Tracked total views</dt>
+                <dd className="mt-3 text-4xl font-extrabold tracking-tight">
+                  {formatNumber(Number(profile.totalViews))}
+                </dd>
+              </div>
+              <div>
+                <dt className="n-eyebrow text-n-slate">Platforms</dt>
+                <dd className="mt-3 text-4xl font-extrabold tracking-tight">
+                  {profile.platformAccounts.length}
+                </dd>
+              </div>
+              <p className="col-span-2 text-xs leading-relaxed text-n-slate">
+                Figures reflect available tracked accounts and their latest
+                snapshots. Platform definitions and coverage vary; totals do not
+                represent unique people.
+              </p>
+            </dl>
+          </div>
+          <div
+            className="mt-10 overflow-x-auto"
+            role="region"
+            aria-label="Platform audience and 30-day growth"
+            tabIndex={0}
+          >
+            <table className="n-table min-w-[640px]">
+              <caption className="mb-4 text-left text-sm text-n-slate">
+                Platform audience and follower change · last 30 days
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Platform / account</th>
+                  <th scope="col">Followers / subscribers</th>
+                  <th scope="col">Change</th>
+                  <th scope="col">Change %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortByPlatformOrder(headerData.platformAccounts).map(
+                  (account) => {
+                    const rollup = growth.get(account.platform);
+                    const delta = rollup?.delta30d;
+                    const url = getPlatformProfileUrl(
+                      account.platform,
+                      account.platformUrl,
+                      account.platformUsername,
+                    );
+                    return (
+                      <tr key={account.platform}>
+                        <th scope="row">
+                          <span className="block font-semibold text-n-ink">
+                            {PLATFORM_CONFIG[account.platform].name}
+                          </span>
+                          {url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-block text-xs underline"
+                            >
+                              @{account.platformUsername}
+                            </a>
+                          ) : (
+                            <span className="text-xs">
+                              @{account.platformUsername}
+                            </span>
+                          )}
+                        </th>
+                        <td className="font-semibold">
+                          {account.followerCount === null
+                            ? "—"
+                            : formatNumber(Number(account.followerCount))}
+                        </td>
+                        <td>
+                          {delta == null ? (
+                            <span className="text-n-slate">
+                              Not enough history
+                            </span>
+                          ) : (
+                            `${Number(delta) > 0 ? "+" : ""}${formatNumber(Number(delta))}`
+                          )}
+                        </td>
+                        <td>
+                          {rollup?.pct30d == null
+                            ? "—"
+                            : formatPercent(rollup.pct30d)}
+                        </td>
+                      </tr>
+                    );
+                  },
+                )}
+              </tbody>
+            </table>
+          </div>
+          {enabled.has("stats_row") && (
+            <div className="mt-10">
+              <WidgetCard widgetId="stats_row">
+                <StatsRow profile={profile} statsContext={statsContext} />
+              </WidgetCard>
+            </div>
+          )}
+        </>
+      ),
+    },
+  ];
+  if (enabled.has("featured_clips") && dataAvailability.featured_clips)
+    sections.push({
+      id: "clips",
+      title: "Featured clips.",
+      content: (
+        <WidgetCard widgetId="featured_clips">
+          <FeaturedClipsWidget profile={profile} />
+        </WidgetCard>
+      ),
+    });
+  const demographics = hasPublicDemographics(profile, isClaimed);
+  const breakdown =
+    enabled.has("platform_breakdown") &&
+    headerData.platformAccounts.some(
+      (account) => Number(account.followerCount ?? 0) > 0,
+    );
+  if (breakdown || (enabled.has("demographics") && demographics))
+    sections.push({
+      id: "audience",
+      title: "Meet the audience.",
+      content: (
+        <div className="space-y-10">
+          {breakdown && (
+            <WidgetCard widgetId="platform_breakdown">
+              <PlatformBreakdownWidget profile={profile} />
+            </WidgetCard>
+          )}
+          {enabled.has("demographics") && demographics && (
+            <WidgetCard widgetId="demographics">
+              <DemographicsWidget
+                profile={profile}
+                isClaimed={isClaimed}
+                isOwner={false}
+              />
+            </WidgetCard>
+          )}
+        </div>
+      ),
+    });
+  if (enabled.has("popular_games") && dataAvailability.popular_games)
+    sections.push({
+      id: "content",
+      title: "Content, in focus.",
+      content: (
+        <WidgetCard widgetId="popular_games">
+          <PopularGamesWidget profile={profile} />
+        </WidgetCard>
+      ),
+    });
+  if (isClaimed && profile.brandPartnerships.length > 0)
+    sections.push({
+      id: "partners",
+      title: "Brand partners.",
+      content: (
+        <>
+          <p className="mb-6 text-sm text-n-slate">
+            Partnerships added by the creator.
+          </p>
+          <WidgetCard widgetId="brand_partners">
+            <BrandPartnersWidget profile={profile} isOwner={false} />
+          </WidgetCard>
+        </>
+      ),
+    });
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {hasCountryData && (
-        <Card>
-          <h3 className="mb-3 text-sm font-semibold text-[#F2F3F5]">
-            Top Countries
-          </h3>
-          <div className="space-y-2">
-            {Object.entries(countryData)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 5)
-              .map(([country, value]) => (
-                <div
-                  key={country}
-                  className="flex items-center justify-between"
-                >
-                  <span className="text-sm text-[#DBDEE1]">{country}</span>
-                  <span className="text-sm font-medium text-[#F2F3F5]">
-                    {typeof value === "number"
-                      ? `${(value * 100).toFixed(1)}%`
-                      : String(value)}
-                  </span>
-                </div>
-              ))}
+    <AppearanceProvider>
+      <div className="noticed noticed-analytics">
+        <EditorialCreatorHeader
+          creator={headerData}
+          kit
+          actions={
+            <button
+              type="button"
+              className="n-button n-button-light"
+              onClick={copyLink}
+            >
+              {shareState === "copied" ? "Link copied" : "Copy media-kit link"}
+            </button>
+          }
+        />
+        {shareState !== "idle" && (
+          <Container className="py-4">
+            <p role="status" className="text-sm">
+              {shareState === "copied"
+                ? "Public media-kit link copied. Anyone with this link can open the public view."
+                : "Copy this public link manually:"}
+            </p>
+            {shareState === "manual" && (
+              <input
+                aria-label="Public media-kit link"
+                className="n-input mt-2"
+                readOnly
+                value={publicUrl}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            )}
+          </Container>
+        )}
+        <EditorialSections sections={sections} />
+        <div className="border-t border-n-line bg-n-surface">
+          <Container className="flex flex-wrap items-center justify-between gap-6 py-12">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight">
+                There’s more behind the numbers.
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-n-slate">
+                Find the full follower and viewer histories, recent-stream table
+                and enabled profile sections in the analytical profile.
+              </p>
+            </div>
+            <ActionLink href={`/creator/${profile.slug}`}>
+              Explore full analytics
+            </ActionLink>
+          </Container>
+        </div>
+        <Container className="flex flex-wrap items-center justify-between gap-5 py-8">
+          <Link href="/" aria-label="Noticed home">
+            <Wordmark />
+          </Link>
+          <div className="text-right">
+            <button
+              type="button"
+              disabled
+              className="n-button n-button-secondary"
+              title="Creator media-kit PDF download is not available yet"
+            >
+              Download PDF · coming soon
+            </button>
+            <p className="mt-2 text-xs text-n-slate">
+              Share the public link for the latest available figures.
+            </p>
           </div>
-        </Card>
-      )}
-      {hasAgeGenderData && (
-        <Card>
-          <h3 className="mb-3 text-sm font-semibold text-[#F2F3F5]">
-            Age & Gender
-          </h3>
-          <div className="space-y-2">
-            {ageGenderRows.slice(0, 6).map(({ label, percentage }) => (
-              <div key={label}>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#DBDEE1]">{label}</span>
-                  <span className="font-medium text-[#F2F3F5]">
-                    {(percentage * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="mt-1 h-1.5 w-full rounded-full bg-[#2B2D31]">
-                  <div
-                    className="h-1.5 rounded-full bg-[#E32C19]"
-                    style={{
-                      width: `${Math.min(percentage * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
+        </Container>
+      </div>
+    </AppearanceProvider>
   );
 }

@@ -35,7 +35,7 @@ export function CreatorViewToggle() {
   }
 
   return (
-    <div className="flex w-fit gap-1 rounded-md bg-[#1E1F22] p-0.5">
+    <div className="flex w-fit gap-1 rounded-md bg-[var(--view-canvas,#1E1F22)] p-0.5">
       {VIEWS.map(({ value, label, Icon }) => {
         const isActive = current === value;
         return (
@@ -46,13 +46,13 @@ export function CreatorViewToggle() {
             aria-label={label}
             aria-pressed={isActive}
             className={cn(
-              "rounded px-2.5 py-1.5 transition-colors",
+              "flex h-11 w-11 items-center justify-center rounded transition-colors",
               isActive
-                ? "bg-[#383A40] text-[#F2F3F5]"
-                : "text-[#949BA4] hover:text-[#DBDEE1]",
+                ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
+                : "text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#DBDEE1)]",
             )}
           >
-            <Icon size={14} weight="duotone" />
+            <Icon size={18} weight="duotone" />
           </button>
         );
       })}

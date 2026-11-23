@@ -1,5 +1,6 @@
 "use client";
 
+import { useAppearance } from "@/components/ui/Appearance";
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { LineChart, BarChart, PieChart, GaugeChart } from "echarts/charts";
@@ -59,8 +60,10 @@ export function BaseChart({
   height = 400,
   loading = false,
   className,
-  appearance = "legacy",
+  appearance: explicitAppearance,
 }: BaseChartProps) {
+  const inheritedAppearance = useAppearance();
+  const appearance = explicitAppearance ?? inheritedAppearance;
   const chartRef = useRef<ReactECharts>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
