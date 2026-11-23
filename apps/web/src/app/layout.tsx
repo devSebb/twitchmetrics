@@ -9,6 +9,8 @@ import {
   DEFAULT_DESCRIPTION,
 } from "@/lib/constants/seo";
 import "./globals.css";
+import "./noticed.css";
+import { NOTICED_CSS_VARS } from "@/lib/constants/noticed";
 
 const gotham = localFont({
   src: [
@@ -91,6 +93,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
+        style={NOTICED_CSS_VARS}
         className={`${gotham.variable} ${gothamBlack.variable} font-body bg-background text-text-primary antialiased`}
       >
         <Providers>{children}</Providers>

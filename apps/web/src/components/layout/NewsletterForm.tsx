@@ -40,20 +40,23 @@ export function NewsletterForm() {
 
   if (state === "success") {
     return (
-      <p className="mt-3 flex items-center gap-2 text-sm text-[#DBDEE1]">
+      <p
+        role="status"
+        className="mt-3 flex items-center gap-2 text-sm text-[var(--noticed-ink)]"
+      >
         <CheckCircle
           size={18}
           weight="fill"
-          className="flex-shrink-0 text-[#22c55e]"
+          className="flex-shrink-0 text-[var(--noticed-success)]"
         />
-        You&apos;re subscribed — welcome aboard.
+        You&apos;re subscribed. Welcome aboard.
       </p>
     );
   }
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="mt-3 flex gap-2">
+      <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           type="email"
           required
@@ -62,19 +65,19 @@ export function NewsletterForm() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email address"
           aria-label="Email address"
-          className="w-0 flex-1 rounded-md border border-[#3F4147] bg-[#313338] px-3 py-2 text-sm text-[#DBDEE1] placeholder-[#949BA4] outline-none focus:border-[#E32C19]"
+          className="n-input min-w-0 flex-1"
         />
         <button
           type="submit"
           disabled={state === "submitting"}
           aria-label="Subscribe to the newsletter"
-          className="rounded-md bg-[#E32C19] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
+          className="n-button n-button-primary !rounded-md !px-4"
         >
-          {state === "submitting" ? "…" : "→"}
+          {state === "submitting" ? "Subscribing…" : "Subscribe"}
         </button>
       </form>
       {state === "error" && error && (
-        <p role="alert" className="mt-2 text-xs text-[#ef4444]">
+        <p role="alert" className="mt-2 text-xs text-[var(--noticed-error)]">
           {error}
         </p>
       )}

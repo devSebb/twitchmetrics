@@ -10,6 +10,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Scoped Noticed surfaces resolve these values from the shared web tokens.
+        n: {
+          canvas: "var(--noticed-canvas)",
+          ink: "var(--noticed-ink)",
+          red: "var(--noticed-red)",
+          navy: "var(--noticed-navy)",
+          slate: "var(--noticed-slate)",
+          surface: "var(--noticed-surface)",
+          line: "var(--noticed-line)",
+          control: "var(--noticed-control)",
+          success: "var(--noticed-success)",
+          warning: "var(--noticed-warning)",
+          error: "var(--noticed-error)",
+        },
         background: "#2B2D31",
         surface: {
           DEFAULT: "#313338",

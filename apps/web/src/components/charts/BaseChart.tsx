@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { LineChart, BarChart, PieChart, GaugeChart } from "echarts/charts";
 import {
@@ -40,6 +40,7 @@ type BaseChartProps = {
   height?: string | number;
   loading?: boolean;
   className?: string;
+  appearance?: "legacy" | "noticed";
 };
 
 function hasData(option: EChartsOption): boolean {
@@ -58,8 +59,25 @@ export function BaseChart({
   height = 400,
   loading = false,
   className,
+  appearance = "legacy",
 }: BaseChartProps) {
   const chartRef = useRef<ReactECharts>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    if (appearance !== "noticed") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(media.matches);
+    const update = () => setReduceMotion(media.matches);
+    media.addEventListener("change", update);
+    let disposed = false;
+    void document.fonts.ready.then(() => {
+      if (!disposed) chartRef.current?.getEchartsInstance().resize();
+    });
+    return () => {
+      disposed = true;
+      media.removeEventListener("change", update);
+    };
+  }, [appearance]);
 
   if (loading) {
     return (
@@ -67,8 +85,11 @@ export function BaseChart({
         className={className}
         style={{ height: typeof height === "number" ? `${height}px` : height }}
       >
-        <div className="flex h-full w-full animate-pulse items-center justify-center rounded-lg bg-[#383A40]">
-          <span className="text-sm text-[#949BA4]">Loading chart...</span>
+        <div
+          role="status"
+          className={`flex h-full w-full animate-pulse items-center justify-center rounded-lg ${appearance === "noticed" ? "bg-n-surface text-n-slate" : "bg-[#383A40] text-[#949BA4]"}`}
+        >
+          <span className="text-sm">Loading chart...</span>
         </div>
       </div>
     );
@@ -80,8 +101,11 @@ export function BaseChart({
         className={className}
         style={{ height: typeof height === "number" ? `${height}px` : height }}
       >
-        <div className="flex h-full w-full items-center justify-center rounded-lg border border-[#3F4147] bg-[#313338]">
-          <span className="text-sm text-[#949BA4]">No data available</span>
+        <div
+          role="status"
+          className={`flex h-full w-full items-center justify-center rounded-lg border ${appearance === "noticed" ? "border-n-line bg-n-canvas text-n-slate" : "border-[#3F4147] bg-[#313338] text-[#949BA4]"}`}
+        >
+          <span className="text-sm">No data available</span>
         </div>
       </div>
     );
@@ -91,8 +115,12 @@ export function BaseChart({
     <ReactECharts
       ref={chartRef}
       echarts={echarts}
-      option={option}
-      theme="twitchmetrics"
+      option={
+        appearance === "noticed" && reduceMotion
+          ? { ...option, animation: false }
+          : option
+      }
+      theme={appearance === "noticed" ? "noticed" : "twitchmetrics"}
       style={{ height: typeof height === "number" ? `${height}px` : height }}
       className={className}
       notMerge

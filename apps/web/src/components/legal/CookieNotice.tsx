@@ -57,7 +57,7 @@ const COPY = {
     essentialTitle: "Essential cookies",
     diagnosticsTitle: "Optional diagnostics",
     notice:
-      "We use essential cookies for sign-in, session security and authentication flows. They are required for TwitchMetrics to work.",
+      "We use essential cookies for sign-in, session security and authentication flows. They are required for Noticed to work.",
     consent:
       "We use essential cookies for sign-in and security. You can also allow optional diagnostics that help us debug errors and improve stability.",
     diagnostics:
@@ -75,7 +75,7 @@ const COPY = {
     essentialTitle: "Cookies esenciales",
     diagnosticsTitle: "Diagnóstico opcional",
     notice:
-      "Utilizamos cookies esenciales para el inicio de sesión, la seguridad de la sesión y los flujos de autenticación. Son necesarias para que TwitchMetrics funcione.",
+      "Utilizamos cookies esenciales para el inicio de sesión, la seguridad de la sesión y los flujos de autenticación. Son necesarias para que Noticed funcione.",
     consent:
       "Utilizamos cookies esenciales para el inicio de sesión y la seguridad. También puedes permitir diagnósticos opcionales que nos ayudan a depurar errores y mejorar la estabilidad.",
     diagnostics:
@@ -134,24 +134,24 @@ export function CookieNotice() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[70] px-4 pb-4 sm:px-6">
+    <div className="noticed !bg-transparent fixed inset-x-0 bottom-0 z-[70] px-4 pb-4 sm:px-6">
       <section
         aria-labelledby="cookie-notice-title"
-        className="mx-auto max-w-4xl rounded-lg border border-[#3F4147] bg-[#1E1F22] p-4 shadow-2xl shadow-black/40 sm:p-5"
+        className="mx-auto max-w-4xl rounded-lg border border-[var(--noticed-line)] bg-[var(--noticed-canvas)] p-4 shadow-2xl shadow-black/40 sm:p-5"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
             <h2
               id="cookie-notice-title"
-              className="text-base font-semibold text-[#F2F3F5]"
+              className="text-base font-semibold text-[var(--noticed-ink)]"
             >
               {copy.title}
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#DBDEE1]">
+            <p className="mt-2 text-sm leading-relaxed text-[var(--noticed-ink)]">
               {body}{" "}
               <Link
                 href={policyPath}
-                className="font-medium text-[#E32C19] underline-offset-2 hover:underline"
+                className="font-medium text-[var(--noticed-red)] underline-offset-2 hover:underline"
               >
                 {copy.policy}
               </Link>
@@ -165,21 +165,21 @@ export function CookieNotice() {
                   <button
                     type="button"
                     onClick={() => persist(false)}
-                    className="rounded-md border border-[#3F4147] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
+                    className="rounded-md border border-[var(--noticed-line)] px-4 py-2 text-sm font-medium text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)]"
                   >
                     {copy.reject}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowSettings(true)}
-                    className="rounded-md border border-[#3F4147] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
+                    className="rounded-md border border-[var(--noticed-line)] px-4 py-2 text-sm font-medium text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)]"
                   >
                     {copy.manage}
                   </button>
                   <button
                     type="button"
                     onClick={() => persist(true)}
-                    className="rounded-md bg-[#E32C19] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
+                    className="rounded-md bg-[var(--noticed-red)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--noticed-red-hover)]"
                   >
                     {copy.accept}
                   </button>
@@ -188,7 +188,7 @@ export function CookieNotice() {
                 <button
                   type="button"
                   onClick={() => persist(false)}
-                  className="rounded-md bg-[#E32C19] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
+                  className="rounded-md bg-[var(--noticed-red)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--noticed-red-hover)]"
                 >
                   {copy.gotIt}
                 </button>
@@ -198,28 +198,28 @@ export function CookieNotice() {
         </div>
 
         {showSettings ? (
-          <div className="mt-4 space-y-3 border-t border-[#3F4147] pt-4">
-            <div className="flex items-start justify-between gap-4 rounded-md bg-[#2B2D31] p-3">
+          <div className="mt-4 space-y-3 border-t border-[var(--noticed-line)] pt-4">
+            <div className="flex items-start justify-between gap-4 rounded-md bg-[var(--noticed-surface)] p-3">
               <div>
-                <h3 className="text-sm font-semibold text-[#F2F3F5]">
+                <h3 className="text-sm font-semibold text-[var(--noticed-ink)]">
                   {copy.essentialTitle}
                 </h3>
-                <p className="mt-1 text-xs leading-relaxed text-[#949BA4]">
+                <p className="mt-1 text-xs leading-relaxed text-[var(--noticed-slate)]">
                   {copy.notice}
                 </p>
               </div>
-              <span className="rounded-md border border-[#3F4147] px-2 py-1 text-xs font-medium text-[#DBDEE1]">
+              <span className="rounded-md border border-[var(--noticed-line)] px-2 py-1 text-xs font-medium text-[var(--noticed-ink)]">
                 {copy.required}
               </span>
             </div>
 
             {diagnosticsAvailable ? (
-              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md bg-[#2B2D31] p-3">
+              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md bg-[var(--noticed-surface)] p-3">
                 <span>
-                  <span className="block text-sm font-semibold text-[#F2F3F5]">
+                  <span className="block text-sm font-semibold text-[var(--noticed-ink)]">
                     {copy.diagnosticsTitle}
                   </span>
-                  <span className="mt-1 block text-xs leading-relaxed text-[#949BA4]">
+                  <span className="mt-1 block text-xs leading-relaxed text-[var(--noticed-slate)]">
                     {copy.diagnostics}
                   </span>
                 </span>
@@ -227,7 +227,7 @@ export function CookieNotice() {
                   type="checkbox"
                   checked={diagnostics}
                   onChange={(event) => setDiagnostics(event.target.checked)}
-                  className="mt-1 h-4 w-4 accent-[#E32C19]"
+                  className="mt-1 h-4 w-4 accent-[var(--noticed-red)]"
                 />
               </label>
             ) : null}
@@ -236,14 +236,14 @@ export function CookieNotice() {
               <button
                 type="button"
                 onClick={() => persist(false)}
-                className="rounded-md border border-[#3F4147] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
+                className="rounded-md border border-[var(--noticed-line)] px-4 py-2 text-sm font-medium text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)]"
               >
                 {copy.reject}
               </button>
               <button
                 type="button"
                 onClick={() => persist(diagnostics)}
-                className="rounded-md bg-[#E32C19] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
+                className="rounded-md bg-[var(--noticed-red)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--noticed-red-hover)]"
               >
                 {copy.save}
               </button>
@@ -263,7 +263,7 @@ export function CookiePreferencesButton() {
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event(OPEN_EVENT))}
-      className="text-xs text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+      className="text-xs text-n-slate transition-colors hover:text-n-ink hover:underline"
     >
       {locale === "es" ? "Configurar cookies" : "Cookie settings"}
     </button>

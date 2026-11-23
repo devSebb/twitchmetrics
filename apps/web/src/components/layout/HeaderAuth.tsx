@@ -68,15 +68,12 @@ export function HeaderAuth() {
           <>
             <Link
               href="/login"
-              className="rounded-md px-3 py-1.5 text-sm text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#DBDEE1]"
+              className="n-button !px-3 text-n-slate hover:text-n-ink"
             >
-              Log In
+              Log in
             </Link>
-            <Link
-              href="/register"
-              className="rounded-md bg-[#E32C19] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
-            >
-              Sign Up
+            <Link href="/register" className="n-button n-button-primary !px-5">
+              Get started
             </Link>
           </>
         ) : null}

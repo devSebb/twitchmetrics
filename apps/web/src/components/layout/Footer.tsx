@@ -1,99 +1,96 @@
 import Link from "next/link";
-import Image from "next/image";
+import { Wordmark } from "@/components/brand/Wordmark";
+import { Container } from "@/components/ui/Editorial";
 import { CookiePreferencesButton } from "@/components/legal/CookieNotice";
 import { NewsletterForm } from "./NewsletterForm";
-
-const NAV_SECTIONS = [
+const sections = [
   {
-    title: "Product",
+    title: "Explore",
     links: [
-      { label: "Channels", href: "/creators" },
-      { label: "Categories", href: "/browse" },
-      { label: "Reports", href: "/reports" },
+      ["Channels", "/creators"],
+      ["Categories", "/browse"],
+      ["Reports", "/reports"],
+    ],
+  },
+  {
+    title: "For you",
+    links: [
+      ["Claim your profile", "/claim"],
+      ["For creators", "/solutions/creators"],
+      ["For talent managers", "/solutions/talent-managers"],
     ],
   },
   {
     title: "Company",
     links: [
-      { label: "About Us", href: "/about" },
-      { label: "Contact Us", href: "/contact" },
+      ["About", "/about"],
+      ["Contact", "/contact"],
     ],
   },
-] as const;
-
+];
 export function Footer() {
-  const year = new Date().getFullYear();
-
   return (
-    <footer className="border-t border-[#3F4147] bg-[#1E1F22]">
-      <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {NAV_SECTIONS.map((section) => (
-            <div key={section.title}>
-              <h3 className="text-sm font-semibold text-[#F2F3F5]">
-                {section.title}
-              </h3>
-              <ul className="mt-3 space-y-2">
-                {section.links.map((link) => (
-                  <li key={link.label}>
+    <footer className="noticed border-t border-n-line">
+      <Container className="py-12 sm:py-16">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+          <div>
+            <Link href="/" aria-label="Noticed home">
+              <Wordmark />
+            </Link>
+            <p className="mt-5 max-w-xs text-sm leading-relaxed text-n-slate">
+              Your work, your audience, one link. Creator media kits and
+              analytics, powered by Hatchet.
+            </p>
+          </div>
+          {sections.map((section) => (
+            <nav key={section.title} aria-label={section.title}>
+              <h2 className="n-eyebrow text-n-slate">{section.title}</h2>
+              <ul className="mt-4 space-y-3">
+                {section.links.map(([label, href]) => (
+                  <li key={href}>
                     <Link
-                      href={link.href}
-                      className="text-sm text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+                      href={href!}
+                      className="inline-block py-1 text-sm hover:underline"
                     >
-                      {link.label}
+                      {label}
                     </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            </nav>
           ))}
-
-          {/* Subscribe */}
+        </div>
+        <div className="mt-10 grid gap-6 border-t border-n-line pt-8 md:grid-cols-2 md:items-center">
           <div>
-            <h3 className="text-sm font-semibold text-[#F2F3F5]">Subscribe</h3>
+            <h2 className="text-lg font-bold tracking-tight">
+              Keep up with the creator economy.
+            </h2>
+            <p className="mt-2 text-sm text-n-slate">
+              News and updates in your inbox.
+            </p>
+          </div>
+          <div className="w-full max-w-md md:justify-self-end">
             <NewsletterForm />
           </div>
         </div>
-      </div>
-
-      {/* Bottom bar */}
-      <div className="border-t border-[#3F4147]">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-6 sm:flex-row">
-          <Link href="/" className="relative flex h-8 flex-shrink-0">
-            <Image
-              src="/brand/logo.png"
-              alt="TwitchMetrics"
-              width={160}
-              height={43}
-              className="h-8 w-auto object-contain object-left"
-            />
-          </Link>
-          <div className="flex gap-6 text-xs text-[#949BA4]">
-            <Link
-              href="/terms"
-              className="transition-colors hover:text-[#DBDEE1]"
-            >
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-6 border-t border-n-line pt-6">
+          <p className="text-xs text-n-slate">
+            © {new Date().getFullYear()} Noticed. All rights reserved.
+          </p>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-n-slate">
+            <Link href="/terms" className="hover:underline">
               Terms
             </Link>
-            <Link
-              href="/privacy"
-              className="transition-colors hover:text-[#DBDEE1]"
-            >
+            <Link href="/privacy" className="hover:underline">
               Privacy
             </Link>
-            <Link
-              href="/cookies"
-              className="transition-colors hover:text-[#DBDEE1]"
-            >
+            <Link href="/cookies" className="hover:underline">
               Cookies
             </Link>
             <CookiePreferencesButton />
           </div>
-          <p className="text-xs text-[#949BA4]">
-            &copy; {year} TwitchMetrics. All rights reserved.
-          </p>
         </div>
-      </div>
+      </Container>
     </footer>
   );
 }

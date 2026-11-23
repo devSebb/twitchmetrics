@@ -1,55 +1,46 @@
 import Link from "next/link";
-import Image from "next/image";
 import { SearchBar } from "@/components/search";
+import { Wordmark } from "@/components/brand/Wordmark";
+import { Container } from "@/components/ui/Editorial";
 import { HeaderAuth } from "./HeaderAuth";
 import { SolutionsDropdown } from "./SolutionsDropdown";
 import { PRIMARY_NAV_LINKS } from "./header-navigation";
 
-/**
- * Static server component — auth-dependent chrome lives in <HeaderAuth />,
- * which fetches the session client-side. Do not read the session (or any
- * other request-scoped API) here: this header wraps the whole (public) tree
- * and would force every page in it to render dynamically.
- */
+/** Keep this shell static. HeaderAuth alone fetches session-dependent controls,
+ * preserving public SSR/ISR and avoiding request-scoped reads in this layout. */
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-[#3F4147] bg-[#1E1F22]/95 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6 lg:gap-4">
-        {/* Logo */}
-        <Link href="/" className="relative flex h-9 flex-shrink-0">
-          <Image
-            src="/brand/logo.png"
-            alt="TwitchMetrics"
-            width={180}
-            height={48}
-            className="h-9 w-auto object-contain object-left"
-            priority
-          />
+    <header className="noticed sticky top-0 z-50 border-b border-n-line">
+      <Container className="flex min-h-[88px] items-center gap-4 py-4">
+        <Link
+          href="/"
+          aria-label="Noticed, powered by Hatchet. Home"
+          className="shrink-0"
+        >
+          <Wordmark />
         </Link>
-
-        {/* Nav links — centered and evenly spread between the logo and search bar */}
-        <nav className="hidden flex-1 items-center justify-center gap-8 lg:flex xl:gap-12">
+        <nav
+          aria-label="Primary navigation"
+          className="hidden flex-1 items-center justify-center gap-6 lg:flex xl:gap-8"
+        >
           {PRIMARY_NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+              className="py-2 text-sm font-medium text-n-slate hover:text-n-ink"
             >
               {link.label}
             </Link>
           ))}
           <SolutionsDropdown />
         </nav>
-
-        <div className="ml-auto flex min-w-0 items-center gap-2">
-          {/* Tablet search. Mobile search lives in the drawer. */}
-          <div className="hidden w-48 min-w-0 md:block lg:w-56 xl:w-80">
-            <SearchBar mode="compact" />
+        <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="hidden w-44 md:block xl:w-56">
+            <SearchBar mode="compact" appearance="noticed" />
           </div>
-
           <HeaderAuth />
         </div>
-      </div>
+      </Container>
     </header>
   );
 }

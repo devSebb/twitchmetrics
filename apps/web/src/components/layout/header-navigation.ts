@@ -8,7 +8,7 @@ export const SOLUTION_LINKS = [
   {
     label: "Talent Managers",
     href: "/solutions/talent-managers",
-    description: "Tools to scout, sign, and grow your roster.",
+    description: "A workspace for the creators you represent.",
   },
   {
     label: "Creators",

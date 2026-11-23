@@ -108,7 +108,7 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
         aria-expanded={open}
         aria-controls="mobile-navigation-drawer"
         onClick={() => setOpen(true)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#3F4147] text-[#DBDEE1] transition-colors hover:bg-[#383A40] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19] focus-visible:ring-offset-2 focus-visible:ring-offset-[#1E1F22]"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[var(--noticed-line)] text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--noticed-canvas)]"
       >
         <svg
           width="20"
@@ -138,12 +138,12 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-navigation-title"
-            className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col border-l border-[#3F4147] bg-[#1E1F22] shadow-2xl"
+            className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col border-l border-[var(--noticed-line)] bg-[var(--noticed-canvas)] shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-[#3F4147] px-5 py-4">
+            <div className="flex items-center justify-between border-b border-[var(--noticed-line)] px-5 py-4">
               <h2
                 id="mobile-navigation-title"
-                className="text-base font-semibold text-[#F2F3F5]"
+                className="text-base font-semibold text-[var(--noticed-ink)]"
               >
                 Menu
               </h2>
@@ -151,7 +151,7 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                 type="button"
                 aria-label="Close navigation menu"
                 onClick={() => closeDrawer()}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#949BA4] transition-colors hover:bg-[#313338] hover:text-[#DBDEE1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[var(--noticed-slate)] transition-colors hover:bg-[var(--noticed-surface)] hover:text-[var(--noticed-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
               >
                 <svg
                   width="20"
@@ -172,15 +172,15 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
               <section aria-labelledby="mobile-search-title">
                 <h3
                   id="mobile-search-title"
-                  className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]"
+                  className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--noticed-slate)]"
                 >
                   Search
                 </h3>
-                <SearchBar mode="compact" />
+                <SearchBar mode="compact" appearance="noticed" />
               </section>
 
               <nav aria-label="Mobile primary navigation" className="mt-7">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
+                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--noticed-slate)]">
                   Explore
                 </h3>
                 <div className="space-y-1">
@@ -189,7 +189,7 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                       key={link.href}
                       href={link.href}
                       onClick={() => closeDrawer(false)}
-                      className="block rounded-lg px-3 py-3 text-base font-medium text-[#DBDEE1] transition-colors hover:bg-[#313338] hover:text-[#F2F3F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                      className="block rounded-lg px-3 py-3 text-base font-medium text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)] hover:text-[var(--noticed-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
                     >
                       {link.label}
                     </Link>
@@ -203,7 +203,7 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
               >
                 <h3
                   id="mobile-solutions-title"
-                  className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]"
+                  className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--noticed-slate)]"
                 >
                   Solutions
                 </h3>
@@ -213,12 +213,12 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                       key={link.href}
                       href={link.href}
                       onClick={() => closeDrawer(false)}
-                      className="block rounded-lg px-3 py-3 transition-colors hover:bg-[#313338] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                      className="block rounded-lg px-3 py-3 transition-colors hover:bg-[var(--noticed-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
                     >
-                      <span className="block text-sm font-semibold text-[#F2F3F5]">
+                      <span className="block text-sm font-semibold text-[var(--noticed-ink)]">
                         {link.label}
                       </span>
-                      <span className="mt-0.5 block text-xs text-[#949BA4]">
+                      <span className="mt-0.5 block text-sm text-[var(--noticed-slate)]">
                         {link.description}
                       </span>
                     </Link>
@@ -233,11 +233,11 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                 >
                   <h3
                     id="mobile-account-title"
-                    className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]"
+                    className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--noticed-slate)]"
                   >
                     Account
                   </h3>
-                  <div className="mb-2 flex items-center gap-3 rounded-lg bg-[#2B2D31] px-3 py-3">
+                  <div className="mb-2 flex items-center gap-3 rounded-lg bg-[var(--noticed-surface)] px-3 py-3">
                     {avatarSrc ? (
                       <Image
                         src={avatarSrc}
@@ -247,11 +247,11 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                         className="h-9 w-9 rounded-full object-cover"
                       />
                     ) : (
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#383A40] text-sm font-bold text-[#F2F3F5]">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--noticed-surface)] text-sm font-bold text-[var(--noticed-ink)]">
                         {displayName.charAt(0).toUpperCase()}
                       </span>
                     )}
-                    <span className="min-w-0 truncate text-sm font-medium text-[#DBDEE1]">
+                    <span className="min-w-0 truncate text-sm font-medium text-[var(--noticed-ink)]">
                       {displayName}
                     </span>
                   </div>
@@ -259,14 +259,14 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                     <Link
                       href="/dashboard"
                       onClick={() => closeDrawer(false)}
-                      className="block rounded-lg px-3 py-3 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#313338] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                      className="block rounded-lg px-3 py-3 text-sm font-medium text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
                     >
                       Dashboard
                     </Link>
                     <Link
                       href="/dashboard/settings"
                       onClick={() => closeDrawer(false)}
-                      className="block rounded-lg px-3 py-3 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#313338] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                      className="block rounded-lg px-3 py-3 text-sm font-medium text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
                     >
                       Settings
                     </Link>
@@ -275,12 +275,12 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
               )}
             </div>
 
-            <div className="border-t border-[#3F4147] p-5">
+            <div className="border-t border-[var(--noticed-line)] p-5">
               {user ? (
                 <button
                   type="button"
                   onClick={() => void signOut({ callbackUrl: "/" })}
-                  className="w-full rounded-lg border border-[#3F4147] bg-[#313338] px-4 py-3 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#383A40] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                  className="w-full rounded-lg border border-[var(--noticed-line)] bg-[var(--noticed-surface)] px-4 py-3 text-sm font-semibold text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
                 >
                   Sign out
                 </button>
@@ -289,14 +289,14 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                   <Link
                     href="/login"
                     onClick={() => closeDrawer(false)}
-                    className="rounded-lg border border-[#3F4147] bg-[#313338] px-4 py-3 text-center text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#383A40] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]"
+                    className="rounded-lg border border-[var(--noticed-line)] bg-[var(--noticed-surface)] px-4 py-3 text-center text-sm font-semibold text-[var(--noticed-ink)] transition-colors hover:bg-[var(--noticed-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noticed-red)]"
                   >
                     Log In
                   </Link>
                   <Link
                     href="/register"
                     onClick={() => closeDrawer(false)}
-                    className="rounded-lg bg-[#E32C19] px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-[#C72615] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="rounded-lg bg-[var(--noticed-red)] px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-[var(--noticed-red-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   >
                     Sign Up
                   </Link>

@@ -8,6 +8,7 @@ import { SOLUTION_LINKS } from "./header-navigation";
 export function SolutionsDropdown() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -20,6 +21,7 @@ export function SolutionsDropdown() {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpen(false);
+        triggerRef.current?.focus();
       }
     }
 
@@ -39,13 +41,16 @@ export function SolutionsDropdown() {
       onMouseLeave={() => setOpen(false)}
     >
       <button
+        ref={triggerRef}
         type="button"
-        aria-haspopup="menu"
+        aria-controls={open ? "solutions-navigation" : undefined}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className={cn(
           "flex items-center gap-1 text-sm font-medium transition-colors",
-          open ? "text-[#DBDEE1]" : "text-[#949BA4] hover:text-[#DBDEE1]",
+          open
+            ? "text-[var(--noticed-ink)]"
+            : "text-[var(--noticed-slate)] hover:text-[var(--noticed-ink)]",
         )}
       >
         Solutions
@@ -73,21 +78,20 @@ export function SolutionsDropdown() {
       {open && (
         <div className="absolute left-1/2 top-full z-50 -translate-x-1/2 pt-2">
           <div
-            role="menu"
-            className="w-64 overflow-hidden rounded-lg border border-[#3F4147] bg-[#2B2D31] shadow-lg"
+            id="solutions-navigation"
+            className="w-64 overflow-hidden rounded-lg border border-[var(--noticed-line)] bg-[var(--noticed-surface)] shadow-lg"
           >
             {SOLUTION_LINKS.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                role="menuitem"
                 onClick={() => setOpen(false)}
-                className="block px-4 py-3 transition-colors hover:bg-[#383A40]"
+                className="block px-4 py-3 transition-colors hover:bg-[var(--noticed-surface)]"
               >
-                <p className="text-sm font-semibold text-[#F2F3F5]">
+                <p className="text-sm font-semibold text-[var(--noticed-ink)]">
                   {item.label}
                 </p>
-                <p className="mt-0.5 text-xs text-[#949BA4]">
+                <p className="mt-0.5 text-xs text-[var(--noticed-slate)]">
                   {item.description}
                 </p>
               </Link>

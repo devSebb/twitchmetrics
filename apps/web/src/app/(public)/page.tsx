@@ -111,10 +111,10 @@ async function getLandingData() {
 export const revalidate = 600; // ISR: revalidate every 10 minutes
 
 export const metadata: Metadata = {
-  title: `${SITE_NAME} | Creator Analytics Platform`,
+  title: { absolute: `${SITE_NAME} | Your work. Your audience. One link.` },
   description: DEFAULT_DESCRIPTION,
   openGraph: {
-    title: `${SITE_NAME} | Creator Analytics Platform`,
+    title: `${SITE_NAME} | Your work. Your audience. One link.`,
     description: DEFAULT_DESCRIPTION,
     type: "website",
     images: [
@@ -156,17 +156,19 @@ export default async function LandingPage() {
   return (
     <>
       <JsonLd />
-      <HeroSection />
-      <CreatorShowcase creators={carouselCreators} />
-      <ValueProps />
-      <HowItWorks />
-      <AudienceSplit />
-      <TrendingSection
-        topChannels={topCreators.slice(0, 7)}
-        topGames={topGames}
-        trendingCreators={trendingCreators}
-      />
-      <CtaSection />
+      <div className="noticed">
+        <HeroSection creator={carouselCreators[0]} />
+        <CreatorShowcase creators={carouselCreators.slice(1)} />
+        <HowItWorks />
+        <ValueProps />
+        <TrendingSection
+          topChannels={topCreators.slice(0, 7)}
+          topGames={topGames}
+          trendingCreators={trendingCreators}
+        />
+        <AudienceSplit />
+        <CtaSection />
+      </div>
     </>
   );
 }

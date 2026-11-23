@@ -7,6 +7,7 @@ type ButtonSize = "sm" | "md" | "lg";
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  appearance?: "legacy" | "noticed";
 };
 
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
@@ -26,16 +27,35 @@ const SIZE_STYLES: Record<ButtonSize, string> = {
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
-    { variant = "primary", size = "md", className, disabled, ...props },
+    {
+      variant = "primary",
+      size = "md",
+      appearance = "legacy",
+      className,
+      disabled,
+      ...props
+    },
     ref,
   ) {
     return (
       <button
         ref={ref}
         className={cn(
-          "inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#2B2D31] disabled:pointer-events-none disabled:opacity-50",
-          VARIANT_STYLES[variant],
-          SIZE_STYLES[size],
+          "inline-flex items-center justify-center font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
+          appearance === "legacy" &&
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#2B2D31]",
+          appearance === "noticed"
+            ? [
+                "n-button",
+                variant === "primary"
+                  ? "n-button-primary"
+                  : variant === "secondary"
+                    ? "n-button-secondary"
+                    : "text-n-slate hover:bg-n-surface",
+                size === "lg" && "!px-7 !text-base",
+                size === "sm" && "!px-4",
+              ]
+            : [VARIANT_STYLES[variant], SIZE_STYLES[size]],
           className,
         )}
         disabled={disabled}
