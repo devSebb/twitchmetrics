@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { cacheGet, cacheSet, CACHE_TTL } from "@/server/services/cache";
-import {
-  getGameSeries,
-  summarizeGameSeries,
-} from "@/server/services/game-viewer-series";
+import { loadGameSeries } from "@/server/services/game-series-load";
+import { summarizeGameSeries } from "@/server/services/game-viewer-series";
 
 const VALID_PERIODS = ["24h", "7d", "30d"] as const;
 
@@ -50,7 +48,7 @@ export async function GET(
   const { until, fixed } = parseUntil(searchParams.get("until"));
   const periodMs = PERIOD_MS[period as (typeof VALID_PERIODS)[number]];
   // A page-supplied end is fixed, so it is part of the key; "now" is not.
-  const cacheKey = `game:${slug}:series:${period}:${fixed ? until.toISOString() : "latest"}`;
+  const cacheKey = `game:${slug}:series2:${period}:${fixed ? until.toISOString() : "latest"}`;
   const cached = await cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -68,7 +66,7 @@ export async function GET(
     );
   }
 
-  const series = await getGameSeries(db, {
+  const series = await loadGameSeries(db, {
     gameId: game.id,
     since: new Date(until.getTime() - periodMs),
     until,

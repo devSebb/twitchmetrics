@@ -21,6 +21,7 @@ import {
   SERIES_PLATFORMS,
   type GameSeries,
   type GameSeriesSummary,
+  type SlotRun,
 } from "@/server/services/game-viewer-series";
 
 /**
@@ -59,11 +60,36 @@ const COPY = {
   },
 } as const;
 
+type MarkAreaPoint = { xAxis: number; name?: string };
+
+/** The runs of slots where any platform holds a day's average. */
+function estimatedRuns(series: GameSeries): SlotRun[] {
+  const filled = new Set<number>();
+  for (const runs of Object.values(series.estimated ?? {})) {
+    for (const [first, last] of runs) {
+      for (let index = first; index <= last; index++) filled.add(index);
+    }
+  }
+  const merged: SlotRun[] = [];
+  for (const index of [...filled].sort((a, b) => a - b)) {
+    const run = merged[merged.length - 1];
+    if (run && run[1] === index - 1) run[1] = index;
+    else merged.push([index, index]);
+  }
+  return merged;
+}
+
 function buildOption(series: GameSeries, metric: Metric): EChartsOption {
   const times = series.slots.map((slot) => Date.parse(slot));
   const columns = series[metric];
   const platforms = SERIES_PLATFORMS.filter((platform) => columns[platform]);
   const axisLine = { lineStyle: { color: THEME.colors.border } };
+  // Days without live readings hold a day's average: viewers only.
+  const estimated = metric === "viewers" ? estimatedRuns(series) : [];
+  const isEstimated = (time: number) =>
+    estimated.some(
+      ([first, last]) => time >= times[first]! && time <= times[last]!,
+    );
 
   return {
     tooltip: {
@@ -91,9 +117,20 @@ function buildOption(series: GameSeries, metric: Metric): EChartsOption {
             ),
           });
         }
+        const notes = isEstimated(first.value[0])
+          ? [
+              {
+                label: "",
+                value: "Daily average: no live readings",
+                plain: true,
+                small: true,
+                color: THEME.colors.textMuted,
+              },
+            ]
+          : [];
         return tooltipHtml(
           chartDateTimeLabel(new Date(first.value[0]).toISOString()),
-          rows,
+          [...rows, ...notes],
         );
       },
     },
@@ -128,18 +165,53 @@ function buildOption(series: GameSeries, metric: Metric): EChartsOption {
       axisLabel: { fontSize: 10, formatter: axisNumber },
       splitLine: { lineStyle: { color: THEME.colors.border, type: "dashed" } },
     },
-    series: platforms.map((platform) => ({
-      name: PLATFORM_CONFIG[platform].name,
-      type: "line" as const,
-      stack: "platforms",
-      smooth: false,
-      symbol: "none",
-      color: CHART_PLATFORM_COLORS[platform],
-      lineStyle: { width: 1 },
-      areaStyle: { opacity: 0.6 },
-      emphasis: { disabled: true },
-      data: times.map((time, index) => [time, columns[platform]![index]!]),
-    })),
+    series: [
+      ...platforms.map((platform) => ({
+        name: PLATFORM_CONFIG[platform].name,
+        type: "line" as const,
+        stack: "platforms",
+        smooth: false,
+        symbol: "none",
+        color: CHART_PLATFORM_COLORS[platform],
+        lineStyle: { width: 1 },
+        areaStyle: { opacity: 0.6 },
+        emphasis: { disabled: true },
+        data: times.map((time, index) => [time, columns[platform]![index]!]),
+      })),
+      // A veil over the days drawn from daily averages, so their flat level
+      // doesn't read as a measured one. Its own series, to sit above the areas.
+      ...(estimated.length > 0
+        ? [
+            {
+              type: "line" as const,
+              z: 10,
+              silent: true,
+              symbol: "none",
+              data: times.map((time) => [time, null]),
+              markArea: {
+                silent: true,
+                // Marked areas sit under the series unless raised.
+                z: 10,
+                itemStyle: { color: THEME.colors.surface, opacity: 0.55 },
+                label: {
+                  position: "insideTop" as const,
+                  color: THEME.colors.textMuted,
+                  fontSize: 10,
+                },
+                data: estimated.map(
+                  ([first, last], run): [MarkAreaPoint, MarkAreaPoint] => [
+                    {
+                      xAxis: times[first]!,
+                      name: run === 0 ? "Daily average" : "",
+                    },
+                    { xAxis: times[last]! },
+                  ],
+                ),
+              },
+            },
+          ]
+        : []),
+    ],
   };
 }
 
@@ -157,6 +229,24 @@ function summaryLine(
   return summary.avgViewers.total > 0
     ? `${period} avg ${formatNumber(summary.avgViewers.total)} · peak ${formatNumber(summary.peakViewers)}`
     : null;
+}
+
+const utcDay = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+/** "Nov 17 – Nov 19", the days the chart draws from daily averages. */
+function estimatedDays(series: GameSeries, metric: Metric): string | null {
+  const runs = metric === "viewers" ? estimatedRuns(series) : [];
+  const first = runs[0];
+  const last = runs[runs.length - 1];
+  if (!first || !last) return null;
+  const from = utcDay.format(new Date(series.slots[first[0]]!));
+  const to = utcDay.format(new Date(series.slots[last[1]]!));
+  const days = from === to ? from : `${from} – ${to}`;
+  return `${days}: daily averages, live readings unavailable`;
 }
 
 /** Platforms whose readings begin partway into the period, with the day. */
@@ -208,7 +298,12 @@ export function GamePlatformChart({
     metric,
   );
   const summary = data ? summaryLine(data.summary, metric, period) : null;
-  const late = data ? lateStarts(data.summary, metric) : null;
+  const notes = data
+    ? [
+        estimatedDays(data.series, metric),
+        lateStarts(data.summary, metric),
+      ].filter((note) => note !== null)
+    : [];
 
   return (
     <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-4">
@@ -239,7 +334,9 @@ export function GamePlatformChart({
         </div>
       </div>
       <BaseChart option={option} height={height} loading={isLoading} />
-      {late && <p className="mt-2 text-[11px] text-[#949BA4]">{late}</p>}
+      {notes.length > 0 && (
+        <p className="mt-2 text-[11px] text-[#949BA4]">{notes.join(" · ")}</p>
+      )}
     </div>
   );
 }

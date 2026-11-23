@@ -22,6 +22,10 @@ import type { PrismaClient } from "@twitchmetrics/database";
  *    didn't list this one: nobody was streaming it there. Without this a
  *    game streamed two hours a day would average only those two hours.
  *
+ * A day our readings mostly failed (the scheduler outage of 2026-11-17 to
+ * 19) has its missing viewer slots set to Stream Hatchet's average for that
+ * day and marked `estimated`: see fillOutageDays.
+ *
  * YouTube has no reading of its own, so it starts with Stream Hatchet's:
  * 2026-11-04 for the biggest games, and for every game the day all are kept.
  * Until then a call kept the 100 biggest games only, so a smaller game was
@@ -68,7 +72,14 @@ export type GameSeries = {
   /** Only platforms with at least one value. */
   viewers: Partial<Record<SeriesPlatform, Values>>;
   channels: Partial<Record<SeriesPlatform, Values>>;
+  /**
+   * Per platform, the runs of slots ([first, last] by index) where its
+   * viewers are its average for the day and not a reading (fillOutageDays).
+   */
+  estimated?: Partial<Record<SeriesPlatform, SlotRun[]>>;
 };
+
+export type SlotRun = [first: number, last: number];
 
 function slotOf(date: Date): number {
   return Math.floor(date.getTime() / SLOT_MS) * SLOT_MS;
@@ -188,6 +199,94 @@ export function buildGameSeries(input: {
   return series;
 }
 
+/** Above this share of a day's slots without a Twitch reading, we were down. */
+const OUTAGE_SHARE = 0.25;
+
+const dayOf = (slot: string) => slot.slice(0, 10);
+
+/**
+ * The UTC days (ISO dates) our readings mostly failed. The Twitch snapshot
+ * writes a row for every game on every run, also when nobody is streaming
+ * it, so a day with many empty Twitch slots is a day the jobs didn't run.
+ */
+export function outageDays(series: GameSeries): string[] {
+  const twitch = series.viewers.twitch;
+  if (!twitch) return [];
+  const byDay = new Map<string, { slots: number; empty: number }>();
+  series.slots.forEach((slot, index) => {
+    const day = byDay.get(dayOf(slot)) ?? { slots: 0, empty: 0 };
+    day.slots++;
+    if (twitch[index] === null) day.empty++;
+    byDay.set(dayOf(slot), day);
+  });
+  return [...byDay]
+    .filter(([, day]) => day.empty > day.slots * OUTAGE_SHARE)
+    .map(([day]) => day);
+}
+
+export const dailyAverageKey = (platform: SeriesPlatform, day: string) =>
+  `${platform}:${day}`;
+
+/**
+ * Sets the viewer slots without a reading on `days` to the platform's
+ * average for that day, from Stream Hatchet's daily data (hours watched over
+ * 24 hours), so the averages count those days at their real level. Readings
+ * that did land stay. The filled slots are marked `estimated`: the chart
+ * draws them apart and the peaks leave them out, because a day's average
+ * says nothing about how the day moved.
+ *
+ * Channels are not filled: the daily data counts far fewer channels than a
+ * live reading does (League of Legends on Twitch: 446 against 1,891).
+ *
+ * A platform is filled only when it was being read within a day of the
+ * outage, so a platform we never read for this game doesn't appear for the
+ * outage alone.
+ */
+export function fillOutageDays(
+  series: GameSeries,
+  days: string[],
+  dailyAverages: ReadonlyMap<string, number>,
+): GameSeries {
+  const slotsPerDay = DAY_MS / SLOT_MS;
+  const viewers = { ...series.viewers };
+  const estimated: NonNullable<GameSeries["estimated"]> = {};
+
+  for (const day of days) {
+    const first = series.slots.findIndex((slot) => dayOf(slot) === day);
+    if (first < 0) continue;
+    let last = first;
+    while (
+      last + 1 < series.slots.length &&
+      dayOf(series.slots[last + 1]!) === day
+    ) {
+      last++;
+    }
+    for (const platform of SERIES_PLATFORMS) {
+      const average = dailyAverages.get(dailyAverageKey(platform, day));
+      const column = series.viewers[platform];
+      if (average === undefined || !column) continue;
+      const readNearby = column
+        .slice(Math.max(0, first - slotsPerDay), last + 1 + slotsPerDay)
+        .some((value) => value !== null);
+      if (!readNearby) continue;
+      const values = [...viewers[platform]!];
+      const runs = estimated[platform] ?? [];
+      for (let index = first; index <= last; index++) {
+        if (values[index] !== null) continue;
+        values[index] = average;
+        const run = runs[runs.length - 1];
+        if (run && run[1] === index - 1) run[1] = index;
+        else runs.push([index, index]);
+      }
+      viewers[platform] = values;
+      if (runs.length > 0) estimated[platform] = runs;
+    }
+  }
+  return Object.keys(estimated).length > 0
+    ? { ...series, viewers, estimated }
+    : series;
+}
+
 export type SlotReading = {
   platform: SeriesPlatform;
   source: string;
@@ -271,7 +370,8 @@ export type GameSeriesSummary = {
   /**
    * Highest slot per platform in the window's last 24 hours. The total is the
    * highest slot of all platforms together, not the sum of the rows: they
-   * peak at different moments.
+   * peak at different moments. Peaks are readings only: slots filled with a
+   * day's average are left out.
    */
   peakViewers24h: SeriesFigures;
   /** Highest slot of all platforms together, over the whole window. */
@@ -317,6 +417,17 @@ export function summarizeGameSeries(series: GameSeries): GameSeriesSummary {
   // shorter window worth flagging.
   const lateFrom = DAY_MS / SLOT_MS;
   const dayStart = Math.max(0, slotCount - DAY_MS / SLOT_MS);
+  // Peaks are readings only.
+  const readings: GameSeries["viewers"] = {};
+  for (const platform of SERIES_PLATFORMS) {
+    const values = series.viewers[platform];
+    if (!values) continue;
+    const kept = [...values];
+    for (const [first, last] of series.estimated?.[platform] ?? []) {
+      kept.fill(null, first, last + 1);
+    }
+    readings[platform] = kept;
+  }
 
   const averages = (
     columns: Partial<Record<SeriesPlatform, Values>>,
@@ -338,11 +449,11 @@ export function summarizeGameSeries(series: GameSeries): GameSeriesSummary {
 
   const peakRows: PlatformFigure[] = [];
   for (const platform of SERIES_PLATFORMS) {
-    const values = series.viewers[platform];
+    const values = readings[platform];
     if (!values) continue;
     peakRows.push({ platform, value: highest(values, dayStart), since: null });
   }
-  const totals = columnTotals(series.viewers, slotCount);
+  const totals = columnTotals(readings, slotCount);
 
   return {
     avgViewers: averages(series.viewers),
@@ -352,7 +463,10 @@ export function summarizeGameSeries(series: GameSeries): GameSeriesSummary {
   };
 }
 
-/** The series for the slots from `since` to `until`, both included. */
+/**
+ * The readings for the slots from `since` to `until`, both included. Pages
+ * read loadGameSeries (game-series-load.ts), which also fills outage days.
+ */
 export async function getGameSeries(
   prisma: PrismaClient,
   input: { gameId: string; since: Date; until: Date },

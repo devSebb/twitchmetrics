@@ -142,7 +142,7 @@ const GAME_SERIES_SOURCE =
 export const GAME_INFO = {
   avgViewers7d: {
     title: "Avg Viewers · 7d",
-    body: "Average number of people watching the game at any moment over the last 7 days, per platform. The total adds the platforms together. A platform whose readings start partway into the 7 days says since when.",
+    body: "Average number of people watching the game at any moment over the last 7 days, per platform. The total adds the platforms together. A platform whose readings start partway into the 7 days says since when. A day our readings failed counts at Stream Hatchet's average for that day.",
     source: GAME_SERIES_SOURCE,
   },
   peakViewers24h: {
@@ -167,7 +167,7 @@ export const GAME_INFO = {
   },
   viewership: {
     title: "Viewership",
-    body: "People watching the game over time, stacked by platform, so the top edge is the total. One reading every 30 minutes; a spike shorter than that can fall between two readings. The average and peak above the chart use the same readings as the header. Click a platform in the legend to hide it. A platform appears from its first reading; the note under the chart says when.",
+    body: "People watching the game over time, stacked by platform, so the top edge is the total. One reading every 30 minutes; a spike shorter than that can fall between two readings. The average and peak above the chart use the same readings as the header. Click a platform in the legend to hide it. A platform appears from its first reading; the note under the chart says when. Days our readings failed are drawn faded at Stream Hatchet's average for the day; the peak leaves them out.",
     source: GAME_SERIES_SOURCE,
   },
   channelActivity: {

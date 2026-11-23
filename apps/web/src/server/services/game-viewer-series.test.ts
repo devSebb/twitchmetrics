@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildGameSeries,
   columnTotals,
+  dailyAverageKey,
+  fillOutageDays,
+  outageDays,
   slotTotals,
   summarizeGameSeries,
   SLOT_MS,
@@ -265,6 +268,90 @@ describe("summarizeGameSeries", () => {
       null,
       slot(DAY_SLOTS * 2).toISOString(),
     ]);
+  });
+});
+
+describe("outage days", () => {
+  // Two UTC days of 4 slots each, to keep the fixtures readable.
+  const slots = [
+    "2026-11-17T00:00:00.000Z",
+    "2026-11-17T06:00:00.000Z",
+    "2026-11-17T12:00:00.000Z",
+    "2026-11-17T18:00:00.000Z",
+    "2026-11-18T00:00:00.000Z",
+    "2026-11-18T06:00:00.000Z",
+    "2026-11-18T12:00:00.000Z",
+    "2026-11-18T18:00:00.000Z",
+  ];
+  const series: GameSeries = {
+    slots,
+    viewers: {
+      twitch: [100, 110, 120, 130, 140, null, null, null],
+      kick: [10, 10, 10, 10, null, null, null, 30],
+    },
+    channels: { twitch: [5, 5, 5, 5, 6, null, null, null] },
+  };
+  const daily = new Map([
+    [dailyAverageKey("twitch", "2026-11-18"), 90],
+    [dailyAverageKey("kick", "2026-11-18"), 20],
+    [dailyAverageKey("youtube", "2026-11-18"), 50],
+  ]);
+
+  it("finds the days most Twitch slots are empty", () => {
+    expect(outageDays(series)).toEqual(["2026-11-18"]);
+  });
+
+  it("ignores one missed run", () => {
+    expect(
+      outageDays({
+        ...series,
+        viewers: { twitch: [100, 110, 120, 130, 140, null, 150, 160] },
+      }),
+    ).toEqual([]);
+  });
+
+  it("sets the empty viewer slots to the day's average and keeps readings", () => {
+    const filled = fillOutageDays(series, ["2026-11-18"], daily);
+    expect(filled.viewers.twitch).toEqual([
+      100, 110, 120, 130, 140, 90, 90, 90,
+    ]);
+    expect(filled.viewers.kick).toEqual([10, 10, 10, 10, 20, 20, 20, 30]);
+    expect(filled.estimated).toEqual({
+      twitch: [[5, 7]],
+      kick: [[4, 6]],
+    });
+  });
+
+  it("leaves channels and platforms we weren't reading alone", () => {
+    const filled = fillOutageDays(series, ["2026-11-18"], daily);
+    expect(filled.channels).toEqual(series.channels);
+    expect(filled.viewers.youtube).toBeUndefined();
+  });
+
+  it("returns the series as it was when the daily data has nothing", () => {
+    expect(fillOutageDays(series, ["2026-11-18"], new Map())).toBe(series);
+  });
+
+  it("counts filled slots in the average but not in the peaks", () => {
+    const filled = fillOutageDays(
+      { ...series, viewers: { twitch: series.viewers.twitch! } },
+      ["2026-11-18"],
+      new Map([[dailyAverageKey("twitch", "2026-11-18"), 900]]),
+    );
+    const summary = summarizeGameSeries(filled);
+    expect(summary.avgViewers.total).toBe(
+      Math.round((100 + 110 + 120 + 130 + 140 + 900 * 3) / 8),
+    );
+    expect(summary.peakViewers).toBe(140);
+    expect(summary.peakViewers24h.total).toBe(140);
+  });
+
+  it("keeps a reading in the peak when another platform's slot is filled", () => {
+    const summary = summarizeGameSeries(
+      fillOutageDays(series, ["2026-11-18"], daily),
+    );
+    // 140 on Twitch at a slot where Kick holds its daily average of 20.
+    expect(summary.peakViewers).toBe(140);
   });
 });
 

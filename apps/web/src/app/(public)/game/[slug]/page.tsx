@@ -7,8 +7,8 @@ import {
   getGamePlatformMetrics,
   captionSince,
 } from "@/server/services/game-platform-metrics";
+import { loadGameSeries } from "@/server/services/game-series-load";
 import {
-  getGameSeries,
   summarizeGameSeries,
   type SeriesFigures,
 } from "@/server/services/game-viewer-series";
@@ -150,7 +150,7 @@ export default async function GamePage({ params }: PageProps) {
       getGamePlatformMetrics({ gameId: game.id }),
       // The 7 days ending at the newest snapshot, every platform.
       until
-        ? getGameSeries(db, {
+        ? loadGameSeries(db, {
             gameId: game.id,
             since: new Date(until.getTime() - WEEK_MS),
             until,
