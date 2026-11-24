@@ -44,10 +44,10 @@ function SectionLabel({
 }) {
   return (
     <div className="mb-3 flex items-center gap-2">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E32C19] text-[10px] font-bold text-white">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-n-red text-[10px] font-bold text-white">
         {number}
       </span>
-      <span className="text-sm font-semibold text-[#F2F3F5]">{children}</span>
+      <span className="text-sm font-semibold text-n-ink">{children}</span>
     </div>
   );
 }
@@ -68,15 +68,18 @@ function CheckboxItem({
   return (
     <button
       type="button"
+      role="checkbox"
+      aria-checked={checked && !disabled}
+      disabled={disabled}
       onClick={disabled ? undefined : onChange}
       title={disabled ? disabledReason : undefined}
-      className={`flex items-center gap-2 text-left transition-opacity ${disabled ? "cursor-not-allowed opacity-35" : ""}`}
+      className={`flex min-w-0 max-w-full items-center gap-2 whitespace-normal text-left transition-opacity ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
     >
       <div
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
           checked && !disabled
-            ? "border-[#E32C19] bg-[#E32C19]"
-            : "border-[#4E5058] bg-[#2B2D31]"
+            ? "border-n-red bg-n-red"
+            : "border-n-control bg-n-surface"
         }`}
       >
         {checked && !disabled && (
@@ -91,7 +94,7 @@ function CheckboxItem({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#DBDEE1]">{label}</span>
+      <span className="min-w-0 text-sm text-n-ink">{label}</span>
     </button>
   );
 }
@@ -257,6 +260,8 @@ export function ReportRequestForm({
         router.push(data.successUrl);
       } else if (data.sessionUrl) {
         window.location.href = data.sessionUrl;
+      } else {
+        throw new Error("Checkout is unavailable. Please try again.");
       }
     } catch {
       setSubmitState("error");
@@ -328,16 +333,16 @@ export function ReportRequestForm({
   const pickerLabel = include === "games" ? "games" : "channels";
 
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#2B2D31]">
+    <div className="n-form border-y border-n-line bg-white">
       {/* Card header */}
-      <div className="border-b border-[#3F4147] px-6 py-5">
+      <div className="border-b border-n-line px-0 py-6 sm:px-6">
         <div className="flex items-center gap-2">
           <svg
             width="16"
             height="16"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#949BA4"
+            stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -345,20 +350,20 @@ export function ReportRequestForm({
             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
             <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
           </svg>
-          <h2 className="text-base font-bold text-[#F2F3F5]">
+          <h2 className="text-2xl font-bold tracking-tight text-n-ink">
             Request a Report
           </h2>
         </div>
-        <p className="mt-1 text-xs text-[#949BA4]">
-          Green-tier combinations unlock instant download. Everything else goes
-          to our team for a quote within 24 hours.
+        <p className="mt-1 text-xs text-n-slate">
+          Standard Twitch combinations are available as instant CSV downloads.
+          Custom combinations go to our team for a quote within 24 hours.
         </p>
       </div>
 
       {/* Two-column form body */}
       <div className="grid gap-0 lg:grid-cols-2">
         {/* ── Left column ── */}
-        <div className="space-y-7 border-b border-[#3F4147] px-6 py-6 lg:border-b-0 lg:border-r">
+        <div className="space-y-7 border-b border-n-line px-0 py-8 sm:px-6 lg:border-b-0 lg:border-r">
           {/* Q1 */}
           <div>
             <SectionLabel number={1}>
@@ -388,9 +393,9 @@ export function ReportRequestForm({
             <SectionLabel number={2}>
               Who should the report include?
             </SectionLabel>
-            <p className="mb-2 text-[11px] text-[#4E5058]">
-              Pick <span className="text-[#DBDEE1]">Top X</span> or pick
-              specific {pickerLabel} — not both.
+            <p className="mb-2 text-[11px] text-n-slate">
+              Pick <span className="text-n-ink">Top X</span> or pick specific{" "}
+              {pickerLabel} — not both.
             </p>
             <div className="mb-3 flex flex-wrap gap-2">
               {TOP_COUNTS.map((n) => {
@@ -399,14 +404,15 @@ export function ReportRequestForm({
                   <button
                     key={n}
                     type="button"
+                    aria-pressed={isSelected}
                     disabled={topCountDisabled && !isSelected}
                     onClick={() => setTopCount(isSelected ? null : n)}
                     className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                       isSelected
-                        ? "bg-[#F2F3F5] text-[#1E1F22]"
+                        ? "bg-n-ink text-white"
                         : topCountDisabled
-                          ? "bg-[#383A40] text-[#4E5058] opacity-50 cursor-not-allowed"
-                          : "bg-[#383A40] text-[#949BA4] hover:text-[#DBDEE1]"
+                          ? "bg-n-surface text-n-slate opacity-50 cursor-not-allowed"
+                          : "bg-n-surface text-n-slate hover:text-n-ink"
                     }`}
                     title={
                       topCountDisabled && !isSelected
@@ -445,11 +451,12 @@ export function ReportRequestForm({
                 <button
                   key={value}
                   type="button"
+                  aria-pressed={timePeriod === value}
                   onClick={() => setTimePeriod(value)}
                   className={`text-sm transition-colors ${
                     timePeriod === value
-                      ? "font-semibold text-[#E32C19] underline underline-offset-2"
-                      : "text-[#949BA4] hover:text-[#DBDEE1]"
+                      ? "font-semibold text-n-red underline underline-offset-2"
+                      : "text-n-slate hover:text-n-ink"
                   }`}
                 >
                   {label}
@@ -459,10 +466,11 @@ export function ReportRequestForm({
             {timePeriod === "custom" && (
               <input
                 type="text"
+                aria-label="Custom reporting date range"
                 value={customRange}
                 onChange={(e) => setCustomRange(e.target.value)}
                 placeholder="e.g. Jan 2025 – Mar 2025"
-                className="mt-3 w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-sm text-[#DBDEE1] placeholder-[#4E5058] outline-none focus:border-[#E32C19]/50"
+                className="mt-3 w-full rounded-lg border border-n-line bg-n-surface px-3 py-2 text-sm text-n-ink placeholder-n-slate outline-none focus:border-n-red/50"
               />
             )}
           </div>
@@ -472,7 +480,7 @@ export function ReportRequestForm({
             <SectionLabel number={4}>
               Which platforms do you want data from?
             </SectionLabel>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
               {(
                 [
                   { key: "twitch", label: "Twitch" },
@@ -498,18 +506,18 @@ export function ReportRequestForm({
         </div>
 
         {/* ── Right column ── */}
-        <div className="px-6 py-6">
+        <div className="px-0 py-8 sm:px-6">
           <SectionLabel number={5}>
             Which metrics do you want included?
           </SectionLabel>
 
           {!include && (
-            <p className="mb-4 text-xs text-[#4E5058]">
+            <p className="mb-4 text-xs text-n-slate">
               Select a report type above to see available metrics.
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-x-6">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
             <div className="space-y-2.5">
               {MAIN_METRICS.map(({ key, label }) => {
                 const isDisabled = disabledMetrics.has(key);
@@ -527,7 +535,7 @@ export function ReportRequestForm({
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-n-slate">
                 Audience
               </p>
               <div className="space-y-2.5">
@@ -551,10 +559,11 @@ export function ReportRequestForm({
           {/* Outcome feedback */}
           {isFormReady && (
             <div
+              role="status"
               className={`mt-6 rounded-lg border px-4 py-3 text-xs ${
                 outcome === "auto"
-                  ? "border-[#22c55e]/30 bg-[#22c55e]/5 text-[#22c55e]"
-                  : "border-[#E32C19]/30 bg-[#E32C19]/5 text-[#E32C19]"
+                  ? "border-n-success/30 bg-n-success/5 text-n-success"
+                  : "border-n-red/30 bg-n-red/5 text-n-red"
               }`}
             >
               {outcome === "auto" && matchedTemplate && (
@@ -602,7 +611,7 @@ export function ReportRequestForm({
                     </span>
                   </div>
                   {quoteReasons.length > 0 && (
-                    <ul className="ml-5 list-disc space-y-0.5 text-[11px] text-[#E32C19]/80">
+                    <ul className="ml-5 list-disc space-y-0.5 text-[11px] text-n-red/80">
                       {quoteReasons.map((r) => (
                         <li key={r.label}>{r.label}</li>
                       ))}
@@ -616,43 +625,32 @@ export function ReportRequestForm({
       </div>
 
       {/* ── Footer ── */}
-      <div className="border-t border-[#3F4147] px-6 py-5">
+      <div className="border-t border-n-line px-0 py-6 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={() => setAcceptedTerms((v) => !v)}
-            className="flex items-center gap-2 text-left"
-          >
-            <div
-              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                acceptedTerms
-                  ? "border-[#E32C19] bg-[#E32C19]"
-                  : "border-[#4E5058] bg-[#2B2D31]"
-              }`}
-            >
-              {acceptedTerms && (
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                  <path
-                    d="M1 4L3.5 6.5L9 1"
-                    stroke="white"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              )}
-            </div>
-            <span className="text-sm text-[#DBDEE1]">
+          <div className="flex items-center gap-3">
+            <input
+              id="report-terms"
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(event) => setAcceptedTerms(event.target.checked)}
+              className="h-5 w-5 shrink-0"
+            />
+            <label htmlFor="report-terms" className="text-sm text-n-ink">
               I accept the{" "}
-              <span className="text-[#E32C19] underline underline-offset-2">
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-n-red underline underline-offset-2"
+              >
                 Terms &amp; Conditions
-              </span>
-            </span>
-          </button>
+              </a>
+            </label>
+          </div>
 
           <div className="flex items-center gap-3">
             {submitState === "error" && (
-              <p className="text-xs text-[#ef4444]">
+              <p role="alert" className="text-sm text-n-error">
                 Something went wrong — please try again.
               </p>
             )}
@@ -664,11 +662,11 @@ export function ReportRequestForm({
                 disabled={
                   !acceptedTerms || !isFormReady || submitState === "submitting"
                 }
-                className="w-full rounded-lg border border-[#E32C19] bg-[#E32C19]/10 px-6 py-2.5 text-sm font-semibold text-[#E32C19] transition-colors hover:bg-[#E32C19]/20 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                className="w-full rounded-lg border border-n-red bg-n-red/10 px-6 py-2.5 text-sm font-semibold text-n-red transition-colors hover:bg-n-red/20 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >
                 {submitState === "submitting" ? (
                   <span className="flex items-center gap-2">
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#E32C19]/30 border-t-[#E32C19]" />
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-n-red/30 border-t-n-red" />
                     Submitting…
                   </span>
                 ) : (
@@ -682,7 +680,7 @@ export function ReportRequestForm({
                 type="button"
                 onClick={handleBuyReport}
                 disabled={!acceptedTerms || submitState === "submitting"}
-                className="w-full rounded-lg bg-[#E32C19] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="w-full rounded-lg bg-n-red px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {submitState === "submitting" ? (
                   <span className="flex items-center gap-2">
@@ -699,7 +697,7 @@ export function ReportRequestForm({
               <button
                 type="button"
                 disabled
-                className="w-full cursor-not-allowed rounded-lg bg-[#383A40] px-6 py-2.5 text-sm font-semibold text-[#4E5058] sm:w-auto"
+                className="w-full cursor-not-allowed rounded-lg bg-n-surface px-6 py-2.5 text-sm font-semibold text-n-slate sm:w-auto"
               >
                 Complete the form
               </button>

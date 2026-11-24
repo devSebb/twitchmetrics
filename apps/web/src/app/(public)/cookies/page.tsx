@@ -8,7 +8,7 @@ export const revalidate = 86400;
 export const metadata: Metadata = {
   title: "Cookie Policy",
   description:
-    "How TwitchMetrics uses technical cookies, authentication cookies, security cookies and similar technologies.",
+    "How Noticed uses technical cookies, authentication cookies, security cookies and similar technologies.",
   alternates: {
     canonical: `${SITE_URL}/cookies`,
     languages: {

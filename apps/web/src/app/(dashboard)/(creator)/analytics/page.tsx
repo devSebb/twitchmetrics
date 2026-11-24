@@ -129,14 +129,16 @@ export default async function CreatorAnalyticsPage() {
     (creatorProfile.state !== "claimed" && creatorProfile.state !== "premium")
   ) {
     return (
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">Analytics</h1>
-        <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-6">
-          <p className="text-sm text-[#949BA4]">
+      <div className="mx-auto max-w-[1280px] space-y-4 px-5 py-10 sm:px-8 lg:px-10">
+        <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
+          Analytics
+        </h1>
+        <div className="rounded-lg border border-n-line bg-white p-6">
+          <p className="text-sm text-n-slate">
             Claim your creator profile to unlock private analytics.
           </p>
           <Link href="/dashboard/claim" className="mt-4 inline-block">
-            <Button>Claim a profile</Button>
+            <Button appearance="noticed">Claim a profile</Button>
           </Link>
         </div>
       </div>
@@ -176,16 +178,18 @@ export default async function CreatorAnalyticsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[1280px] space-y-6 px-5 py-10 sm:px-8 lg:px-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">Analytics</h1>
-          <p className="mt-2 text-sm text-[#949BA4]">
+          <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
+            Analytics
+          </h1>
+          <p className="mt-2 text-sm text-n-slate">
             Private post-claim metrics across your connected platforms.
           </p>
         </div>
         <form action={refreshEnrichment}>
-          <Button type="submit" variant="secondary">
+          <Button appearance="noticed" type="submit" variant="secondary">
             Refresh now
           </Button>
         </form>
@@ -194,8 +198,8 @@ export default async function CreatorAnalyticsPage() {
       {platforms.length > 0 ? (
         <AnalyticsDashboard analytics={analytics} platforms={platforms} />
       ) : (
-        <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-6">
-          <p className="text-sm text-[#949BA4]">
+        <div className="rounded-lg border border-n-line bg-white p-6">
+          <p className="text-sm text-n-slate">
             No enrichment data is available yet. Connect your platforms and
             refresh to fetch analytics.
           </p>

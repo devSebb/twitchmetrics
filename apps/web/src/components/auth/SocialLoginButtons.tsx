@@ -55,7 +55,7 @@ export function SocialLoginButtons({
 
   return (
     <div className="space-y-4">
-      <p className="text-center text-xs uppercase tracking-[0.16em] text-[#949BA4]">
+      <p className="text-center text-xs uppercase tracking-[0.16em] text-n-slate">
         {heading}
       </p>
       <ul
@@ -71,7 +71,7 @@ export function SocialLoginButtons({
               className={cn(
                 "flex flex-col items-center gap-2 rounded-xl px-1 pt-1 pb-0.5 transition-transform",
                 "hover:scale-[1.03] active:scale-[0.98]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#313338]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-n-red/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
               )}
             >
               {item.bgColor ? (
@@ -98,7 +98,7 @@ export function SocialLoginButtons({
                   aria-hidden
                 />
               )}
-              <span className="text-center text-sm font-bold tracking-tight text-[#F2F3F5]">
+              <span className="text-center text-sm font-bold tracking-tight text-n-ink">
                 {item.label}
               </span>
             </button>

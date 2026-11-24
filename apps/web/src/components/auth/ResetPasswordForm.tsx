@@ -66,10 +66,10 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   if (!token) {
     return (
       <div className="space-y-4 text-center">
-        <p className="text-sm text-[#f87171]">Invalid or expired reset link.</p>
+        <p className="text-sm text-n-error">Invalid or expired reset link.</p>
         <Link
           href="/forgot-password"
-          className="text-sm text-[#DBDEE1] hover:text-white"
+          className="text-sm text-n-ink hover:text-n-ink"
         >
           Request a new link
         </Link>
@@ -82,7 +82,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <div>
         <label
           htmlFor="reset-password"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           New Password
         </label>
@@ -96,13 +96,13 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
             maxLength={128}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 pr-16 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+            className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 pr-16 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
             placeholder="New password"
           />
           <button
             type="button"
             onClick={() => setShowPassword((value) => !value)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-n-slate transition-colors hover:text-n-ink"
           >
             {showPassword ? "Hide" : "Show"}
           </button>
@@ -112,7 +112,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <div>
         <label
           htmlFor="reset-password-confirm"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Confirm Password
         </label>
@@ -125,31 +125,28 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           maxLength={128}
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="Confirm new password"
         />
       </div>
 
       {validationError && password.length > 0 && (
-        <p className="text-sm text-[#f87171]">{validationError}</p>
+        <p className="text-sm text-n-error">{validationError}</p>
       )}
       {message && <p className="text-sm text-[#8ddf9a]">{message}</p>}
-      {error && <p className="text-sm text-[#f87171]">{error}</p>}
+      {error && <p className="text-sm text-n-error">{error}</p>}
 
       <button
         type="submit"
         disabled={!canSubmit}
-        className="w-full rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? "Resetting..." : "Reset Password"}
       </button>
 
       {message && (
         <div className="text-center">
-          <Link
-            href="/login"
-            className="text-sm text-[#DBDEE1] hover:text-white"
-          >
+          <Link href="/login" className="text-sm text-n-ink hover:text-n-ink">
             Continue to log in
           </Link>
         </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useDialogFocus } from "@/hooks/useDialogFocus";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowSquareOut, Spinner, X } from "@phosphor-icons/react";
@@ -80,6 +82,7 @@ export function ExportPdfSettingsModal({
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, exportMutation.isPending, onClose]);
 
+  const dialogRef = useDialogFocus(open);
   if (!open) return null;
 
   const managerAvatar = resolveAvatar("talent_manager", {
@@ -95,17 +98,20 @@ export function ExportPdfSettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
       onClick={() => !isPending && onClose()}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
+        aria-label="Export roster as PDF"
         role="dialog"
         aria-modal
-        className="w-full max-w-md rounded-2xl border border-[#3F4147] bg-[#2B2D31] shadow-2xl"
+        className="max-h-[85dvh] overflow-y-auto w-full max-w-lg rounded-lg border border-n-line bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[#3F4147] px-5 py-4">
-          <h2 className="text-base font-semibold text-[#F2F3F5]">
+        <div className="flex items-center justify-between border-b border-n-line px-5 py-4">
+          <h2 className="text-base font-semibold text-n-ink">
             Export roster as PDF
           </h2>
           <button
@@ -113,7 +119,7 @@ export function ExportPdfSettingsModal({
             onClick={onClose}
             disabled={isPending}
             aria-label="Close"
-            className="rounded-md p-1 text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#F2F3F5] disabled:opacity-50"
+            className="rounded-md p-3 text-n-slate transition-colors hover:bg-n-surface hover:text-n-ink disabled:opacity-50"
           >
             <X size={18} weight="bold" />
           </button>
@@ -122,7 +128,7 @@ export function ExportPdfSettingsModal({
         <div className="space-y-5 px-5 py-5">
           {/* Logo preview */}
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-n-slate">
               Cover logo
             </p>
             <div className="flex items-center gap-3">
@@ -134,17 +140,15 @@ export function ExportPdfSettingsModal({
                   className="h-14 w-14 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#383A40] text-lg font-bold text-[#F2F3F5]">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-n-surface text-lg font-bold text-n-ink">
                   {initial}
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-[#DBDEE1]">
-                  Appears on the PDF cover.
-                </p>
+                <p className="text-sm text-n-ink">Appears on the PDF cover.</p>
                 <Link
                   href="/dashboard/settings"
-                  className="mt-1 inline-flex items-center gap-1 text-xs text-[#93c5fd] hover:underline"
+                  className="mt-1 inline-flex items-center gap-1 text-xs text-n-navy hover:underline"
                 >
                   Update in Settings
                   <ArrowSquareOut size={12} weight="bold" />
@@ -155,19 +159,21 @@ export function ExportPdfSettingsModal({
 
           {/* Brand color */}
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-n-slate">
               Brand color
             </p>
             <div className="flex items-center gap-2">
               <input
                 type="color"
+                aria-label="PDF brand colour"
                 value={brandColor}
                 onChange={(event) => setBrandColor(event.target.value)}
                 disabled={isPending}
-                className="h-10 w-12 cursor-pointer rounded-md border border-[#3F4147] bg-[#1E1F22] disabled:cursor-not-allowed"
+                className="h-10 w-12 cursor-pointer rounded-md border border-n-line bg-white disabled:cursor-not-allowed"
               />
               <input
                 type="text"
+                aria-label="PDF brand colour hex code"
                 value={brandColor}
                 onChange={(event) => {
                   const next = event.target.value;
@@ -177,31 +183,34 @@ export function ExportPdfSettingsModal({
                 spellCheck={false}
                 maxLength={7}
                 className={cn(
-                  "flex-1 rounded-md border bg-[#1E1F22] px-3 py-2 text-sm font-mono uppercase text-[#F2F3F5] outline-none transition-colors disabled:cursor-not-allowed",
+                  "flex-1 rounded-md border bg-white px-3 py-2 text-sm font-mono uppercase text-n-ink outline-none transition-colors disabled:cursor-not-allowed",
                   isValidColor
-                    ? "border-[#3F4147] focus:border-[#4E5058]"
-                    : "border-[#ef4444]/60",
+                    ? "border-n-line focus:border-n-line"
+                    : "border-n-error/60",
                 )}
               />
             </div>
-            <p className="mt-1.5 text-xs text-[#949BA4]">
+            <p className="mt-1.5 text-xs text-n-slate">
               Used for the cover bar, card stripes, and footer accent.
             </p>
           </div>
 
           {error && (
-            <p className="rounded-md border border-[#ef4444]/40 bg-[#ef4444]/10 px-3 py-2 text-xs text-[#fca5a5]">
+            <p
+              role="alert"
+              className="rounded-md border border-n-error/40 bg-n-error/10 px-3 py-2 text-xs text-n-error"
+            >
               {error}
             </p>
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#3F4147] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-n-line px-5 py-4">
           <button
             type="button"
             onClick={onClose}
             disabled={isPending}
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40] disabled:opacity-50"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-n-ink transition-colors hover:bg-n-surface disabled:opacity-50"
           >
             Cancel
           </button>
@@ -212,8 +221,8 @@ export function ExportPdfSettingsModal({
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold text-white transition-colors",
               !isValidColor || isPending
-                ? "cursor-not-allowed bg-[#5C5F66]"
-                : "bg-[#E32C19] hover:bg-[#C72615]",
+                ? "cursor-not-allowed bg-n-slate"
+                : "bg-n-red hover:bg-n-red-hover",
             )}
           >
             {isPending && <Spinner size={14} className="animate-spin" />}

@@ -23,13 +23,18 @@ export function GameSortControls() {
   const status = TIMEFRAME[currentSort];
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex gap-1 rounded-md bg-[#1E1F22] p-0.5 w-fit">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div
+        role="group"
+        aria-label="Sort categories"
+        className="flex flex-wrap gap-1"
+      >
         {SORTS.map((s) => {
           const isActive = currentSort === s.value;
           return (
             <button
               key={s.value}
+              aria-pressed={isActive}
               onClick={() => {
                 const params = new URLSearchParams(searchParams.toString());
                 params.set("sort", s.value);
@@ -37,10 +42,10 @@ export function GameSortControls() {
                 router.push(`/browse?${params.toString()}`);
               }}
               className={cn(
-                "rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                "min-h-11 rounded-md px-3 py-2 text-sm font-semibold transition-colors",
                 isActive
-                  ? "bg-[#383A40] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:text-[#DBDEE1]",
+                  ? "bg-n-surface text-n-ink"
+                  : "text-n-slate hover:text-n-ink",
               )}
             >
               {s.label}
@@ -49,7 +54,7 @@ export function GameSortControls() {
         })}
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs text-[#949BA4]">
+      <div className="flex items-center gap-1.5 text-xs text-n-slate">
         <span>{status}</span>
       </div>
     </div>

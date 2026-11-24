@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CreatorCard } from "@/components/shared";
 import { CreatorList } from "./CreatorList";
 import { cn } from "@/lib/utils";
-import type { Platform } from "@/lib/constants/platforms";
+import { PLATFORM_CONFIG, type Platform } from "@/lib/constants/platforms";
 
 type CreatorData = {
   displayName: string;
@@ -33,6 +33,12 @@ type ApiResponse = {
 };
 
 type CreatorGridProps = {
+  initialFilters: {
+    platform: string;
+    sort: string;
+    game: string;
+    page: number;
+  };
   initialData: CreatorData[];
   initialMeta: {
     total: number;
@@ -42,7 +48,11 @@ type CreatorGridProps = {
   };
 };
 
-export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
+export function CreatorGrid({
+  initialData,
+  initialMeta,
+  initialFilters,
+}: CreatorGridProps) {
   const searchParams = useSearchParams();
   const platform = searchParams.get("platform") ?? "";
   const sort = searchParams.get("sort") ?? "followers";
@@ -51,8 +61,12 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   const pageParam = Number(searchParams.get("page") ?? "1");
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
-  const isDefaultParams =
-    page === 1 && !platform && !game && sort === "followers" && view === "grid";
+  const hasServerData =
+    view === "grid" &&
+    platform === initialFilters.platform &&
+    sort === initialFilters.sort &&
+    game === initialFilters.game &&
+    page === initialFilters.page;
 
   function buildCreatorsUrl(nextPage: number) {
     const params = new URLSearchParams(searchParams.toString());
@@ -65,7 +79,7 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
     return next ? `/creators?${next}` : "/creators";
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["creators", platform, sort, game, page, view],
     queryFn: async (): Promise<ApiResponse> => {
       const params = new URLSearchParams();
@@ -76,9 +90,10 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
       params.set("limit", "32");
       if (view === "list") params.set("view", "list");
       const res = await fetch(`/api/creators?${params.toString()}`);
+      if (!res.ok) throw new Error("Creator directory unavailable");
       return res.json() as Promise<ApiResponse>;
     },
-    ...(isDefaultParams
+    ...(hasServerData
       ? { initialData: { data: initialData, meta: initialMeta } }
       : {}),
     staleTime: 30_000,
@@ -90,11 +105,11 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
   return (
     <div>
       {isLoading && creators.length === 0 && view === "grid" && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-[220px] animate-pulse rounded-lg border border-[#3F4147] bg-[#313338]"
+              className="h-[220px] animate-pulse rounded-lg border border-n-line bg-n-canvas"
             />
           ))}
         </div>
@@ -105,15 +120,27 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-10 animate-pulse rounded-lg bg-[#383A40]"
+              className="h-10 animate-pulse rounded-lg bg-n-surface"
             />
           ))}
         </div>
       )}
 
-      {!isLoading && creators.length === 0 && (
-        <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-10 text-center">
-          <p className="text-sm text-[#949BA4]">No creators found</p>
+      {isError && (
+        <div role="alert" className="border-y border-n-line py-10">
+          <p>We couldn’t load this selection.</p>
+          <button
+            type="button"
+            className="n-button n-button-secondary mt-4"
+            onClick={() => void refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+      {!isLoading && !isError && creators.length === 0 && (
+        <div className="rounded-lg border border-n-line bg-n-canvas px-6 py-10 text-center">
+          <p className="text-sm text-n-slate">No creators found</p>
         </div>
       )}
 
@@ -122,39 +149,50 @@ export function CreatorGrid({ initialData, initialMeta }: CreatorGridProps) {
           {view === "list" ? (
             <CreatorList rows={creators} />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {creators.map((creator: CreatorData) => (
-                <CreatorCard key={creator.slug} creator={creator} />
+                <CreatorCard
+                  key={creator.slug}
+                  creator={creator}
+                  appearance="noticed"
+                  selectedPlatform={
+                    Object.hasOwn(PLATFORM_CONFIG, platform)
+                      ? (platform as Platform)
+                      : undefined
+                  }
+                />
               ))}
             </div>
           )}
 
           {/* Pagination */}
           {meta.totalPages > 1 && (
-            <div className="mt-8 flex items-center justify-center gap-2">
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3 border-t border-n-line pt-8">
               <Link
                 href={buildCreatorsUrl(Math.max(1, page - 1))}
                 aria-disabled={page === 1}
+                tabIndex={page === 1 ? -1 : undefined}
                 className={cn(
                   "rounded-md px-4 py-2 text-sm font-medium transition-colors",
                   page === 1
-                    ? "pointer-events-none bg-[#383A40] text-[#949BA4] opacity-40"
-                    : "bg-[#383A40] text-[#DBDEE1] hover:bg-[#4E5058]",
+                    ? "pointer-events-none bg-n-surface text-n-slate opacity-40"
+                    : "bg-n-surface text-n-ink hover:bg-n-control",
                 )}
               >
                 Previous
               </Link>
-              <span className="text-sm text-[#949BA4]">
+              <span className="text-sm text-n-slate">
                 Page {page} of {meta.totalPages}
               </span>
               <Link
                 href={buildCreatorsUrl(Math.min(meta.totalPages, page + 1))}
                 aria-disabled={page === meta.totalPages}
+                tabIndex={page === meta.totalPages ? -1 : undefined}
                 className={cn(
                   "rounded-md px-4 py-2 text-sm font-medium transition-colors",
                   page === meta.totalPages
-                    ? "pointer-events-none bg-[#383A40] text-[#949BA4] opacity-40"
-                    : "bg-[#383A40] text-[#DBDEE1] hover:bg-[#4E5058]",
+                    ? "pointer-events-none bg-n-surface text-n-slate opacity-40"
+                    : "bg-n-surface text-n-ink hover:bg-n-control",
                 )}
               >
                 Next

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { db } from "@/server/db";
 import { serializeBigInt } from "@/app/api/_lib/serialize";
@@ -20,6 +21,12 @@ import { getGameMostWatched } from "@/server/services/game-most-watched";
 import { getGameRecentStreams } from "@/server/services/game-recent-streams";
 import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-stats";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
+import { AppearanceProvider } from "@/components/ui/Appearance";
+import {
+  EditorialSections,
+  type EditorialSection,
+} from "@/components/creator/EditorialSections";
+import { GameMetricStrip } from "@/components/game/GameHeader";
 import {
   GameHeader,
   GamePlatformChart,
@@ -92,7 +99,7 @@ export async function generateMetadata({
   const game = await getGame(slug);
 
   if (!game) {
-    return { title: "Game Not Found | TwitchMetrics" };
+    return { title: "Category Not Found" };
   }
 
   const latestSnapshot = game.viewerSnapshots[0];
@@ -106,7 +113,7 @@ export async function generateMetadata({
   const description = `Latest observed viewership for ${game.name}: ${viewersStr} viewers across ${channelsStr} channels.`;
 
   return {
-    title: `${game.name} - Game Analytics`,
+    title: `${game.name} · ${game.vertical === "gaming" ? "Game" : "Category"} Analytics`,
     description,
     openGraph: {
       title: `${game.name} | ${SITE_NAME}`,
@@ -170,6 +177,7 @@ export default async function GamePage({ params }: PageProps) {
   const headerData = {
     name: game.name,
     slug: game.slug,
+    vertical: game.vertical,
     coverImageUrl: game.coverImageUrl,
     developer: game.developer,
     publisher: game.publisher,
@@ -194,21 +202,23 @@ export default async function GamePage({ params }: PageProps) {
 
   const chartSeries = series && summary ? { series, summary } : null;
 
-  // VideoGame JSON-LD for rich results
+  // Non-game categories share the route without claiming to be video games.
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "VideoGame",
+    "@type": game.vertical === "gaming" ? "VideoGame" : "WebPage",
     name: game.name,
     url: `${SITE_URL}/game/${game.slug}`,
     image: game.coverImageUrl ?? undefined,
-    genre: game.genres,
-    ...(game.developer
+    ...(game.vertical === "gaming" ? { genre: game.genres } : {}),
+    ...(game.vertical === "gaming" && game.developer
       ? { author: { "@type": "Organization", name: game.developer } }
       : {}),
-    ...(game.publisher
+    ...(game.vertical === "gaming" && game.publisher
       ? { publisher: { "@type": "Organization", name: game.publisher } }
       : {}),
-    ...(game.releaseDate ? { datePublished: String(game.releaseDate) } : {}),
+    ...(game.vertical === "gaming" && game.releaseDate
+      ? { datePublished: String(game.releaseDate) }
+      : {}),
   };
 
   // BreadcrumbList JSON-LD for search result breadcrumbs
@@ -220,7 +230,7 @@ export default async function GamePage({ params }: PageProps) {
       {
         "@type": "ListItem",
         position: 2,
-        name: "Browse",
+        name: "Categories",
         item: `${SITE_URL}/browse`,
       },
       {
@@ -232,48 +242,92 @@ export default async function GamePage({ params }: PageProps) {
     ],
   };
 
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
-      />
-
-      <GameHeader game={headerData} />
-
-      {/* Broadcast languages + viewers by platform */}
-      <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr]">
-        <BroadcastLanguages languages={game.broadcastLanguages} />
+  const sections: EditorialSection[] = [
+    {
+      id: "overview",
+      title: "The latest picture.",
+      content: (
+        <Fragment key="overview">
+          <GameMetricStrip game={headerData} />
+          <div className="mt-12 border-t border-n-line pt-8">
+            <BroadcastLanguages languages={game.broadcastLanguages} />
+          </div>
+        </Fragment>
+      ),
+    },
+    {
+      id: "viewership",
+      title: "An audience over time.",
+      content: (
         <GamePlatformChart
+          key="viewership"
           slug={game.slug}
           metric="viewers"
           until={chartUntil}
           initialData={chartSeries}
+          height={360}
         />
-      </div>
-
-      <div className="mt-4">
+      ),
+    },
+    {
+      id: "channels",
+      title: "Channel activity.",
+      content: (
         <GamePlatformChart
+          key="channels"
           slug={game.slug}
           metric="channels"
           until={chartUntil}
           initialData={chartSeries}
-          height={260}
+          height={320}
+        />
+      ),
+    },
+    {
+      id: "discover",
+      title: "Creators to explore.",
+      content: (
+        <GameTopChannels
+          key="discover"
+          channels={selectDisplayTopChannels(game.topChannels)}
+          mostWatched={mostWatched}
+        />
+      ),
+    },
+    {
+      id: "streams",
+      title: "Recent streams.",
+      content: <GameRecentStreams key="streams" recent={recentStreams} />,
+    },
+    ...(game.clips.length > 0
+      ? [
+          {
+            id: "clips",
+            title: "Moments worth watching.",
+            content: <GameClips key="clips" clips={game.clips} />,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <AppearanceProvider>
+      <div className="noticed noticed-analytics min-h-screen">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        />
+
+        <GameHeader game={headerData} />
+        <EditorialSections
+          navigationLabel="Category sections"
+          sections={sections}
         />
       </div>
-
-      <GameTopChannels
-        channels={selectDisplayTopChannels(game.topChannels)}
-        mostWatched={mostWatched}
-      />
-
-      <GameRecentStreams recent={recentStreams} />
-
-      <GameClips clips={game.clips} />
-    </div>
+    </AppearanceProvider>
   );
 }

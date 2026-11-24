@@ -1,72 +1,47 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { db } from "@/server/db";
-import { serializeBigInt } from "@/app/api/_lib/serialize";
+import {
+  getPublicCreator,
+  getPublicCreatorView,
+} from "@/lib/public-creator-view";
+import { resolveAvatar } from "@/lib/avatar";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { MediaKitLayout } from "@/components/media-kit/MediaKitLayout";
-import { creatorRobots } from "@/server/services/creator-visibility";
-import { platformFollowerCount } from "@/lib/platform-follower-count";
+import {
+  creatorRobots,
+  resolveCreatorSlug,
+} from "@/server/services/creator-visibility";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-async function getMediaKitData(slug: string) {
-  const profile = await db.creatorProfile.findUnique({
-    where: { slug },
-    include: {
-      mergedInto: { select: { slug: true } },
-      platformAccounts: {
-        select: {
-          platform: true,
-          platformUsername: true,
-          platformUrl: true,
-          followerCount: true,
-          otherChannelsFollowerCount: true,
-          totalViews: true,
-        },
-      },
-      growthRollups: {
-        select: {
-          platform: true,
-          followerCount: true,
-          delta30d: true,
-          pct30d: true,
-          trendDirection: true,
-        },
-      },
-      brandPartnerships: {
-        where: { isPublic: true },
-        select: {
-          brandName: true,
-          brandLogoUrl: true,
-          campaignName: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 12,
-      },
-    },
-  });
-
-  if (!profile) return null;
-  return serializeBigInt(profile);
-}
-
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const profile = await getMediaKitData(slug);
+  const profile = await getPublicCreator(slug);
 
   if (!profile) {
-    return { title: "Media Kit Not Found | TwitchMetrics" };
+    const resolved = await resolveCreatorSlug(db, slug);
+    if (resolved.found && resolved.redirect) {
+      return {
+        title: "Creator Media Kit",
+        robots: { index: false, follow: true },
+        alternates: {
+          canonical: `${SITE_URL}/creator/${resolved.canonicalSlug}/media-kit`,
+        },
+      };
+    }
+    return { title: "Media Kit Not Found" };
   }
 
   if (profile.mergedInto) {
     return {
-      title: `Creator Media Kit | ${SITE_NAME}`,
+      title: "Creator Media Kit",
       robots: { index: false, follow: true },
       alternates: {
         canonical: `${SITE_URL}/creator/${profile.mergedInto.slug}/media-kit`,
@@ -74,6 +49,12 @@ export async function generateMetadata({
     };
   }
 
+  const avatarUrl = resolveAvatar("creator", {
+    creator: {
+      avatarUrl: profile.avatarUrl,
+      customAvatarUrl: profile.customAvatarUrl,
+    },
+  });
   const totalFollowers = Number(profile.totalFollowers);
   const followersStr =
     totalFollowers >= 1_000_000
@@ -88,19 +69,19 @@ export async function generateMetadata({
 
   const description =
     profile.bio ??
-    `${profile.displayName}'s creator media kit with verified analytics across ${platformNames}.`;
+    `${profile.displayName}'s creator media kit with tracked analytics across ${platformNames}.`;
 
   return {
-    title: `${profile.displayName} — Media Kit | ${SITE_NAME}`,
+    title: `${profile.displayName} · Media Kit`,
     description,
     robots: creatorRobots(profile.listed),
     openGraph: {
-      title: `${profile.displayName} — Media Kit`,
+      title: `${profile.displayName} · Media Kit`,
       description: `${followersStr} followers across ${platformNames}`,
-      images: profile.avatarUrl
+      images: avatarUrl
         ? [
             {
-              url: profile.avatarUrl,
+              url: avatarUrl,
               width: 300,
               height: 300,
               alt: profile.displayName,
@@ -113,9 +94,9 @@ export async function generateMetadata({
     twitter: {
       card: "summary",
       site: TWITTER_HANDLE,
-      title: `${profile.displayName} — Media Kit | ${SITE_NAME}`,
+      title: `${profile.displayName} · Media Kit | ${SITE_NAME}`,
       description: `${followersStr} followers across ${platformNames}`,
-      images: profile.avatarUrl ? [profile.avatarUrl] : [],
+      images: avatarUrl ? [avatarUrl] : [],
     },
     alternates: {
       canonical: `${SITE_URL}/creator/${slug}/media-kit`,
@@ -125,30 +106,26 @@ export async function generateMetadata({
 
 export default async function MediaKitPage({ params }: PageProps) {
   const { slug } = await params;
-  const profile = await getMediaKitData(slug);
+  const profile = await getPublicCreator(slug);
 
-  if (!profile) notFound();
+  if (!profile) {
+    const resolved = await resolveCreatorSlug(db, slug);
+    if (resolved.found && resolved.redirect)
+      permanentRedirect(`/creator/${resolved.canonicalSlug}/media-kit`);
+    notFound();
+  }
 
   if (profile.mergedInto) {
     permanentRedirect(`/creator/${profile.mergedInto.slug}/media-kit`);
   }
 
-  const isClaimed = profile.state === "claimed" || profile.state === "premium";
-
-  const analytics = isClaimed
-    ? await db.creatorAnalytics.findFirst({
-        where: { creatorProfileId: profile.id },
-        orderBy: { periodEnd: "desc" },
-        select: { ageGenderData: true, countryData: true },
-      })
-    : null;
-
+  const view = await getPublicCreatorView(profile);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Person",
     name: profile.displayName,
     description: profile.bio ?? undefined,
-    image: profile.avatarUrl ?? undefined,
+    image: view.headerData.avatarUrl ?? undefined,
     url: `${SITE_URL}/creator/${profile.slug}`,
     sameAs: profile.platformAccounts
       .map((a) =>
@@ -162,46 +139,13 @@ export default async function MediaKitPage({ params }: PageProps) {
     },
   };
 
-  const profileData = {
-    displayName: profile.displayName,
-    slug: profile.slug,
-    avatarUrl: profile.avatarUrl,
-    bannerUrl: profile.bannerUrl,
-    bio: profile.bio,
-    country: profile.country,
-    state: profile.state,
-    totalFollowers: String(profile.totalFollowers),
-    totalViews: String(profile.totalViews),
-    platformAccounts: profile.platformAccounts.map((a) => ({
-      platform: a.platform,
-      platformUsername: a.platformUsername,
-      platformUrl: a.platformUrl,
-      followerCount: platformFollowerCount(a)?.toString() ?? "0",
-      totalViews: a.totalViews ? String(a.totalViews) : "0",
-    })),
-    growthRollups: profile.growthRollups.map((g) => ({
-      platform: g.platform,
-      followerCount: String(g.followerCount),
-      delta30d: String(g.delta30d),
-      pct30d: g.pct30d,
-      trendDirection: g.trendDirection,
-    })),
-    partnerships: profile.brandPartnerships.map((p) => ({
-      brandName: p.brandName,
-      brandLogoUrl: p.brandLogoUrl,
-      campaignName: p.campaignName,
-    })),
-  };
-
-  const analyticsData = analytics ? serializeBigInt(analytics) : null;
-
   return (
-    <div className="min-h-screen bg-[#2B2D31]">
+    <div className="noticed min-h-screen">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <MediaKitLayout profile={profileData} analytics={analyticsData} />
+      <MediaKitLayout {...view} />
     </div>
   );
 }

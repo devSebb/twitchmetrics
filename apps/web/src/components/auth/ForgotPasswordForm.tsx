@@ -42,7 +42,7 @@ export function ForgotPasswordForm() {
 
     setMessage(
       payload?.message ??
-        "If a TwitchMetrics account exists for that email, a reset link has been sent.",
+        "If a Noticed account exists for that email, a reset link has been sent.",
     );
   }
 
@@ -51,7 +51,7 @@ export function ForgotPasswordForm() {
       <div>
         <label
           htmlFor="forgot-password-email"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Email
         </label>
@@ -62,24 +62,24 @@ export function ForgotPasswordForm() {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="you@example.com"
         />
       </div>
 
       {message && <p className="text-sm text-[#8ddf9a]">{message}</p>}
-      {error && <p className="text-sm text-[#f87171]">{error}</p>}
+      {error && <p className="text-sm text-n-error">{error}</p>}
 
       <button
         type="submit"
         disabled={!canSubmit}
-        className="w-full rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? "Sending..." : "Send Reset Link"}
       </button>
 
       <div className="text-center">
-        <Link href="/login" className="text-sm text-[#DBDEE1] hover:text-white">
+        <Link href="/login" className="text-sm text-n-ink hover:text-n-ink">
           Back to log in
         </Link>
       </div>

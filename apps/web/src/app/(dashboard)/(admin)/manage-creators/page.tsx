@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function AdminCreatorsPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <h1 className="text-3xl font-bold text-[#F2F3F5]">Creator Management</h1>
+    <div className="mx-auto max-w-[1280px] space-y-4 px-5 py-10 sm:px-8 lg:px-10">
+      <h1 className="text-3xl font-bold text-n-ink">Creator Management</h1>
       <CreatorManagement />
     </div>
   );

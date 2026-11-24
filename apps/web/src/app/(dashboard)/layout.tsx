@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Footer, Header } from "@/components/layout";
 import { getSession } from "@/server/auth-cache";
+import { WorkspaceShell } from "@/components/dashboard/WorkspaceShell";
 
 export default async function DashboardLayout({
   children,
@@ -17,9 +18,9 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#2B2D31]">
+    <div className="flex min-h-screen flex-col bg-n-canvas">
       <Header />
-      <main className="flex-1">{children}</main>
+      <WorkspaceShell role={session.user.role}>{children}</WorkspaceShell>
       <Footer />
     </div>
   );

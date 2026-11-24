@@ -5,7 +5,7 @@ import {
   EnvelopeSimple,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
-import { Card } from "@/components/ui/Card";
+import { Container } from "@/components/ui/Editorial";
 import { ContactForm } from "@/components/contact/ContactForm";
 import {
   SITE_URL,
@@ -18,7 +18,7 @@ const PAGE_PATH = "/contact";
 const CANONICAL = `${SITE_URL}${PAGE_PATH}`;
 
 const PAGE_DESCRIPTION =
-  "Get in touch with the TwitchMetrics team — questions about creator analytics, custom reports, partnerships, or press. We reply within one business day.";
+  "Get in touch with the Noticed team — questions about creator analytics, custom reports, partnerships, or press. We reply within one business day.";
 
 export const metadata: Metadata = {
   title: "Contact Us",
@@ -51,7 +51,7 @@ const EXPECTATIONS = [
   {
     icon: ChatCircleText,
     title: "Real humans",
-    body: "No ticket queues or bots. The people who build TwitchMetrics read and answer your message.",
+    body: "No ticket queues or bots. The people who build Noticed read and answer your message.",
   },
   {
     icon: UsersThree,
@@ -62,52 +62,53 @@ const EXPECTATIONS = [
 
 export default function ContactPage() {
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6">
+    <Container className="n-form py-16 sm:py-24">
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div className="mb-12">
-        <p className="inline-flex items-center gap-2 rounded-full border border-[#3F4147] bg-[#313338]/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#DBDEE1]">
-          <EnvelopeSimple size={14} weight="fill" className="text-[#E32C19]" />
+        <p className="n-eyebrow inline-flex items-center gap-2 text-n-slate">
+          <EnvelopeSimple size={14} weight="fill" className="text-n-red" />
           Contact
         </p>
-        <h1 className="font-display mt-6 text-4xl font-bold leading-[1.05] tracking-tight text-[#F2F3F5] sm:text-5xl">
-          Let&apos;s <span className="text-[#E32C19]">talk.</span>
+        <h1 className="mt-6 text-[clamp(3rem,7vw,6rem)] font-extrabold leading-[.98] tracking-[-.055em]">
+          Let&apos;s <span className="text-n-red">talk.</span>
         </h1>
-        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#DBDEE1]">
+        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-n-ink">
           Questions about creator analytics, custom reports, partnerships, or
           press — send us a message and the team will get back to you.
         </p>
       </div>
 
       {/* ── Expectations + form ──────────────────────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid gap-12 lg:grid-cols-5">
         <div className="flex flex-col gap-4 lg:col-span-2">
           {EXPECTATIONS.map(({ icon: Icon, title, body }) => (
-            <Card key={title} className="flex gap-4 p-5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#E32C19]/10 text-[#E32C19]">
+            <article
+              key={title}
+              className="flex gap-4 border-t border-n-line py-6"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-n-red/10 text-n-red">
                 <Icon size={22} weight="duotone" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-[#F2F3F5]">
-                  {title}
-                </h2>
-                <p className="mt-1 text-sm leading-relaxed text-[#949BA4]">
+                <h2 className="text-sm font-semibold text-n-ink">{title}</h2>
+                <p className="mt-1 text-sm leading-relaxed text-n-slate">
                   {body}
                 </p>
               </div>
-            </Card>
+            </article>
           ))}
         </div>
 
-        <Card className="p-6 lg:col-span-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E32C19]">
+        <section className="border-t border-n-line pt-6 lg:col-span-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-n-red">
             Send a message
           </p>
-          <h2 className="font-display mb-6 mt-2 text-xl font-bold text-[#F2F3F5]">
+          <h2 className="font-display mb-6 mt-2 text-xl font-bold text-n-ink">
             How can we help?
           </h2>
           <ContactForm />
-        </Card>
+        </section>
       </div>
-    </div>
+    </Container>
   );
 }

@@ -34,7 +34,7 @@ export function GameCoverImage({
         role="img"
         aria-label={`${name} cover unavailable`}
         className={cn(
-          "flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-[#E32C19]/20 to-[#1E1F22] text-center text-[#949BA4]",
+          "flex h-full w-full flex-col items-center justify-center gap-1 bg-n-surface text-center text-n-slate",
           fallbackClassName,
         )}
       >

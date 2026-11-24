@@ -15,6 +15,7 @@ import { GameGrid } from "@/components/games/GameGrid";
 import { GenreFilter } from "@/components/games/GenreFilter";
 import { VerticalPills } from "@/components/browse/VerticalPills";
 import { Suspense } from "react";
+import { Container } from "@/components/ui/Editorial";
 
 export const revalidate = 300;
 
@@ -27,7 +28,7 @@ function verticalCopy(vertical: GameVerticalFilter): {
     return {
       title: "Top Categories",
       description:
-        "Browse every category on Twitch, Kick and YouTube — gaming, IRL, music, and more — ranked by the latest observed viewers.",
+        "Explore gaming, IRL, music and more across Twitch, Kick and YouTube. Compare categories using the latest observed viewers and channel counts.",
       noun: "categories",
     };
   }
@@ -155,53 +156,62 @@ export default async function BrowsePage({ searchParams }: PageProps) {
   const { title, description, noun } = verticalCopy(vertical);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <ItemListJsonLd
-        games={serializedGames}
-        page={filters.page}
-        perPage={filters.limit}
-      />
-      <Suspense>
-        <div className="mb-6">
-          <VerticalPills />
+    <div className="noticed min-h-screen">
+      <Container className="py-10 sm:py-16">
+        <ItemListJsonLd
+          games={serializedGames}
+          page={filters.page}
+          perPage={filters.limit}
+        />
+        <div className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-2xl">
+            <p className="n-eyebrow text-n-slate">Explore categories</p>
+            <h1 className="mt-4 text-[clamp(2rem,5vw,4.5rem)] font-extrabold leading-[1.05] tracking-[-.05em]">
+              {title}
+              <span className="text-n-red">.</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-n-slate">
+              {description}
+            </p>
+          </div>
+          <span className="shrink-0 text-sm text-n-slate">
+            {formatNumber(total)} {noun}
+          </span>
         </div>
-      </Suspense>
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold text-[#F2F3F5]">{title}</h1>
-          <p className="mt-2 text-sm text-[#949BA4]">{description}</p>
-        </div>
-        <span className="text-sm text-[#949BA4]">
-          {formatNumber(total)} {noun}
-        </span>
-      </div>
-
-      <Suspense>
-        <div className="mb-4">
-          <GameSortControls />
-        </div>
-      </Suspense>
-
-      {vertical === "gaming" && genres.length > 0 && (
         <Suspense>
-          <div className="mb-6">
-            <GenreFilter genres={genres} />
+          <div className="border-y border-n-line py-5">
+            <VerticalPills />
           </div>
         </Suspense>
-      )}
 
-      <Suspense>
-        <GameGrid
-          initialData={serializedGames}
-          initialMeta={{
-            total,
-            page: filters.page,
-            limit: filters.limit,
-            totalPages,
-          }}
-        />
-      </Suspense>
+        <Suspense>
+          <div className="py-6">
+            <GameSortControls />
+          </div>
+        </Suspense>
+
+        {vertical === "gaming" && genres.length > 0 && (
+          <Suspense>
+            <div className="mb-8">
+              <GenreFilter genres={genres} />
+            </div>
+          </Suspense>
+        )}
+
+        <Suspense>
+          <GameGrid
+            initialFilters={filters}
+            initialData={serializedGames}
+            initialMeta={{
+              total,
+              page: filters.page,
+              limit: filters.limit,
+              totalPages,
+            }}
+          />
+        </Suspense>
+      </Container>
     </div>
   );
 }

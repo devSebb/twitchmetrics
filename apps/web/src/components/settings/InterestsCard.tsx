@@ -6,9 +6,9 @@ type InterestsCardProps = {
 
 export function InterestsCard({ interests }: InterestsCardProps) {
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-5">
+    <div className="rounded-xl border border-n-line bg-white p-5">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#F2F3F5]">Interests</h3>
+        <h3 className="text-sm font-semibold text-n-ink">Interests</h3>
       </div>
       <div className="mt-3">
         {interests.length > 0 ? (
@@ -16,14 +16,14 @@ export function InterestsCard({ interests }: InterestsCardProps) {
             {interests.map((interest) => (
               <span
                 key={interest}
-                className="rounded-full border border-[#3F4147] bg-[#383A40] px-3 py-1 text-xs text-[#DBDEE1]"
+                className="rounded-full border border-n-line bg-n-surface px-3 py-1 text-xs text-n-ink"
               >
                 {interest}
               </span>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-[#949BA4]">
+          <p className="text-xs text-n-slate">
             No interests selected yet. Add interests in the form above.
           </p>
         )}

@@ -56,23 +56,27 @@ export type ManagerSettingsFormProps = {
 
 // ─── Styling ───
 
-const INPUT_CLS =
-  "w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#4E5058] placeholder:text-[#949BA4]";
+const INPUT_CLS = "n-input";
 
 const DISABLED_INPUT_CLS =
-  "w-full rounded-lg border border-[#3F4147] bg-[#2B2D31] px-3 py-2 text-sm text-[#949BA4]";
+  "w-full rounded-lg border border-n-line bg-n-surface px-3 py-2 text-sm text-n-slate";
 
 function Label({
   children,
   required,
+  htmlFor,
 }: {
   children: React.ReactNode;
   required?: boolean;
+  htmlFor?: string;
 }) {
   return (
-    <label className="mb-1 block text-sm text-[#DBDEE1]">
+    <label
+      htmlFor={htmlFor}
+      className="mb-1.5 block text-sm font-medium text-n-ink"
+    >
       {children}
-      {required && <span className="ml-1 text-[#E32C19]">(required)</span>}
+      {required && <span className="ml-1 text-n-red">(required)</span>}
     </label>
   );
 }
@@ -125,19 +129,29 @@ export function ManagerSettingsForm({
       e.preventDefault();
       setStatus(null);
 
-      const trimmedName = name.trim();
-      if (trimmedName && trimmedName !== user.name) {
-        await updateName.mutateAsync({ name: trimmedName });
-      }
+      try {
+        const trimmedName = name.trim();
+        if (trimmedName && trimmedName !== user.name) {
+          await updateName.mutateAsync({ name: trimmedName });
+        }
 
-      await updateProfile.mutateAsync({
-        agencyName: agencyName.trim() || null,
-        bio: bio.trim() || null,
-        websiteUrl: websiteUrl.trim() || null,
-        country: country.trim() || null,
-        languages,
-        contactEmail: contactEmail.trim() || null,
-      });
+        await updateProfile.mutateAsync({
+          agencyName: agencyName.trim() || null,
+          bio: bio.trim() || null,
+          websiteUrl: websiteUrl.trim() || null,
+          country: country.trim() || null,
+          languages,
+          contactEmail: contactEmail.trim() || null,
+        });
+      } catch (error) {
+        setStatus({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "We couldn’t save your profile. Please try again.",
+        });
+      }
     },
     [
       name,
@@ -164,7 +178,7 @@ export function ManagerSettingsForm({
   const isPending = updateName.isPending || updateProfile.isPending;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <ManagerProfileCompletionBar
         name={name || null}
         email={user.email}
@@ -178,13 +192,23 @@ export function ManagerSettingsForm({
       />
 
       <form onSubmit={handleSave}>
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-5">
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr_200px]">
-            {/* Column 1 — identity */}
+        <section className="border-t border-n-line pt-7">
+          <h2 className="text-2xl font-bold tracking-tight">
+            Agency & contact details
+          </h2>
+          <p className="mt-2 mb-7 max-w-2xl text-sm leading-relaxed text-n-slate">
+            Set the identity creators see when you invite them, and the contact
+            details for your agency.
+          </p>
+          <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_240px]">
+            {/* Column 1, identity */}
             <div className="space-y-4">
               <div>
-                <Label required>Name</Label>
+                <Label required htmlFor="settings-name">
+                  Name
+                </Label>
                 <input
+                  id="settings-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className={INPUT_CLS}
@@ -194,18 +218,22 @@ export function ManagerSettingsForm({
                 />
               </div>
               <div>
-                <Label>Agency / Company</Label>
+                <Label htmlFor="settings-agency-company">
+                  Agency / Company
+                </Label>
                 <input
+                  id="settings-agency-company"
                   value={agencyName}
                   onChange={(e) => setAgencyName(e.target.value)}
                   className={INPUT_CLS}
-                  placeholder="Optional — leave blank if solo"
+                  placeholder="Optional, leave blank if solo"
                   maxLength={80}
                 />
               </div>
               <div>
-                <Label>Country</Label>
+                <Label htmlFor="settings-country">Country</Label>
                 <input
+                  id="settings-country"
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
                   className={INPUT_CLS}
@@ -214,8 +242,9 @@ export function ManagerSettingsForm({
                 />
               </div>
               <div>
-                <Label>Website</Label>
+                <Label htmlFor="settings-website">Website</Label>
                 <input
+                  id="settings-website"
                   type="url"
                   value={websiteUrl}
                   onChange={(e) => setWebsiteUrl(e.target.value)}
@@ -226,19 +255,23 @@ export function ManagerSettingsForm({
               </div>
             </div>
 
-            {/* Column 2 — contact + operating */}
+            {/* Column 2, contact + operating */}
             <div className="space-y-4">
               <div>
-                <Label required>Login email</Label>
+                <Label required htmlFor="settings-login-email">
+                  Login email
+                </Label>
                 <input
+                  id="settings-login-email"
                   value={user.email ?? ""}
                   disabled
                   className={DISABLED_INPUT_CLS}
                 />
               </div>
               <div>
-                <Label>Contact email</Label>
+                <Label htmlFor="settings-contact-email">Contact email</Label>
                 <input
+                  id="settings-contact-email"
                   type="email"
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
@@ -248,28 +281,34 @@ export function ManagerSettingsForm({
                 />
               </div>
               <div className="relative">
-                <Label>Languages</Label>
+                <Label htmlFor="settings-languages">Languages</Label>
                 <button
+                  id="settings-languages"
                   type="button"
+                  aria-expanded={showLanguageDropdown}
                   onClick={() => setShowLanguageDropdown((v) => !v)}
                   className={`${INPUT_CLS} text-left`}
                 >
                   {languages.length > 0
-                    ? `${languages.length} selected`
+                    ? `${languages.length}/${MAX_LANGUAGES} selected`
                     : "Select languages"}
                 </button>
                 {showLanguageDropdown && (
-                  <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[#3F4147] bg-[#2B2D31] p-2 shadow-lg">
+                  <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-n-line bg-n-surface p-2 shadow-lg">
                     {LANGUAGE_OPTIONS.map((opt) => (
                       <label
                         key={opt}
-                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-[#DBDEE1] hover:bg-[#383A40]"
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-n-ink hover:bg-n-surface"
                       >
                         <input
                           type="checkbox"
                           checked={languages.includes(opt)}
+                          disabled={
+                            !languages.includes(opt) &&
+                            languages.length >= MAX_LANGUAGES
+                          }
                           onChange={() => toggleLanguage(opt)}
-                          className="rounded border-[#3F4147]"
+                          className="rounded border-n-line"
                         />
                         {opt}
                       </label>
@@ -278,8 +317,9 @@ export function ManagerSettingsForm({
                 )}
               </div>
               <div>
-                <Label>Active roster</Label>
+                <Label htmlFor="settings-active-roster">Active roster</Label>
                 <input
+                  id="settings-active-roster"
                   value={
                     activeRosterCount === 1
                       ? "1 creator"
@@ -291,8 +331,8 @@ export function ManagerSettingsForm({
               </div>
             </div>
 
-            {/* Column 3 — avatar sidebar */}
-            <div className="flex flex-col items-center gap-2">
+            {/* Column 3, avatar sidebar */}
+            <div className="flex flex-col items-center gap-4 border-t border-n-line pt-6 sm:col-span-2 lg:col-span-1 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
               <EditableAvatar
                 src={resolvedAvatar}
                 displayName={name || "?"}
@@ -300,15 +340,16 @@ export function ManagerSettingsForm({
                 canEdit={true}
                 onUpdated={setAvatarOverride}
               />
-              <p className="text-center text-[10px] text-[#949BA4]">
+              <p className="text-center text-xs text-n-slate">
                 Click the pencil to update.
               </p>
             </div>
           </div>
 
           <div className="mt-5">
-            <Label>Bio</Label>
+            <Label htmlFor="settings-bio">Bio</Label>
             <textarea
+              id="settings-bio"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               maxLength={BIO_MAX}
@@ -316,24 +357,25 @@ export function ManagerSettingsForm({
               className={INPUT_CLS}
               placeholder="One or two sentences creators see when you invite them..."
             />
-            <p className="mt-1 text-right text-xs text-[#949BA4]">
+            <p className="mt-1 text-right text-xs text-n-slate">
               {bio.length}/{BIO_MAX}
             </p>
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
-            <Button type="submit" disabled={isPending}>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button appearance="noticed" type="submit" disabled={isPending}>
               {isPending ? "Saving..." : "Save Profile"}
             </Button>
             {status && (
               <p
-                className={`text-sm ${status.type === "success" ? "text-green-400" : "text-[#ef4444]"}`}
+                role="status"
+                className={`text-sm ${status.type === "success" ? "text-n-success" : "text-n-error"}`}
               >
                 {status.message}
               </p>
             )}
           </div>
-        </div>
+        </section>
       </form>
 
       <InvitePreviewCard

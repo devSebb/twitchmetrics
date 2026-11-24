@@ -66,10 +66,7 @@ export function LoginForm({ callbackUrl = "/dashboard/home" }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label
-          htmlFor="login-email"
-          className="mb-1 block text-sm text-[#DBDEE1]"
-        >
+        <label htmlFor="login-email" className="mb-1 block text-sm text-n-ink">
           Email
         </label>
         <input
@@ -79,22 +76,19 @@ export function LoginForm({ callbackUrl = "/dashboard/home" }: LoginFormProps) {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="you@example.com"
         />
       </div>
 
       <div>
         <div className="mb-1 flex items-center justify-between gap-3">
-          <label
-            htmlFor="login-password"
-            className="block text-sm text-[#DBDEE1]"
-          >
+          <label htmlFor="login-password" className="block text-sm text-n-ink">
             Password
           </label>
           <Link
             href="/forgot-password"
-            className="text-xs font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+            className="text-xs font-medium text-n-slate transition-colors hover:text-n-ink"
           >
             Forgot password?
           </Link>
@@ -107,25 +101,25 @@ export function LoginForm({ callbackUrl = "/dashboard/home" }: LoginFormProps) {
             required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 pr-16 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+            className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 pr-16 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
             placeholder="Password"
           />
           <button
             type="button"
             onClick={() => setShowPassword((value) => !value)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-n-slate transition-colors hover:text-n-ink"
           >
             {showPassword ? "Hide" : "Show"}
           </button>
         </div>
       </div>
 
-      {error && <p className="text-sm text-[#f87171]">{error}</p>}
+      {error && <p className="text-sm text-n-error">{error}</p>}
 
       <button
         type="submit"
         disabled={!canSubmit}
-        className="w-full rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? "Logging in..." : "Log In"}
       </button>

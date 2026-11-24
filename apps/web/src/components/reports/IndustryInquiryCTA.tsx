@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 type IndustryInquiryCTAProps = {
   name: string;
@@ -90,22 +90,16 @@ export function IndustryInquiryCTA({
   }
 
   return (
-    <div className="mt-8 overflow-hidden rounded-xl border border-[#3F4147] bg-gradient-to-b from-[#313338] to-[#2B2D31]">
+    <div className="n-form mt-16 border-t border-n-line bg-n-surface">
       {/* Header */}
-      <div className="border-b border-[#3F4147] px-6 py-6">
-        <div className="mb-3 flex h-8">
-          <Image
-            src="/brand/logo.png"
-            alt="TwitchMetrics"
-            width={160}
-            height={42}
-            className="h-8 w-auto object-contain object-left"
-          />
+      <div className="border-b border-n-line px-6 py-6">
+        <div className="mb-6 flex">
+          <Wordmark />
         </div>
-        <h2 className="text-xl font-bold text-[#F2F3F5]">
+        <h2 className="text-xl font-bold text-n-ink">
           Need something more custom?
         </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#DBDEE1]">
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-n-ink">
           Our analysts pull bespoke industry data across every major
           live-streaming platform. Tell us what you&apos;re after and we&apos;ll
           come back with a tailored quote — no combination is too specific.
@@ -113,14 +107,18 @@ export function IndustryInquiryCTA({
       </div>
 
       {state === "success" ? (
-        <div className="flex flex-col items-center px-6 py-12 text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#22c55e]/10">
+        <div
+          role="status"
+          className="flex flex-col items-center px-6 py-12 text-center"
+        >
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-n-success/10">
             <svg
               width="24"
               height="24"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#22c55e"
+              stroke="currentColor"
+              className="text-n-success"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -128,20 +126,20 @@ export function IndustryInquiryCTA({
               <path d="M20 6 9 17l-5-5" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-[#F2F3F5]">
+          <h3 className="text-lg font-semibold text-n-ink">
             Request sent — thank you!
           </h3>
-          <p className="mt-2 max-w-md text-sm text-[#949BA4]">
+          <p className="mt-2 max-w-md text-sm text-n-slate">
             Our team will review your inquiry and get back to you at{" "}
-            <span className="text-[#DBDEE1]">{email}</span> shortly. A
-            confirmation is on its way to your inbox.
+            <span className="text-n-ink">{email}</span> shortly. A confirmation
+            is on its way to your inbox.
           </p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="px-6 py-6">
           {/* Example prompts */}
           <div className="mb-5">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#949BA4]">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-n-slate">
               Things you can ask for
             </p>
             <div className="flex flex-wrap gap-2">
@@ -150,7 +148,7 @@ export function IndustryInquiryCTA({
                   key={p.label}
                   type="button"
                   onClick={() => applyPrompt(p.seed)}
-                  className="rounded-full border border-[#3F4147] bg-[#383A40] px-3 py-1.5 text-xs font-medium text-[#DBDEE1] transition-colors hover:border-[#E32C19]/50 hover:text-[#F2F3F5]"
+                  className="rounded-full border border-n-line bg-n-surface px-3 py-1.5 text-xs font-medium text-n-ink transition-colors hover:border-n-red/50 hover:text-n-ink"
                 >
                   {p.label}
                 </button>
@@ -163,7 +161,7 @@ export function IndustryInquiryCTA({
             <div>
               <label
                 htmlFor="inquiry-name"
-                className="mb-1 block text-xs font-medium text-[#949BA4]"
+                className="mb-1 block text-xs font-medium text-n-slate"
               >
                 Name
               </label>
@@ -172,13 +170,13 @@ export function IndustryInquiryCTA({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-3 py-2 text-sm text-[#DBDEE1] outline-none transition-colors focus:border-[#E32C19]/50"
+                className="w-full rounded-lg border border-n-line bg-white px-3 py-2 text-sm text-n-ink outline-none transition-colors focus:border-n-red/50"
               />
             </div>
             <div>
               <label
                 htmlFor="inquiry-email"
-                className="mb-1 block text-xs font-medium text-[#949BA4]"
+                className="mb-1 block text-xs font-medium text-n-slate"
               >
                 Email
               </label>
@@ -187,13 +185,13 @@ export function IndustryInquiryCTA({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-3 py-2 text-sm text-[#DBDEE1] outline-none transition-colors focus:border-[#E32C19]/50"
+                className="w-full rounded-lg border border-n-line bg-white px-3 py-2 text-sm text-n-ink outline-none transition-colors focus:border-n-red/50"
               />
             </div>
             <div>
               <label
                 htmlFor="inquiry-company"
-                className="mb-1 block text-xs font-medium text-[#949BA4]"
+                className="mb-1 block text-xs font-medium text-n-slate"
               >
                 Company
               </label>
@@ -202,7 +200,7 @@ export function IndustryInquiryCTA({
                 type="text"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
-                className="w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-3 py-2 text-sm text-[#DBDEE1] outline-none transition-colors focus:border-[#E32C19]/50"
+                className="w-full rounded-lg border border-n-line bg-white px-3 py-2 text-sm text-n-ink outline-none transition-colors focus:border-n-red/50"
               />
             </div>
           </div>
@@ -211,7 +209,7 @@ export function IndustryInquiryCTA({
           <div>
             <label
               htmlFor="inquiry-message"
-              className="mb-1 block text-xs font-medium text-[#949BA4]"
+              className="mb-1 block text-xs font-medium text-n-slate"
             >
               What data are you after?
             </label>
@@ -222,25 +220,25 @@ export function IndustryInquiryCTA({
               rows={5}
               maxLength={4000}
               placeholder="Describe the metrics, platforms, channels, categories, or time range you'd like us to pull…"
-              className="w-full resize-y rounded-lg border border-[#3F4147] bg-[#1E1F22] px-4 py-3 text-sm text-[#DBDEE1] placeholder-[#4E5058] outline-none transition-colors focus:border-[#E32C19]/50"
+              className="w-full resize-y rounded-lg border border-n-line bg-white px-4 py-3 text-sm text-n-ink placeholder-n-slate outline-none transition-colors focus:border-n-red/50"
             />
           </div>
 
           {/* Footer */}
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {state === "error" ? (
-              <p className="text-xs text-[#ef4444]">
+              <p role="alert" className="text-sm text-n-error">
                 {errorMsg ?? "Something went wrong — please try again."}
               </p>
             ) : (
-              <p className="text-xs text-[#6D7178]">
+              <p className="text-xs text-n-slate">
                 We typically reply within 24 hours.
               </p>
             )}
             <button
               type="submit"
               disabled={!canSubmit}
-              className="w-full rounded-lg bg-[#E32C19] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+              className="w-full rounded-lg bg-n-red px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
             >
               {state === "submitting" ? (
                 <span className="flex items-center justify-center gap-2">

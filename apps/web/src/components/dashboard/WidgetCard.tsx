@@ -1,3 +1,4 @@
+"use client";
 import { WIDGET_REGISTRY, type WidgetId } from "@/lib/constants/widgets";
 import { CREATOR_WIDGET_INFO } from "@/lib/constants/metric-info";
 import { InfoTip } from "@/components/shared/InfoTip";
@@ -24,12 +25,13 @@ export function WidgetCard({ widgetId, children, className }: WidgetCardProps) {
   return (
     <div
       data-widget-id={widgetId}
-      className={`flex flex-col rounded-xl border border-[#3F4147] bg-[#313338] p-5 has-[[data-widget-empty]]:hidden ${className ?? ""}`}
+      className={`flex flex-col has-[[data-widget-empty]]:hidden py-2 ${className ?? ""}`}
     >
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F2F3F5]">
-          <def.icon size={16} weight="duotone" className="text-[#949BA4]" />
-          {def.label}
+        <h3
+          className={`flex items-center gap-2 mb-3 text-xl font-bold tracking-tight text-n-ink`}
+        >
+          {widgetId === "stats_row" ? "Streaming performance" : def.label}
           {info && <InfoTip info={info} />}
         </h3>
       </div>

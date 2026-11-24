@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function AdminHealthPage() {
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl font-bold text-[#F2F3F5]">System Health</h1>
+      <h1 className="text-3xl font-bold text-n-ink">System Health</h1>
       <SystemHealth />
     </div>
   );

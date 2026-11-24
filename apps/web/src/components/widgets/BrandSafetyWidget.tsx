@@ -12,13 +12,13 @@ type Props = {
 function getRatingColor(rating: string): string {
   switch (rating) {
     case "safe":
-      return "#22c55e";
+      return "#167044";
     case "moderate":
-      return "#f59e0b";
+      return "#895C0A";
     case "review":
-      return "#ef4444";
+      return "#B4232B";
     default:
-      return "#949BA4";
+      return "#4A505B";
   }
 }
 
@@ -42,8 +42,8 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex h-48 animate-pulse items-center justify-center rounded-lg bg-[#383A40]">
-        <span className="text-sm text-[#949BA4]">Loading...</span>
+      <div className="flex h-48 animate-pulse items-center justify-center rounded-lg bg-n-surface">
+        <span className="text-sm text-n-slate">Loading...</span>
       </div>
     );
   }
@@ -69,7 +69,7 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
     );
   }
 
-  const color = rating ? getRatingColor(rating) : "#949BA4";
+  const color = rating ? getRatingColor(rating) : "#4A505B";
 
   return (
     <div className="space-y-3">
@@ -89,7 +89,7 @@ export function BrandSafetyWidget({ profile, isClaimed }: Props) {
           {tags.map((tag) => (
             <span
               key={tag}
-              className="rounded-md bg-[#383A40] px-2.5 py-1 text-xs text-[#DBDEE1]"
+              className="rounded-md bg-n-surface px-2.5 py-1 text-xs text-n-ink"
             >
               {tag}
             </span>

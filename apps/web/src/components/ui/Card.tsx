@@ -3,13 +3,18 @@ import { cn } from "@/lib/utils";
 type CardProps = {
   className?: string;
   children: React.ReactNode;
+  appearance?: "noticed";
 };
 
-export function Card({ className, children }: CardProps) {
+export function Card({
+  className,
+  children,
+  appearance: _appearance,
+}: CardProps) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-[#3F4147] bg-[#313338] p-4",
+        "rounded-lg border border-n-line bg-white p-5 sm:p-6",
         className,
       )}
     >

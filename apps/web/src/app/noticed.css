@@ -1,0 +1,209 @@
+@font-face {
+  font-family: "Golos Text";
+  src: url("/fonts/golos-text-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+/* One shared appearance across public pages, workspaces and portals. */
+.noticed {
+  color-scheme: light;
+  color: var(--noticed-ink);
+  background: var(--noticed-canvas);
+  font-family: var(--noticed-font);
+  font-variant-numeric: tabular-nums;
+}
+.noticed :where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--noticed-red);
+  outline-offset: 4px;
+}
+.noticed :where(section[id], h2[id]) {
+  scroll-margin-top: 7rem;
+}
+.noticed ::selection {
+  background: var(--noticed-red);
+  color: white;
+}
+.n-eyebrow {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.n-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  font-weight: 700;
+  text-align: center;
+  transition:
+    background-color 150ms,
+    color 150ms,
+    border-color 150ms;
+}
+.n-button-primary {
+  background: var(--noticed-red);
+  color: white;
+}
+.n-button-primary:hover {
+  background: var(--noticed-red-hover);
+}
+.n-button-secondary {
+  border-color: var(--noticed-control);
+  color: var(--noticed-ink);
+  background: white;
+}
+.n-button-secondary:hover {
+  border-color: var(--noticed-ink);
+  background: var(--noticed-surface);
+}
+.n-button-light {
+  background: white;
+  color: var(--noticed-ink);
+}
+.n-button-light:hover {
+  background: var(--noticed-surface);
+}
+.n-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.n-input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--noticed-control);
+  border-radius: 6px;
+  background: white;
+  padding: 0.65rem 0.85rem;
+  font-size: 1rem;
+  color: var(--noticed-ink);
+}
+.n-input::placeholder {
+  color: var(--noticed-slate);
+}
+.n-input:disabled {
+  background: var(--noticed-surface);
+  cursor: not-allowed;
+}
+.n-input[aria-invalid="true"] {
+  border-color: var(--noticed-error);
+}
+.n-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+.n-table th {
+  color: var(--noticed-slate);
+  font-weight: 500;
+}
+.n-table :is(th, td) {
+  border-bottom: 1px solid var(--noticed-line);
+  padding: 1rem;
+}
+.n-table :is(th, td):first-child {
+  padding-left: 0;
+}
+.n-table :is(th, td):last-child {
+  padding-right: 0;
+}
+.n-table td {
+  font-variant-numeric: tabular-nums;
+}
+.n-faq summary {
+  list-style: none;
+}
+.n-faq summary::-webkit-details-marker {
+  display: none;
+}
+.n-faq summary::after {
+  content: "+";
+  font-size: 1.5rem;
+  font-weight: 400;
+}
+.n-faq[open] summary::after {
+  content: "−";
+}
+.n-skip-link {
+  position: fixed;
+  z-index: 200;
+  left: 1rem;
+  top: 1rem;
+  transform: translateY(-200%);
+}
+.n-skip-link:focus {
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .noticed *,
+  .noticed *::before,
+  .noticed *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Dense analytical layouts retain their own table and anchor spacing. */
+.noticed-analytics :where(button:not([aria-label^="About"])) {
+  min-height: 36px;
+}
+.noticed-analytics :where(table) {
+  min-width: 640px;
+}
+.noticed-analytics [data-widget-id] {
+  min-width: 0;
+}
+.noticed [data-platform="x"] {
+  filter: invert(1);
+}
+.noticed .n-dark [data-platform="x"] {
+  filter: none;
+}
+.noticed-analytics :where(section[id]) {
+  scroll-margin-top: 11rem;
+}
+
+.n-workspace
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+        [type="color"]
+      ),
+    select,
+    textarea
+  ),
+.n-auth
+  :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.n-workspace :where(button:not([aria-label^="About"])),
+.n-auth :where(button) {
+  min-height: 44px;
+}
+.n-workspace :where(input[type="checkbox"], input[type="radio"]),
+.n-auth :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--noticed-red);
+}
+
+.n-form
+  :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.n-form :where(button) {
+  min-height: 44px;
+}
+.n-form :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--noticed-red);
+}

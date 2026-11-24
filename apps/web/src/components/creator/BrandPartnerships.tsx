@@ -20,11 +20,11 @@ export function BrandPartnerships({ partnerships }: BrandPartnershipsProps) {
 
   return (
     <div className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-[#F2F3F5]">
-        <Handshake size={20} weight="duotone" className="text-[#949BA4]" />
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-n-ink">
+        <Handshake size={20} weight="duotone" className="text-n-slate" />
         Past Partnerships
       </h2>
-      <Card>
+      <Card appearance="noticed">
         <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-6">
           {partnerships.map((p) => {
             const logoSrc = getSafeImageSrc(p.brandLogoUrl);
@@ -33,7 +33,7 @@ export function BrandPartnerships({ partnerships }: BrandPartnershipsProps) {
                 key={p.id}
                 className="flex flex-col items-center gap-2 rounded-md p-2"
               >
-                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-[#383A40]">
+                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-n-surface">
                   {logoSrc ? (
                     <Image
                       src={logoSrc}
@@ -43,12 +43,12 @@ export function BrandPartnerships({ partnerships }: BrandPartnershipsProps) {
                       sizes="56px"
                     />
                   ) : (
-                    <span className="text-sm font-bold text-[#949BA4]">
+                    <span className="text-sm font-bold text-n-slate">
                       {p.brandName.charAt(0)}
                     </span>
                   )}
                 </div>
-                <span className="text-center text-[10px] font-medium leading-tight text-[#949BA4]">
+                <span className="text-center text-xs font-medium leading-tight text-n-slate">
                   {p.brandName}
                 </span>
               </div>

@@ -34,9 +34,11 @@ type Position = { top: number; left: number; placement: "above" | "below" };
 export function InfoTip({
   info,
   className,
+  inverted = false,
 }: {
   info: MetricInfo;
   className?: string;
+  inverted?: boolean;
 }) {
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -139,7 +141,7 @@ export function InfoTip({
           event.stopPropagation();
           schedule(!open, 0);
         }}
-        className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[#6D6F78] transition-colors hover:text-[#DBDEE1] focus-visible:text-[#DBDEE1] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#5865F2] ${className ?? ""}`}
+        className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full transition-colors ${inverted ? "text-white/75 hover:text-white focus-visible:text-white" : "text-n-slate hover:text-n-ink focus-visible:text-n-ink"} focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-n-red ${className ?? ""}`}
       >
         <Question size={13} weight="bold" aria-hidden />
       </button>
@@ -158,19 +160,19 @@ export function InfoTip({
               // Measured first, shown once placed: no flash at the corner.
               visibility: position ? "visible" : "hidden",
             }}
-            className="fixed z-[100] rounded-lg border border-[#3F4147] bg-[#111214] p-3 text-left shadow-xl shadow-black/40"
+            className={`noticed fixed z-[100] rounded-lg border border-n-line bg-n-canvas p-3 text-left shadow-xl shadow-black/20`}
           >
-            <p className="text-xs font-semibold text-[#F2F3F5]">{info.title}</p>
-            <p className="mt-1 text-xs leading-relaxed text-[#B5BAC1]">
+            <p className="text-xs font-semibold text-n-ink">{info.title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-n-slate">
               {info.body}
             </p>
-            <dl className="mt-2.5 space-y-1.5 border-t border-[#2B2D31] pt-2.5">
+            <dl className="mt-2.5 space-y-1.5 border-t border-n-canvas pt-2.5">
               {details.map((row) => (
                 <div key={row.label} className="flex gap-2">
-                  <dt className="w-12 flex-shrink-0 pt-px text-[10px] font-medium uppercase tracking-wide text-[#949BA4]">
+                  <dt className="w-12 flex-shrink-0 pt-px text-[10px] font-medium uppercase tracking-wide text-n-slate">
                     {row.label}
                   </dt>
-                  <dd className="text-[11px] leading-snug text-[#DBDEE1]">
+                  <dd className="text-[11px] leading-snug text-n-ink">
                     {row.value}
                   </dd>
                 </div>

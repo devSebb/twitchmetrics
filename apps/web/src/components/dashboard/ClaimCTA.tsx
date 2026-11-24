@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { trpc } from "@/lib/trpc";
 
 export function ClaimCTA() {
@@ -13,18 +13,18 @@ export function ClaimCTA() {
 
   return (
     <Card className="space-y-3">
-      <h2 className="text-xl font-semibold text-[#F2F3F5]">
+      <h2 className="text-xl font-semibold text-n-ink">
         Claim your creator profile
       </h2>
-      <p className="text-sm text-[#949BA4]">
+      <p className="text-sm text-n-slate">
         Search for your profile, verify ownership, and unlock private analytics,
         demographics, subscriber metrics, and media kit tools.
       </p>
 
       {pendingClaim && (
-        <div className="flex items-center gap-2 rounded-lg bg-[#f59e0b]/10 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-lg bg-n-warning/10 px-3 py-2">
           <svg
-            className="h-4 w-4 flex-shrink-0 text-[#f59e0b]"
+            className="h-4 w-4 flex-shrink-0 text-n-warning"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -36,7 +36,7 @@ export function ClaimCTA() {
               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <span className="text-sm text-[#fcd34d]">
+          <span className="text-sm text-n-warning">
             You have a pending claim for{" "}
             <Link
               href={`/claim?profile=${pendingClaim.creatorProfile.id}`}
@@ -48,8 +48,8 @@ export function ClaimCTA() {
         </div>
       )}
 
-      <Link href="/claim">
-        <Button>Start claim flow</Button>
+      <Link href="/claim" className="n-button n-button-primary">
+        Start claim flow
       </Link>
     </Card>
   );

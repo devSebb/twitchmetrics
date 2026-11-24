@@ -1,5 +1,7 @@
 "use client";
 
+import { useDialogFocus } from "@/hooks/useDialogFocus";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, UploadSimple, Trash, Spinner } from "@phosphor-icons/react";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
@@ -87,21 +89,25 @@ export function AvatarEditModal({
     if (dropped) handleFile(dropped);
   };
 
+  const dialogRef = useDialogFocus(open);
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
       onClick={() => !isBusy && onClose()}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
+        aria-label="Update profile picture"
         role="dialog"
         aria-modal
-        className="w-full max-w-md rounded-2xl border border-[#3F4147] bg-[#2B2D31] shadow-2xl"
+        className="max-h-[85dvh] overflow-y-auto w-full max-w-lg rounded-lg border border-n-line bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[#3F4147] px-5 py-4">
-          <h2 className="text-base font-semibold text-[#F2F3F5]">
+        <div className="flex items-center justify-between border-b border-n-line px-5 py-4">
+          <h2 className="text-base font-semibold text-n-ink">
             Update profile picture
           </h2>
           <button
@@ -109,7 +115,7 @@ export function AvatarEditModal({
             onClick={onClose}
             disabled={isBusy}
             aria-label="Close"
-            className="rounded-md p-1 text-[#949BA4] transition-colors hover:bg-[#383A40] hover:text-[#F2F3F5] disabled:opacity-50"
+            className="rounded-md p-3 text-n-slate transition-colors hover:bg-n-surface hover:text-n-ink disabled:opacity-50"
           >
             <X size={18} weight="bold" />
           </button>
@@ -125,17 +131,17 @@ export function AvatarEditModal({
                 className="h-20 w-20 rounded-full object-cover"
               />
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#F2F3F5]">
+                <p className="truncate text-sm font-medium text-n-ink">
                   {file?.name}
                 </p>
-                <p className="text-xs text-[#949BA4]">
+                <p className="text-xs text-n-slate">
                   {((file?.size ?? 0) / 1024).toFixed(0)} KB · {file?.type}
                 </p>
                 <button
                   type="button"
                   onClick={reset}
                   disabled={isBusy}
-                  className="mt-1 text-xs text-[#949BA4] underline hover:text-[#DBDEE1] disabled:opacity-50"
+                  className="mt-1 text-xs text-n-slate underline hover:text-n-ink disabled:opacity-50"
                 >
                   Choose different file
                 </button>
@@ -143,22 +149,27 @@ export function AvatarEditModal({
             </div>
           ) : (
             <div
+              role="button"
+              tabIndex={0}
+              aria-label="Choose a profile picture, JPG, PNG or WebP, up to 2 MB"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  inputRef.current?.click();
+                }
+              }}
               onDragOver={(event) => event.preventDefault()}
               onDrop={onDrop}
               onClick={() => inputRef.current?.click()}
               className={cn(
-                "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#3F4147] bg-[#1E1F22] px-4 py-8 text-center transition-colors hover:border-[#E32C19]/60 hover:bg-[#1E1F22]/80",
+                "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-n-line bg-white px-4 py-8 text-center transition-colors hover:border-n-red/60 hover:bg-white/80",
               )}
             >
-              <UploadSimple
-                size={22}
-                weight="bold"
-                className="text-[#949BA4]"
-              />
-              <p className="mt-2 text-sm font-medium text-[#DBDEE1]">
+              <UploadSimple size={22} weight="bold" className="text-n-slate" />
+              <p className="mt-2 text-sm font-medium text-n-ink">
                 Drag &amp; drop or click to browse
               </p>
-              <p className="mt-1 text-xs text-[#949BA4]">
+              <p className="mt-1 text-xs text-n-slate">
                 JPG, PNG, WebP · max 2 MB
               </p>
             </div>
@@ -167,6 +178,7 @@ export function AvatarEditModal({
           <input
             ref={inputRef}
             type="file"
+            aria-label="Profile picture file"
             accept={ACCEPT}
             className="hidden"
             onChange={(event) => {
@@ -177,19 +189,22 @@ export function AvatarEditModal({
           />
 
           {(validationError || error) && (
-            <p className="rounded-md border border-[#ef4444]/40 bg-[#ef4444]/10 px-3 py-2 text-xs text-[#fca5a5]">
+            <p
+              role="alert"
+              className="rounded-md border border-n-error/40 bg-n-error/10 px-3 py-2 text-xs text-n-error"
+            >
               {validationError ?? error}
             </p>
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-[#3F4147] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-n-line px-5 py-4">
           {currentUrl ? (
             <button
               type="button"
               onClick={remove}
               disabled={isBusy}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#fca5a5] transition-colors hover:text-[#ef4444] disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-n-error transition-colors hover:text-n-error disabled:opacity-50"
             >
               <Trash size={14} weight="bold" />
               Remove current
@@ -202,7 +217,7 @@ export function AvatarEditModal({
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40] disabled:opacity-50"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-n-ink transition-colors hover:bg-n-surface disabled:opacity-50"
             >
               Cancel
             </button>
@@ -213,8 +228,8 @@ export function AvatarEditModal({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold text-white transition-colors",
                 !file || isBusy
-                  ? "cursor-not-allowed bg-[#5C5F66]"
-                  : "bg-[#E32C19] hover:bg-[#C72615]",
+                  ? "cursor-not-allowed bg-n-slate"
+                  : "bg-n-red hover:bg-n-red-hover",
               )}
             >
               {status === "uploading" && (

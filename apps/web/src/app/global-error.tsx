@@ -1,6 +1,10 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
+import { NOTICED_CSS_VARS } from "@/lib/constants/noticed";
+import { Wordmark } from "@/components/brand/Wordmark";
+import "./globals.css";
+import "./noticed.css";
 import { useEffect } from "react";
 
 export default function GlobalError({
@@ -15,22 +19,28 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en" className="dark">
-      <body className="flex min-h-screen items-center justify-center bg-[#2B2D31] font-sans text-[#F2F3F5]">
-        <div className="mx-auto max-w-md px-4 text-center">
-          <h1 className="text-4xl font-bold">Something went wrong</h1>
-          <p className="mt-4 text-sm text-[#949BA4]">
+    <html lang="en">
+      <body
+        style={NOTICED_CSS_VARS}
+        className="noticed flex min-h-screen items-center justify-center"
+      >
+        <main className="mx-auto max-w-xl px-5 py-16">
+          <Wordmark />
+          <h1 className="mt-12 text-4xl font-extrabold tracking-tight">
+            Something went wrong
+          </h1>
+          <p className="mt-4 text-sm text-n-slate">
             An unexpected error occurred. The error has been reported
             automatically.
           </p>
           <button
             type="button"
             onClick={reset}
-            className="mt-6 rounded-lg bg-[#E32C19] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
+            className="n-button n-button-primary mt-6"
           >
             Try again
           </button>
-        </div>
+        </main>
       </body>
     </html>
   );

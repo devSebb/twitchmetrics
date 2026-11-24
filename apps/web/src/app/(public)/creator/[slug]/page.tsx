@@ -1,24 +1,19 @@
-import { cache } from "react";
+import {
+  getPublicCreator,
+  getPublicCreatorView,
+} from "@/lib/public-creator-view";
+import { CreatorProfileLayout } from "@/components/creator/CreatorProfileLayout";
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { db } from "@/server/db";
-import { serializeBigInt } from "@/app/api/_lib/serialize";
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { resolveAvatar } from "@/lib/avatar";
 import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
-import { getLatestTimestamp } from "@/lib/metric-freshness";
-import { CreatorHeader } from "@/components/creator";
-import { DashboardGrid, type SerializedProfile } from "@/components/dashboard";
 import {
   creatorRobots,
   resolveCreatorSlug,
 } from "@/server/services/creator-visibility";
-import { isKnownGrowthRollup } from "@/server/services/creator-growth";
-import { selectDisplayableDemographics } from "@/lib/metric-freshness";
-import { getProfileDataAvailability } from "@/server/services/profile-widget-availability";
-import { getStatsContext } from "@/server/services/creator-streaming-stats";
-import { platformFollowerCount } from "@/lib/platform-follower-count";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -32,66 +27,11 @@ export function generateStaticParams() {
   return [];
 }
 
-const getCreator = cache(async (slug: string) => {
-  const creator = await db.creatorProfile.findUnique({
-    where: { slug },
-    include: {
-      mergedInto: { select: { slug: true } },
-      platformAccounts: {
-        select: {
-          platform: true,
-          platformUsername: true,
-          platformUrl: true,
-          followerCount: true,
-          otherChannelsFollowerCount: true,
-          totalViews: true,
-          postCount: true,
-          lastSyncedAt: true,
-          isOAuthConnected: true,
-          discoverySource: true,
-        },
-      },
-      growthRollups: {
-        select: {
-          platform: true,
-          followerCount: true,
-          delta1d: true,
-          delta7d: true,
-          delta30d: true,
-          pct1d: true,
-          pct7d: true,
-          pct30d: true,
-          trendDirection: true,
-          acceleration: true,
-          computedAt: true,
-        },
-        orderBy: { computedAt: "desc" },
-      },
-      brandPartnerships: {
-        where: { isPublic: true },
-        select: {
-          id: true,
-          brandName: true,
-          brandLogoUrl: true,
-          campaignName: true,
-          startDate: true,
-          endDate: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 12,
-      },
-    },
-  });
-
-  if (!creator) return null;
-  return creator;
-});
-
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const creator = await getCreator(slug);
+  const creator = await getPublicCreator(slug);
 
   if (!creator) {
     // Renamed slugs (SlugRedirect) canonicalize to the new URL.
@@ -105,7 +45,7 @@ export async function generateMetadata({
         },
       };
     }
-    return { title: "Creator Not Found | TwitchMetrics" };
+    return { title: `Creator Not Found | ${SITE_NAME}` };
   }
 
   if (creator.mergedInto) {
@@ -139,7 +79,7 @@ export async function generateMetadata({
   });
 
   return {
-    title: `${creator.displayName} - Creator Analytics`,
+    title: `${creator.displayName} Stats & Media Kit`,
     description,
     robots: creatorRobots(creator.listed),
     openGraph: {
@@ -173,7 +113,7 @@ export async function generateMetadata({
 
 export default async function CreatorProfilePage({ params }: PageProps) {
   const { slug } = await params;
-  const creator = await getCreator(slug);
+  const creator = await getPublicCreator(slug);
 
   if (!creator) {
     // Renamed slugs (SlugRedirect) 308 to the canonical URL.
@@ -189,106 +129,8 @@ export default async function CreatorProfilePage({ params }: PageProps) {
     permanentRedirect(`/creator/${creator.mergedInto.slug}`);
   }
 
-  const isClaimed = creator.state === "claimed" || creator.state === "premium";
-  const lastUpdatedAt = getLatestTimestamp(
-    creator.platformAccounts.map((account) => account.lastSyncedAt),
-  );
-  const avatarUrl = resolveAvatar("creator", {
-    creator: {
-      avatarUrl: creator.avatarUrl,
-      customAvatarUrl: creator.customAvatarUrl,
-    },
-  });
-
-  // Data for CreatorHeader (card-style profile)
-  const headerData = {
-    id: creator.id,
-    displayName: creator.displayName,
-    slug: creator.slug,
-    avatarUrl,
-    bannerUrl: creator.bannerUrl,
-    bio: creator.bio,
-    country: creator.country,
-    language: creator.language,
-    age: creator.age,
-    state: creator.state,
-    primaryPlatform: creator.primaryPlatform,
-    totalFollowers: String(creator.totalFollowers),
-    lastSnapshotAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
-    platformAccounts: creator.platformAccounts.map((a) => ({
-      platform: a.platform,
-      platformUsername: a.platformUsername,
-      platformUrl: a.platformUrl,
-      followerCount: platformFollowerCount(a)?.toString() ?? null,
-      totalViews: a.totalViews ? String(a.totalViews) : null,
-      postCount: a.postCount ?? null,
-    })),
-    growthRollups: creator.growthRollups
-      .filter(isKnownGrowthRollup)
-      .map((g) => ({
-        platform: g.platform,
-        delta7d: String(g.delta7d),
-        pct7d: g.pct7d,
-        trendDirection: g.trendDirection,
-      })),
-  };
-
-  // Which client-loaded widgets have data, so the grid packs only cards that
-  // will render. Started here to run alongside the demographics queries.
-  const dataAvailabilityPromise = getProfileDataAvailability(db, creator);
-  // The Stats Row's opening period (the shortest one with streams).
-  const statsContextPromise = getStatsContext(db, creator.id);
-
-  const demographicAnalytics = creator.publicDemographicsEnabled
-    ? await db.creatorAnalytics.findMany({
-        where: { creatorProfileId: creator.id },
-        orderBy: [{ periodEnd: "desc" }, { periodStart: "desc" }],
-        select: {
-          platform: true,
-          ageGenderData: true,
-          countryData: true,
-        },
-        take: 10,
-      })
-    : [];
-
-  // Third-party social-audience estimates are public data (same category as
-  // follower counts) — fetched for every profile, no visibility flag. The
-  // widget prefers first-party analytics when both exist. Newest report
-  // first; reports too old to show are dropped and stale ones tagged.
-  const audienceDemographics = selectDisplayableDemographics(
-    (
-      await db.audienceDemographics.findMany({
-        where: { creatorProfileId: creator.id },
-        orderBy: { dpUpdatedAt: { sort: "desc", nulls: "last" } },
-        select: {
-          platform: true,
-          ages: true,
-          genders: true,
-          countries: true,
-          income: true,
-          reach: true,
-          dpUpdatedAt: true,
-        },
-      })
-    ).map((row) => ({
-      ...row,
-      reach: row.reach != null ? String(row.reach) : null,
-      dpUpdatedAt: row.dpUpdatedAt ? row.dpUpdatedAt.toISOString() : null,
-    })),
-  );
-
-  const [dataAvailability, statsContext] = await Promise.all([
-    dataAvailabilityPromise,
-    statsContextPromise,
-  ]);
-
-  // Data for DashboardGrid (same shape as dashboard page)
-  const serialized = {
-    ...(serializeBigInt(creator) as Record<string, unknown>),
-    demographicAnalytics: serializeBigInt(demographicAnalytics),
-    audienceDemographics,
-  } as unknown as SerializedProfile;
+  const view = await getPublicCreatorView(creator);
+  const avatarUrl = view.headerData.avatarUrl;
 
   // Person JSON-LD for rich results
   const jsonLd = {
@@ -332,7 +174,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
+    <div className="noticed">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -341,15 +183,7 @@ export default async function CreatorProfilePage({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <CreatorHeader creator={headerData} />
-      <DashboardGrid
-        profile={serialized}
-        widgetConfig={creator.widgetConfig}
-        isClaimed={isClaimed}
-        isOwner={false}
-        dataAvailability={dataAvailability}
-        statsContext={statsContext}
-      />
+      <CreatorProfileLayout {...view} />
     </div>
   );
 }

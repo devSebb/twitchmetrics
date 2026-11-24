@@ -1,4 +1,5 @@
 "use client";
+import { WidgetQueryError } from "./WidgetQueryError";
 
 import { useState } from "react";
 import { ViewerCountChart } from "@/components/charts";
@@ -24,11 +25,12 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
 
   // Server-side viewer extraction: StreamHatchet daily rollups when the
   // creator has them, else our own MetricSnapshots (see viewer-history.ts).
-  const { data, isLoading } = trpc.snapshot.getViewerHistory.useQuery({
-    creatorProfileId: profile.id,
-    platform: primaryPlatform,
-    period,
-  });
+  const { data, isLoading, isError, refetch } =
+    trpc.snapshot.getViewerHistory.useQuery({
+      creatorProfileId: profile.id,
+      platform: primaryPlatform,
+      period,
+    });
 
   // Every platform the creator streams on, the main one first. When the main
   // platform has nothing (an Instagram-first creator who streams on Kick),
@@ -45,7 +47,7 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
   const liveInfo = data?.liveInfo ?? null;
   const latestSnapshotAt = data?.latestAt ?? null;
 
-  if (!isLoading && chartData.length === 0 && !hasInteracted) {
+  if (!isLoading && !isError && chartData.length === 0 && !hasInteracted) {
     return <EmptyWidgetSentinel />;
   }
 
@@ -55,14 +57,14 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {liveInfo && (
-            <div className="flex items-center gap-1.5 rounded-full bg-[#ef4444]/20 px-2.5 py-0.5">
+            <div className="flex items-center gap-1.5 rounded-full bg-n-error/5 px-2.5 py-0.5">
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ef4444] opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#ef4444]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-n-error opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-n-error" />
               </span>
-              <span className="text-xs font-semibold text-[#ef4444]">LIVE</span>
+              <span className="text-xs font-semibold text-n-error">LIVE</span>
               {liveInfo.viewers !== null && (
-                <span className="text-xs font-medium text-[#F2F3F5]">
+                <span className="text-xs font-medium text-n-ink">
                   {formatNumber(liveInfo.viewers)}
                 </span>
               )}
@@ -75,14 +77,15 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
           {PERIODS.map((p) => (
             <button
               key={p}
+              aria-pressed={period === p}
               onClick={() => {
                 setHasInteracted(true);
                 setPeriod(p);
               }}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 period === p
-                  ? "bg-[#383A40] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                  ? "bg-n-surface text-n-ink"
+                  : "text-n-slate hover:bg-n-surface hover:text-n-ink"
               }`}
             >
               {p.toUpperCase()}
@@ -91,13 +94,20 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
         </div>
       </div>
 
-      <ViewerCountChart
-        data={chartData}
-        platform={main?.platform ?? primaryPlatform}
-        others={others}
-        loading={isLoading}
-        height={320}
-      />
+      {isError ? (
+        <WidgetQueryError
+          label="viewer history"
+          onRetry={() => void refetch()}
+        />
+      ) : (
+        <ViewerCountChart
+          data={chartData}
+          platform={main?.platform ?? primaryPlatform}
+          others={others}
+          loading={isLoading}
+          height={320}
+        />
+      )}
     </div>
   );
 }

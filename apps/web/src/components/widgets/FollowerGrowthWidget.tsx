@@ -1,9 +1,11 @@
 "use client";
+import { WidgetQueryError } from "./WidgetQueryError";
+import { useChartPalette } from "@/components/ui/Appearance";
 
 import { useState, useMemo } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import { FollowerGrowthChart } from "@/components/charts";
-import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
+
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { getGrowthPlatforms } from "@/lib/follower-growth";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
@@ -15,6 +17,7 @@ type FollowerGrowthWidgetProps = {
 };
 
 export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
+  const palette = useChartPalette();
   // Link-only social accounts have no snapshot history, so a growth tab for
   // them would render an empty chart; their follower counts still appear in
   // the header + the platform-breakdown widget.
@@ -90,21 +93,22 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
 
   // Hide the card only when the widget mounts with no data at all; after an
   // interaction, show an inline empty state for the selected platform instead.
-  if (isEmptySelection && !hasInteracted) {
+  if (isEmptySelection && !primaryQuery.isError && !hasInteracted) {
     return <EmptyWidgetSentinel />;
   }
 
   return (
     <div>
       {/* Platform tabs */}
-      <div className="mb-3 flex items-center gap-1">
+      <div className="mb-3 flex flex-wrap items-center gap-1">
         {connectedPlatforms.length > 1 && (
           <button
+            aria-pressed={platform === "all"}
             onClick={() => selectPlatform("all")}
             className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               platform === "all"
-                ? "bg-[#383A40] text-[#F2F3F5]"
-                : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                ? "bg-n-surface text-n-ink"
+                : "text-n-slate hover:bg-n-surface hover:text-n-ink"
             }`}
           >
             All
@@ -113,18 +117,19 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
         {connectedPlatforms.map((p) => (
           <button
             key={p}
+            aria-pressed={platform === p}
             onClick={() => selectPlatform(p)}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               platform === p
-                ? "bg-[#383A40] text-[#F2F3F5]"
-                : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                ? "bg-n-surface text-n-ink"
+                : "text-n-slate hover:bg-n-surface hover:text-n-ink"
             }`}
           >
             <span
               className="inline-block h-2 w-2 rounded-full"
               style={{
                 backgroundColor:
-                  CHART_PLATFORM_COLORS[p] ?? PLATFORM_CONFIG[p].color,
+                  palette.platforms[p] ?? PLATFORM_CONFIG[p].color,
               }}
             />
             {PLATFORM_CONFIG[p].name}
@@ -138,26 +143,25 @@ export function FollowerGrowthWidget({ profile }: FollowerGrowthWidgetProps) {
           profiles={connectedPlatforms}
           queries={allQueries}
           period={period}
-          onPeriodChange={setPeriod}
+          onPeriodChange={(value) => {
+            setHasInteracted(true);
+            setPeriod(value);
+          }}
         />
-      ) : isEmptySelection ? (
-        <div className="flex h-[400px] items-center justify-center rounded-lg border border-[#3F4147] bg-[#313338]">
-          <div className="px-6 text-center">
-            <p className="text-sm font-medium text-[#DBDEE1]">
-              No follower history for {PLATFORM_CONFIG[platform].name} yet
-            </p>
-            <p className="mt-1 text-xs text-[#949BA4]">
-              We track this account but haven&apos;t collected follower
-              snapshots for it.
-            </p>
-          </div>
-        </div>
+      ) : primaryQuery.isError ? (
+        <WidgetQueryError
+          label="follower history"
+          onRetry={() => void primaryQuery.refetch()}
+        />
       ) : (
         <FollowerGrowthChart
           data={chartData}
           platform={platform}
           period={period}
-          onPeriodChange={setPeriod}
+          onPeriodChange={(value) => {
+            setHasInteracted(true);
+            setPeriod(value);
+          }}
           loading={isLoading}
         />
       )}
@@ -193,6 +197,7 @@ function AllPlatformsChart({
   period,
   onPeriodChange,
 }: AllPlatformsChartProps) {
+  const palette = useChartPalette();
   const isLoading = queries.some((q) => q.isLoading);
 
   const option = useMemo((): EChartsOption => {
@@ -222,7 +227,7 @@ function AllPlatformsChart({
 
     const series = profiles.map((p) => {
       const map = platformData[p];
-      const color = CHART_PLATFORM_COLORS[p] ?? PLATFORM_CONFIG[p].color;
+      const color = palette.platforms[p] ?? PLATFORM_CONFIG[p].color;
       return {
         type: "line" as const,
         name: PLATFORM_CONFIG[p].name,
@@ -292,26 +297,36 @@ function AllPlatformsChart({
       dataZoom: [{ type: "slider", start: 0, end: 100, height: 24, bottom: 8 }],
       series,
     };
-  }, [profiles, queries]);
+  }, [profiles, queries, palette]);
 
   return (
     <div>
-      <div className="mb-3 flex gap-1">
+      <div className="mb-3 flex flex-wrap gap-1">
         {PERIODS.map((p) => (
           <button
             key={p}
+            aria-pressed={period === p}
             onClick={() => onPeriodChange(p)}
             className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               period === p
-                ? "bg-[#383A40] text-[#F2F3F5]"
-                : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                ? "bg-n-surface text-n-ink"
+                : "text-n-slate hover:bg-n-surface hover:text-n-ink"
             }`}
           >
             {p === "all" ? "All" : p.toUpperCase()}
           </button>
         ))}
       </div>
-      <BaseChart option={option} height={400} loading={isLoading} />
+      {queries.some((query) => query.isError) ? (
+        <WidgetQueryError
+          label="platform histories"
+          onRetry={() => {
+            queries.forEach((query) => void query.refetch());
+          }}
+        />
+      ) : (
+        <BaseChart option={option} height={400} loading={isLoading} />
+      )}
     </div>
   );
 }

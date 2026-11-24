@@ -7,7 +7,7 @@
     @apply bg-background text-text-primary;
   }
 
-  /* Themed scrollbars — thin, rounded, matching the dark surface palette.
+  /* Themed scrollbars — thin, rounded, matching the shared palette.
      `scrollbar-color` covers Chrome 121+/Firefox; the -webkit rules cover
      Safari and older Chromium. */
   * {
@@ -47,19 +47,19 @@
 
 @layer components {
   .legal-prose {
-    @apply text-sm leading-relaxed text-[#DBDEE1];
+    @apply text-base leading-relaxed text-n-ink;
   }
   .legal-prose h2 {
-    @apply mt-10 text-xl font-semibold text-[#F2F3F5];
+    @apply mt-10 text-xl font-semibold text-n-ink;
   }
   .legal-prose h2:first-child {
     @apply mt-0;
   }
   .legal-prose h3 {
-    @apply mt-6 text-base font-semibold text-[#F2F3F5];
+    @apply mt-6 text-base font-semibold text-n-ink;
   }
   .legal-prose h4 {
-    @apply mt-5 text-sm font-semibold text-[#DBDEE1];
+    @apply mt-5 text-sm font-semibold text-n-ink;
   }
   .legal-prose p {
     @apply mt-3;
@@ -78,18 +78,18 @@
     @apply marker:text-[#6D7079];
   }
   .legal-prose a {
-    @apply text-[#E32C19] underline-offset-2 hover:underline;
+    @apply text-n-red underline-offset-2 underline hover:no-underline;
   }
   .legal-prose strong {
-    @apply font-semibold text-[#F2F3F5];
+    @apply font-semibold text-n-ink;
   }
   .legal-prose code {
-    @apply rounded bg-[#2B2D31] px-1 py-0.5 font-mono text-xs text-[#F2F3F5];
+    @apply rounded bg-n-canvas px-1 py-0.5 font-mono text-xs text-n-ink;
   }
   .legal-prose blockquote {
-    @apply mt-3 border-l-2 border-[#3F4147] pl-4 italic text-[#949BA4];
+    @apply mt-3 border-l-2 border-n-line pl-4 italic text-n-slate;
   }
   .legal-prose hr {
-    @apply my-8 border-[#3F4147];
+    @apply my-8 border-n-line;
   }
 }

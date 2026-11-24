@@ -82,20 +82,20 @@ export function NotificationBell({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={`Notifications${totalCount > 0 ? ` (${totalCount})` : ""}`}
-        className="relative rounded-md p-2 text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+        className="relative inline-flex h-11 w-11 items-center justify-center rounded-md p-2 text-n-slate transition-colors hover:text-n-ink"
       >
         <Bell size={20} weight="duotone" />
         {totalCount > 0 && (
-          <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#E32C19] px-1 text-[9px] font-bold text-white">
+          <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-n-red px-1 text-[9px] font-bold text-white">
             {totalCount > 9 ? "9+" : totalCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-80 overflow-hidden rounded-lg border border-[#3F4147] bg-[#1E1F22] shadow-xl">
-          <div className="border-b border-[#3F4147] px-4 py-2.5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#F2F3F5]">
+        <div className="absolute right-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-lg border border-n-line bg-n-canvas shadow-xl">
+          <div className="border-b border-n-line px-4 py-2.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-n-ink">
               Notifications
             </p>
           </div>
@@ -104,7 +104,7 @@ export function NotificationBell({
             {/* Roster invitations section */}
             {inviteCount > 0 && (
               <div>
-                <p className="px-4 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-[#949BA4]">
+                <p className="px-4 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-n-slate">
                   Roster invitations
                 </p>
                 {invites.map((invite) => {
@@ -114,7 +114,7 @@ export function NotificationBell({
                   return (
                     <div
                       key={invite.accessId}
-                      className="border-b border-[#2B2D31] px-4 py-3 last:border-b-0"
+                      className="border-b border-n-surface px-4 py-3 last:border-b-0"
                     >
                       <div className="flex items-start gap-2.5">
                         {avatarSrc ? (
@@ -126,12 +126,12 @@ export function NotificationBell({
                             className="rounded-full"
                           />
                         ) : (
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#383A40] text-xs font-bold text-[#F2F3F5]">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-n-surface text-xs font-bold text-n-ink">
                             {invite.manager.displayName.charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs text-[#DBDEE1]">
+                          <p className="text-xs text-n-ink">
                             <span className="font-semibold">
                               {invite.manager.displayName}
                             </span>{" "}
@@ -141,7 +141,7 @@ export function NotificationBell({
                             </span>
                           </p>
                           {invite.inviteExpiresAt && (
-                            <p className="mt-0.5 text-[10px] text-[#949BA4]">
+                            <p className="mt-0.5 text-[10px] text-n-slate">
                               Expires{" "}
                               {new Date(
                                 invite.inviteExpiresAt,
@@ -160,7 +160,7 @@ export function NotificationBell({
                                 acceptMutation.isPending ||
                                 declineMutation.isPending
                               }
-                              className="rounded-md bg-[#E32C19] px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
+                              className="rounded-md bg-n-red px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-n-red-hover disabled:opacity-50"
                             >
                               Accept
                             </button>
@@ -175,7 +175,7 @@ export function NotificationBell({
                                 acceptMutation.isPending ||
                                 declineMutation.isPending
                               }
-                              className="rounded-md border border-[#3F4147] bg-[#383A40] px-2.5 py-1 text-[11px] font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058] disabled:opacity-50"
+                              className="rounded-md border border-n-line bg-n-surface px-2.5 py-1 text-[11px] font-semibold text-n-ink transition-colors hover:bg-n-control disabled:opacity-50"
                             >
                               Decline
                             </button>
@@ -191,19 +191,19 @@ export function NotificationBell({
             {/* Admin pending claims section */}
             {userRole === "admin" && adminCount > 0 && (
               <div>
-                <p className="px-4 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-[#949BA4]">
+                <p className="px-4 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-n-slate">
                   Pending claim reviews
                 </p>
                 <Link
                   href="/dashboard/admin/claims"
                   onClick={() => setOpen(false)}
-                  className="block border-b border-[#2B2D31] px-4 py-3 transition-colors hover:bg-[#313338] last:border-b-0"
+                  className="block border-b border-n-surface px-4 py-3 transition-colors hover:bg-n-surface last:border-b-0"
                 >
-                  <p className="text-xs text-[#DBDEE1]">
+                  <p className="text-xs text-n-ink">
                     <span className="font-semibold">{adminCount}</span> claim
                     {adminCount === 1 ? "" : "s"} awaiting review
                   </p>
-                  <p className="mt-0.5 text-[10px] text-[#949BA4]">
+                  <p className="mt-0.5 text-[10px] text-n-slate">
                     Open claim queue →
                   </p>
                 </Link>
@@ -213,10 +213,7 @@ export function NotificationBell({
             {/* Empty state */}
             {totalCount === 0 && (
               <div
-                className={cn(
-                  "px-4 py-8 text-center",
-                  "text-xs text-[#949BA4]",
-                )}
+                className={cn("px-4 py-8 text-center", "text-xs text-n-slate")}
               >
                 You&apos;re all caught up.
               </div>

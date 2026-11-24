@@ -1,5 +1,3 @@
-import { Card } from "@/components/ui";
-
 type CreatorQuickStatsProps = {
   totalFollowers: string;
   growth7d: string;
@@ -15,30 +13,28 @@ export function CreatorQuickStats({
 }: CreatorQuickStatsProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <Card>
-        <p className="text-xs uppercase text-[#949BA4]">Total followers</p>
-        <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
-          {totalFollowers}
-        </p>
-      </Card>
-      <Card>
-        <p className="text-xs uppercase text-[#949BA4]">7d growth</p>
-        <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">{growth7d}</p>
-      </Card>
-      <Card>
-        <p className="text-xs uppercase text-[#949BA4]">Connected platforms</p>
-        <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
+      <div className="border-t border-n-line py-5">
+        <p className="text-xs uppercase text-n-slate">Total followers</p>
+        <p className="mt-1 text-3xl font-bold text-n-ink">{totalFollowers}</p>
+      </div>
+      <div className="border-t border-n-line py-5">
+        <p className="text-xs uppercase text-n-slate">7d growth</p>
+        <p className="mt-1 text-3xl font-bold text-n-ink">{growth7d}</p>
+      </div>
+      <div className="border-t border-n-line py-5">
+        <p className="text-xs uppercase text-n-slate">Connected platforms</p>
+        <p className="mt-1 text-3xl font-bold text-n-ink">
           {connectedPlatforms}
         </p>
-      </Card>
-      <Card>
-        <p className="text-xs uppercase text-[#949BA4]">Last enrichment</p>
-        <p className="mt-1 text-sm text-[#F2F3F5]">
+      </div>
+      <div className="border-t border-n-line py-5">
+        <p className="text-xs uppercase text-n-slate">Last enrichment</p>
+        <p className="mt-1 text-sm text-n-ink">
           {lastEnrichmentAt
             ? new Date(lastEnrichmentAt).toLocaleString()
             : "Not available yet"}
         </p>
-      </Card>
+      </div>
     </div>
   );
 }

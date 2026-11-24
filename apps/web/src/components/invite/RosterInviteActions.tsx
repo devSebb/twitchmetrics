@@ -39,11 +39,11 @@ export function RosterInviteActions({ accessId }: RosterInviteActionsProps) {
 
   if (done === "accepted") {
     return (
-      <div className="rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 p-4 text-center">
-        <p className="text-sm font-semibold text-[#86efac]">
+      <div className="rounded-xl border border-n-success/40 bg-n-success/10 p-4 text-center">
+        <p className="text-sm font-semibold text-n-success">
           Invitation accepted
         </p>
-        <p className="mt-1 text-xs text-[#DBDEE1]">
+        <p className="mt-1 text-xs text-n-ink">
           Redirecting to your dashboard…
         </p>
       </div>
@@ -52,11 +52,9 @@ export function RosterInviteActions({ accessId }: RosterInviteActionsProps) {
 
   if (done === "declined") {
     return (
-      <div className="rounded-xl border border-[#3F4147] bg-[#1E1F22] p-4 text-center">
-        <p className="text-sm font-semibold text-[#DBDEE1]">
-          Invitation declined
-        </p>
-        <p className="mt-1 text-xs text-[#949BA4]">
+      <div className="rounded-xl border border-n-line bg-white p-4 text-center">
+        <p className="text-sm font-semibold text-n-ink">Invitation declined</p>
+        <p className="mt-1 text-xs text-n-slate">
           The manager has been notified.
         </p>
       </div>
@@ -70,7 +68,7 @@ export function RosterInviteActions({ accessId }: RosterInviteActionsProps) {
           type="button"
           onClick={() => accept.mutate({ accessId })}
           disabled={isPending}
-          className="flex-1 rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
+          className="flex-1 rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:opacity-50"
         >
           {accept.isPending ? "Accepting…" : "Accept invitation"}
         </button>
@@ -78,12 +76,12 @@ export function RosterInviteActions({ accessId }: RosterInviteActionsProps) {
           type="button"
           onClick={() => decline.mutate({ accessId })}
           disabled={isPending}
-          className="rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-2.5 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058] disabled:opacity-50"
+          className="rounded-lg border border-n-line bg-n-surface px-4 py-2.5 text-sm font-semibold text-n-ink transition-colors hover:bg-n-surface disabled:opacity-50"
         >
           {decline.isPending ? "Declining…" : "Decline"}
         </button>
       </div>
-      {error && <p className="text-xs text-[#f87171]">{error}</p>}
+      {error && <p className="text-xs text-n-error">{error}</p>}
     </div>
   );
 }

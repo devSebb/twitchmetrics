@@ -27,14 +27,14 @@ export function InvitePreviewCard({
   const bioText = bio?.trim() || null;
 
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-5">
+    <div className="rounded-xl border border-n-line bg-white p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#F2F3F5]">Invite preview</h3>
-        <span className="rounded bg-[#383A40] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#949BA4]">
+        <h3 className="text-sm font-semibold text-n-ink">Invite preview</h3>
+        <span className="rounded bg-n-surface px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-n-slate">
           What creators see
         </span>
       </div>
-      <div className="rounded-lg border border-[#3F4147] bg-[#1E1F22] p-4">
+      <div className="rounded-lg border border-n-line bg-white p-4">
         <div className="flex items-center gap-3">
           {safeImage ? (
             <Image
@@ -45,25 +45,25 @@ export function InvitePreviewCard({
               className="rounded-full"
             />
           ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#383A40] text-lg font-bold text-[#F2F3F5]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-n-surface text-lg font-bold text-n-ink">
               {name.charAt(0).toUpperCase()}
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-[#949BA4]">
+            <p className="text-xs uppercase tracking-wider text-n-slate">
               Roster invitation
             </p>
-            <p className="text-base font-bold text-[#F2F3F5]">
+            <p className="text-base font-bold text-n-ink">
               {name}{" "}
-              <span className="font-normal text-[#DBDEE1]">
+              <span className="font-normal text-n-ink">
                 would like to manage you
               </span>
             </p>
-            {agency && <p className="text-xs text-[#949BA4]">{agency}</p>}
+            {agency && <p className="text-xs text-n-slate">{agency}</p>}
           </div>
         </div>
         {bioText && (
-          <p className="mt-3 text-xs italic text-[#DBDEE1]">
+          <p className="mt-3 text-xs italic text-n-ink">
             &ldquo;{bioText}&rdquo;
           </p>
         )}

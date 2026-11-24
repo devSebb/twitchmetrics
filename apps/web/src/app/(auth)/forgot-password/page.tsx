@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 
 export default function ForgotPasswordPage() {
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-lg">
       <Link
         href="/login"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-n-slate transition-colors hover:text-n-ink"
       >
         <svg
           className="h-4 w-4"
@@ -30,16 +30,16 @@ export default function ForgotPasswordPage() {
         Back
       </Link>
 
-      <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-8 text-center shadow-xl">
+      <div className="text-left">
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.16em] text-[#949BA4]">
+          <p className="text-xs uppercase tracking-[0.16em] text-n-slate">
             Account Recovery
           </p>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-[#F2F3F5]">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-n-ink">
             Reset Password
           </h1>
-          <p className="text-sm text-[#949BA4]">
-            Get a secure link for your TwitchMetrics account
+          <p className="text-sm text-n-slate">
+            Get a secure link for your Noticed account
           </p>
         </div>
 

@@ -43,19 +43,19 @@ export default async function DashboardHomePage() {
     ]);
 
     return (
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[1280px] space-y-6 px-4 py-8 sm:px-6">
         <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-[#949BA4]">
+          <h1 className="text-3xl font-bold text-n-ink">Admin Dashboard</h1>
+          <p className="mt-1 text-sm text-n-slate">
             Platform overview and claim management.
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
-            <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
+            <p className="text-xs font-medium uppercase tracking-wider text-n-slate">
               Pending claims
             </p>
-            <p className="mt-1 text-3xl font-bold text-[#F2F3F5]">
+            <p className="mt-1 text-3xl font-bold text-n-ink">
               {pendingClaims}
             </p>
             <Link
@@ -66,7 +66,7 @@ export default async function DashboardHomePage() {
             </Link>
           </Card>
           <Card>
-            <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
+            <p className="text-xs font-medium uppercase tracking-wider text-n-slate">
               Platform health
             </p>
             <div className="mt-3 space-y-2">
@@ -75,10 +75,10 @@ export default async function DashboardHomePage() {
                   key={item.platform}
                   className="flex items-center justify-between"
                 >
-                  <span className="text-sm capitalize text-[#DBDEE1]">
+                  <span className="text-sm capitalize text-n-ink">
                     {item.platform}
                   </span>
-                  <span className="rounded-full bg-[#383A40] px-2.5 py-0.5 text-xs font-medium text-[#F2F3F5]">
+                  <span className="rounded-full bg-n-surface px-2.5 py-0.5 text-xs font-medium text-n-ink">
                     {item._count._all}
                   </span>
                 </div>
@@ -87,30 +87,28 @@ export default async function DashboardHomePage() {
           </Card>
         </div>
         <Card>
-          <h2 className="text-lg font-semibold text-[#F2F3F5]">
-            Recent claims
-          </h2>
-          <div className="mt-3 divide-y divide-[#3F4147]">
+          <h2 className="text-lg font-semibold text-n-ink">Recent claims</h2>
+          <div className="mt-3 divide-y divide-n-line">
             {recentClaims.length > 0 ? (
               recentClaims.map((claim) => (
                 <div
                   key={claim.id}
                   className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
                 >
-                  <span className="text-sm text-[#DBDEE1]">
+                  <span className="text-sm text-n-ink">
                     {claim.creatorProfile.displayName}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="rounded bg-[#383A40] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#949BA4]">
+                    <span className="rounded bg-n-surface px-2 py-0.5 text-[10px] uppercase tracking-wide text-n-slate">
                       {claim.method}
                     </span>
                     <span
                       className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase ${
                         claim.status === "pending"
-                          ? "bg-[#f59e0b]/10 text-[#fcd34d]"
+                          ? "bg-n-warning/10 text-n-warning"
                           : claim.status === "approved"
-                            ? "bg-[#22c55e]/10 text-[#86efac]"
-                            : "bg-[#ef4444]/10 text-[#fca5a5]"
+                            ? "bg-n-success/10 text-[#86efac]"
+                            : "bg-n-error/10 text-n-error"
                       }`}
                     >
                       {claim.status}
@@ -119,7 +117,7 @@ export default async function DashboardHomePage() {
                 </div>
               ))
             ) : (
-              <p className="py-3 text-sm text-[#949BA4]">
+              <p className="py-3 text-sm text-n-slate">
                 No claim activity yet.
               </p>
             )}
@@ -167,36 +165,36 @@ export default async function DashboardHomePage() {
     creatorProfile.platformAccounts.length === 0
   ) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[1280px] space-y-10 px-5 py-10 sm:px-8 lg:px-10">
         <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">
+          <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
             Welcome, {user?.name ?? "Creator"}
           </h1>
-          <p className="mt-1 text-sm text-[#949BA4]">
+          <p className="mt-1 text-sm text-n-slate">
             Connect your streaming platforms to start tracking your growth.
           </p>
         </div>
-        <Card>
+        <Card appearance="noticed">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-[#F2F3F5]">
+              <h2 className="text-base font-semibold text-n-ink">
                 Get started
               </h2>
-              <p className="mt-1 text-sm text-[#949BA4]">
+              <p className="mt-1 text-sm text-n-slate">
                 Link your Twitch, YouTube, or other accounts to begin importing
                 your channel data and analytics.
               </p>
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               <Link
                 href="/dashboard/connections"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#E32C19] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
+                className="inline-flex items-center gap-2 rounded-lg bg-n-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-n-red-hover"
               >
                 Connect platforms
               </Link>
               <Link
                 href="/dashboard/claim"
-                className="inline-flex items-center gap-2 rounded-lg border border-[#3F4147] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
+                className="inline-flex items-center gap-2 rounded-lg border border-n-line px-4 py-2 text-sm font-medium text-n-ink transition-colors hover:bg-n-surface"
               >
                 Claim existing profile
               </Link>
@@ -219,13 +217,14 @@ export default async function DashboardHomePage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-[1280px] space-y-10 px-5 py-10 sm:px-8 lg:px-10">
       <div>
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">
+        <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
           Welcome back, {user?.name ?? "Creator"}
         </h1>
-        <p className="mt-1 text-sm text-[#949BA4]">
-          Snapshot of your creator performance and quick actions.
+        <p className="mt-1 text-sm text-n-slate">
+          Your audience at a glance. Keep your profile current and explore your
+          connected insights.
         </p>
       </div>
 
@@ -236,14 +235,12 @@ export default async function DashboardHomePage() {
         lastEnrichmentAt={latestAnalytics?.fetchedAt.toISOString() ?? null}
       />
 
-      <Card>
-        <h2 className="text-base font-semibold text-[#F2F3F5]">
-          Quick actions
-        </h2>
+      <Card appearance="noticed">
+        <h2 className="text-base font-semibold text-n-ink">Quick actions</h2>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Link
             href={`/creator/${creatorProfile.slug}`}
-            className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-3 text-sm text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            className="flex items-center gap-2 rounded-lg border border-n-line bg-n-surface px-4 py-3 text-sm text-n-ink transition-colors hover:bg-n-line"
           >
             <svg
               width="14"
@@ -263,7 +260,7 @@ export default async function DashboardHomePage() {
           </Link>
           <Link
             href="/dashboard/connections"
-            className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-3 text-sm text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            className="flex items-center gap-2 rounded-lg border border-n-line bg-n-surface px-4 py-3 text-sm text-n-ink transition-colors hover:bg-n-line"
           >
             <svg
               width="14"
@@ -282,7 +279,7 @@ export default async function DashboardHomePage() {
           </Link>
           <Link
             href="/dashboard/analytics"
-            className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-3 text-sm text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            className="flex items-center gap-2 rounded-lg border border-n-line bg-n-surface px-4 py-3 text-sm text-n-ink transition-colors hover:bg-n-line"
           >
             <svg
               width="14"

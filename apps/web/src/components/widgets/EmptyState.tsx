@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui";
 
 type EmptyStateVariant = "no_data" | "locked";
 
@@ -66,31 +65,29 @@ export function EmptyState({
         compact ? "py-6 px-4" : "py-10 px-6"
       } ${
         isLocked
-          ? "rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31]/50"
-          : "rounded-lg border border-dashed border-[#3F4147]"
+          ? "rounded-lg border border-dashed border-n-line bg-n-canvas"
+          : "rounded-lg border border-dashed border-n-line"
       } ${className ?? ""}`}
     >
-      <div className={`mb-3 text-[#949BA4] ${isLocked ? "opacity-60" : ""}`}>
+      <div className={`mb-3 text-n-slate ${isLocked ? "opacity-60" : ""}`}>
         {icon ?? (isLocked ? <LockIcon /> : <EmptyIcon />)}
       </div>
 
       <h4
-        className={`text-sm font-semibold ${compact ? "text-xs" : "text-sm"} text-[#DBDEE1]`}
+        className={`text-sm font-semibold ${compact ? "text-xs" : "text-sm"} text-n-ink`}
       >
         {title}
       </h4>
 
       <p
-        className={`mt-1 max-w-xs text-[#949BA4] ${compact ? "text-xs" : "text-xs"}`}
+        className={`mt-1 max-w-xs text-n-slate ${compact ? "text-xs" : "text-xs"}`}
       >
         {message}
       </p>
 
       {actionLabel && actionHref ? (
-        <Link href={actionHref} className="mt-4">
-          <Button variant={isLocked ? "primary" : "secondary"} size="sm">
-            {actionLabel}
-          </Button>
+        <Link href={actionHref} className={"n-button n-button-secondary mt-4"}>
+          {actionLabel}
         </Link>
       ) : null}
     </div>

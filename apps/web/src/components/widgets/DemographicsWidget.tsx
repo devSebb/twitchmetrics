@@ -1,10 +1,12 @@
 "use client";
+import { useChartPalette } from "@/components/ui/Appearance";
 
+import { CountryFlag } from "@/components/shared/CountryFlag";
 import { useMemo, useState } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import { EmptyState } from "@/components/widgets/EmptyState";
 import { EmptyWidgetSentinel } from "@/components/dashboard/WidgetCard";
-import { CHART_PLATFORM_COLORS } from "@/components/charts/theme";
+
 import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { SOCIAL_AGE_LABELS, labeledBars } from "@/lib/social-age-buckets";
 import { trpc } from "@/lib/trpc";
@@ -38,16 +40,6 @@ function formatPercent(value: number): string {
 function normalizeLabel(value: string): string {
   if (value.toLowerCase() === "unknown") return "Unknown";
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function countryCodeToFlag(code: string): string | null {
-  const normalized = code.trim().toUpperCase();
-  if (!/^[A-Z]{2}$/.test(normalized)) return null;
-
-  return normalized
-    .split("")
-    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-    .join("");
 }
 
 function countryDisplayName(code: string): string {
@@ -201,10 +193,10 @@ function AudienceSummary({
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
       {visible.map((gender) => (
         <div key={gender.key} className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold leading-none text-[#F2F3F5]">
+          <span className="text-2xl font-bold leading-none text-n-ink">
             {formatPercent(gender.value)}
           </span>
-          <span className="text-xs font-semibold text-[#949BA4]">
+          <span className="text-xs font-semibold text-n-slate">
             {gender.name}
           </span>
         </div>
@@ -223,14 +215,12 @@ function AgeBars({
       {ageRanges.map((age) => (
         <div key={age.range}>
           <div className="mb-1 flex items-center justify-between text-xs font-semibold">
-            <span className="text-[#F2F3F5]">{age.range}</span>
-            <span className="text-[#F2F3F5]">
-              {formatPercent(age.percentage)}
-            </span>
+            <span className="text-n-ink">{age.range}</span>
+            <span className="text-n-ink">{formatPercent(age.percentage)}</span>
           </div>
-          <div className="h-3 overflow-hidden rounded-full bg-[#3F4147]">
+          <div className="h-3 overflow-hidden rounded-full bg-n-line">
             <div
-              className="h-full rounded-full bg-[#E32C19]"
+              className="h-full rounded-full bg-n-red"
               style={{ width: `${Math.min(age.percentage * 100, 100)}%` }}
             />
           </div>
@@ -248,7 +238,6 @@ function CountryRows({
   return (
     <div className="space-y-5">
       {countries.map((country) => {
-        const flag = countryCodeToFlag(country.country);
         const label = countryDisplayName(country.country);
         return (
           <div
@@ -256,12 +245,12 @@ function CountryRows({
             className="flex items-center justify-between gap-4"
           >
             <div className="flex min-w-0 items-center gap-2">
-              <span className="text-lg leading-none">{flag ?? "🌐"}</span>
-              <span className="truncate text-lg font-semibold text-[#F2F3F5]">
+              <CountryFlag code={country.country} />
+              <span className="truncate text-lg font-semibold text-n-ink">
                 {label}
               </span>
             </div>
-            <span className="shrink-0 text-lg font-bold text-[#F2F3F5]">
+            <span className="shrink-0 text-lg font-bold text-n-ink">
               {formatPercent(country.percentage)}
             </span>
           </div>
@@ -330,6 +319,7 @@ function SocialAudienceContent({
 }: {
   rows: SerializedAudienceDemographics[];
 }) {
+  const palette = useChartPalette();
   const usable = useMemo(() => rows.filter(hasSocialData), [rows]);
   const [selected, setSelected] = useState<Platform | null>(null);
   const row = usable.find((r) => r.platform === selected) ?? usable[0];
@@ -369,17 +359,18 @@ function SocialAudienceContent({
                 <button
                   key={r.platform}
                   onClick={() => setSelected(r.platform)}
+                  aria-pressed={r.platform === row.platform}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                     r.platform === row.platform
-                      ? "bg-[#383A40] text-[#F2F3F5]"
-                      : "text-[#949BA4] hover:bg-[#383A40] hover:text-[#DBDEE1]"
+                      ? "bg-n-surface text-n-ink"
+                      : "text-n-slate hover:bg-n-surface hover:text-n-ink"
                   }`}
                 >
                   <span
                     className="inline-block h-2 w-2 rounded-full"
                     style={{
                       backgroundColor:
-                        CHART_PLATFORM_COLORS[r.platform] ??
+                        palette.platforms[r.platform] ??
                         PLATFORM_CONFIG[r.platform].color,
                     }}
                   />
@@ -403,16 +394,14 @@ function SocialAudienceContent({
       <div className="grid gap-8 md:grid-cols-2">
         {ageRanges && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
-              Age range
-            </p>
+            <p className="mb-1 text-xs font-semibold text-n-slate">Age range</p>
             <AgeBars ageRanges={ageRanges} />
           </div>
         )}
 
         {countries && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
+            <p className="mb-1 text-xs font-semibold text-n-slate">
               Top countries
             </p>
             <div className="mt-4">
@@ -423,13 +412,13 @@ function SocialAudienceContent({
       </div>
 
       {row.freshness === "stale" ? (
-        <p className="text-right text-[10px] text-amber-400">
+        <p className="text-right text-[10px] text-n-warning">
           Estimated {platformName} audience · via DemographicsPro ·{" "}
           {asOf ? `report from ${asOf}` : "report date unknown"} — may be
           outdated
         </p>
       ) : (
-        <p className="text-right text-[10px] text-[#949BA4]">
+        <p className="text-right text-[10px] text-n-slate">
           Estimated {platformName} audience · via DemographicsPro
           {asOf ? ` · updated ${asOf}` : ""}
         </p>
@@ -602,7 +591,7 @@ function DemographicsDataContent({
   if (isLoading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#949BA4] border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-n-slate border-t-transparent" />
       </div>
     );
   }
@@ -638,16 +627,14 @@ function DemographicsDataContent({
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
         {ageData && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
-              Age range
-            </p>
+            <p className="mb-1 text-xs font-semibold text-n-slate">Age range</p>
             <AgeBars ageRanges={ageData} />
           </div>
         )}
 
         {countryData && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[#949BA4]">
+            <p className="mb-1 text-xs font-semibold text-n-slate">
               Top countries
             </p>
             <div className="mt-4">
@@ -658,7 +645,7 @@ function DemographicsDataContent({
       </div>
 
       {sourcePlatform && (
-        <p className="text-right text-[10px] text-[#949BA4]">
+        <p className="text-right text-[10px] text-n-slate">
           via {sourcePlatform.charAt(0).toUpperCase() + sourcePlatform.slice(1)}{" "}
           Analytics
         </p>

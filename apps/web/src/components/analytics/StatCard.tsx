@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Card } from "@/components/ui";
 
 type StatCardProps = {
   label: string;
@@ -10,24 +9,22 @@ type StatCardProps = {
 
 export function StatCard({ label, value, change, icon }: StatCardProps) {
   return (
-    <Card className="space-y-2">
+    <div className="min-w-0 space-y-2 border-t border-n-line py-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-wide text-[#949BA4]">
-          {label}
-        </p>
-        {icon ? <span className="text-[#949BA4]">{icon}</span> : null}
+        <p className="text-xs uppercase tracking-wide text-n-slate">{label}</p>
+        {icon ? <span className="text-n-slate">{icon}</span> : null}
       </div>
-      <p className="text-2xl font-bold text-[#F2F3F5]">{value}</p>
+      <p className="text-2xl font-bold text-n-ink">{value}</p>
       {typeof change === "number" ? (
         <p
           className={
-            change >= 0 ? "text-xs text-[#4ade80]" : "text-xs text-[#f87171]"
+            change >= 0 ? "text-xs text-n-success" : "text-xs text-n-error"
           }
         >
           {change >= 0 ? "+" : ""}
           {change.toFixed(1)}%
         </p>
       ) : null}
-    </Card>
+    </div>
   );
 }

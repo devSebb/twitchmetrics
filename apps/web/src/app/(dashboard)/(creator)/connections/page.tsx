@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 
 export default function ConnectionsPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-[1280px] space-y-6 px-4 py-8 sm:px-6">
       <div>
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">
+        <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
           Connected Platforms
         </h1>
-        <p className="mt-2 text-sm text-[#949BA4]">
+        <p className="mt-2 text-sm text-n-slate">
           Connect your platform accounts to sync private analytics, enable
           claims, and keep your profile data fresh.
         </p>

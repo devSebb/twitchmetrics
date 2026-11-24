@@ -24,7 +24,12 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
   const [view, setView] = useState<ViewMode>("grid");
   const utils = trpc.useUtils();
 
-  const { data: roster, isLoading } = trpc.talentManager.getRoster.useQuery();
+  const {
+    data: roster,
+    isLoading,
+    isError,
+    refetch,
+  } = trpc.talentManager.getRoster.useQuery();
 
   const removeMutation = trpc.talentManager.removeCreator.useMutation({
     onSuccess: async () => {
@@ -35,14 +40,22 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
   // Persist view preference per browser.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
-    if (stored === "grid" || stored === "list") setView(stored);
+    try {
+      const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+      if (stored === "grid" || stored === "list") setView(stored);
+    } catch {
+      /* A blocked preference store must not block the roster. */
+    }
   }, []);
 
   const handleViewChange = (next: ViewMode) => {
     setView(next);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+      try {
+        window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+      } catch {
+        /* The view still changes for this visit. */
+      }
     }
   };
 
@@ -94,12 +107,12 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-[1280px] px-5 py-10 sm:px-8 lg:px-10">
         <div className="mb-6 flex items-center justify-between">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-9 w-32" />
         </div>
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mb-10 grid grid-cols-1 gap-8 sm:grid-cols-3">
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
@@ -121,28 +134,31 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[1280px] px-5 py-10 sm:px-8 lg:px-10">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">Your Roster</h1>
-          <p className="mt-1 text-sm text-[#949BA4]">
-            Manage your creator partnerships and track their performance.
+          <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
+            Your roster
+          </h1>
+          <p className="mt-1 text-sm text-n-slate">
+            Your creators, their performance and the invitations that connect
+            you.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           {/* View toggle */}
-          <div className="flex items-center rounded-lg border border-[#3F4147] bg-[#1E1F22] p-0.5">
+          <div className="flex items-center rounded-lg border border-n-line bg-white p-0.5">
             <button
               type="button"
               onClick={() => handleViewChange("grid")}
               aria-label="Grid view"
               aria-pressed={view === "grid"}
               className={cn(
-                "rounded-md p-1.5 transition-colors",
+                "flex h-11 w-11 items-center justify-center rounded-md transition-colors",
                 view === "grid"
-                  ? "bg-[#313338] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:text-[#DBDEE1]",
+                  ? "bg-n-ink text-white"
+                  : "text-n-slate hover:text-n-ink",
               )}
             >
               <svg
@@ -167,10 +183,10 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
               aria-label="List view"
               aria-pressed={view === "list"}
               className={cn(
-                "rounded-md p-1.5 transition-colors",
+                "flex h-11 w-11 items-center justify-center rounded-md transition-colors",
                 view === "list"
-                  ? "bg-[#313338] text-[#F2F3F5]"
-                  : "text-[#949BA4] hover:text-[#DBDEE1]",
+                  ? "bg-n-ink text-white"
+                  : "text-n-slate hover:text-n-ink",
               )}
             >
               <svg
@@ -192,48 +208,76 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
               </svg>
             </button>
           </div>
-          <ExportRosterButton disabled={(roster?.length ?? 0) === 0} />
-          <Button onClick={() => setAddModalOpen(true)}>Invite Creator</Button>
+          <ExportRosterButton disabled={stats.activeCount === 0} />
+          <Button appearance="noticed" onClick={() => setAddModalOpen(true)}>
+            Invite Creator
+          </Button>
         </div>
       </div>
 
+      {isError && (
+        <div
+          role="alert"
+          className="mb-8 border-l-2 border-n-error bg-n-error/5 p-5 text-sm"
+        >
+          We couldn’t load your roster.{" "}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => refetch()}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+      {removeMutation.error && (
+        <p role="alert" className="mb-6 text-sm text-n-error">
+          {removeMutation.error.message}
+        </p>
+      )}
       {/* Stats Row */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
+      <div className="mb-10 grid grid-cols-1 gap-8 sm:grid-cols-3">
+        <div className="border-t border-n-line py-5">
+          <p className="text-xs font-medium uppercase tracking-wider text-n-slate">
             Active Creators
           </p>
-          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
+          <p className="mt-1 text-4xl font-bold tracking-tight text-n-ink">
             {stats.activeCount}
             {stats.pendingCount > 0 && (
-              <span className="ml-1 text-sm font-medium text-[#949BA4]">
-                (+{stats.pendingCount} pending)
+              <span className="ml-1 text-sm font-medium text-n-slate">
+                ({stats.pendingCount} awaiting acceptance)
               </span>
             )}
           </p>
-        </Card>
-        <Card className="text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
+        </div>
+        <div className="border-t border-n-line py-5">
+          <p className="text-xs font-medium uppercase tracking-wider text-n-slate">
             Combined Followers
           </p>
-          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
+          <p className="mt-1 text-4xl font-bold tracking-tight text-n-ink">
             {formatNumber(stats.totalFollowers)}
           </p>
-          <p className="text-[10px] text-[#949BA4]">active roster only</p>
-        </Card>
-        <Card className="text-center">
-          <p className="text-xs font-medium uppercase tracking-wider text-[#949BA4]">
+          <p className="text-xs text-n-slate">active roster only</p>
+        </div>
+        <div className="border-t border-n-line py-5">
+          <p className="text-xs font-medium uppercase tracking-wider text-n-slate">
             Avg. Growth (7d)
           </p>
-          <p className="mt-1 text-2xl font-bold text-[#F2F3F5]">
+          <p className="mt-1 text-4xl font-bold tracking-tight text-n-ink">
             {formatPercent(stats.avgGrowth)}
           </p>
-          <p className="text-[10px] text-[#949BA4]">active roster only</p>
-        </Card>
+          <p className="text-xs text-n-slate">active roster only</p>
+        </div>
       </div>
 
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-n-line pb-4">
+        <h2 className="text-xl font-bold">Creators & invitations</h2>
+        <p className="text-sm text-n-slate">
+          Only accepted invitations grant access to a creator’s shared data.
+        </p>
+      </div>
       {/* Roster */}
-      {rosterRows.length > 0 ? (
+      {isError ? null : rosterRows.length > 0 ? (
         view === "grid" ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rosterRows.map((row) => (
@@ -257,8 +301,8 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
           />
         )
       ) : (
-        <Card className="py-12 text-center">
-          <div className="mb-3 text-[#949BA4]">
+        <Card appearance="noticed" className="py-12 text-center">
+          <div className="mb-3 text-n-slate">
             <svg
               width="36"
               height="36"
@@ -276,14 +320,15 @@ export function ManagerDashboard({ userId: _userId }: ManagerDashboardProps) {
               <line x1="22" y1="11" x2="16" y2="11" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-[#DBDEE1]">
+          <p className="text-sm font-medium text-n-ink">
             No creators in your roster yet
           </p>
-          <p className="mt-1 text-xs text-[#949BA4]">
+          <p className="mt-1 text-xs text-n-slate">
             Invite creators to manage their profiles. They&apos;ll need to
             accept the invitation before you gain analytics access.
           </p>
           <Button
+            appearance="noticed"
             size="sm"
             className="mt-4"
             onClick={() => setAddModalOpen(true)}

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { SITE_URL, SITE_NAME } from "@/lib/constants/seo";
+import { SITE_URL } from "@/lib/constants/seo";
 import { ReportRequestForm } from "@/components/reports/ReportRequestForm";
 import { IndustryInquiryCTA } from "@/components/reports/IndustryInquiryCTA";
 
 export const metadata: Metadata = {
-  title: `Performance Report | ${SITE_NAME}`,
+  title: "Performance Report",
   description:
     "Tailor your perfect report on creators, games, and the overall industry.",
   robots: { index: false, follow: false },
@@ -25,11 +25,11 @@ export default async function ReportRequestPage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <div className="n-form mx-auto max-w-[1280px] px-5 py-12 sm:px-8 sm:py-16 lg:px-10">
       {/* Back link */}
       <Link
         href="/reports"
-        className="mb-8 inline-flex items-center gap-1.5 text-sm text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+        className="mb-8 inline-flex items-center gap-1.5 text-sm text-n-slate transition-colors hover:text-n-ink"
       >
         <svg
           width="16"
@@ -48,13 +48,13 @@ export default async function ReportRequestPage({ searchParams }: PageProps) {
 
       {/* Page header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-[#F2F3F5]">
+        <h1 className="text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold tracking-tight text-n-ink">
           Performance report
         </h1>
-        <p className="mt-3 max-w-2xl text-base text-[#DBDEE1]">
-          Tailor your perfect report on creators, games, and the overall
-          industry. Fill out the form and our team will reach out with the quote
-          for your professional industry report.
+        <p className="mt-3 max-w-2xl text-base text-n-ink">
+          Choose your subjects, platforms, metrics and timeframe. Standard
+          combinations are available as instant CSV reports; custom requests
+          receive a quote from our team.
         </p>
       </div>
 

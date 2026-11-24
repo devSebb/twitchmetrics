@@ -1,40 +1,49 @@
 "use client";
 
+import { QueryError } from "@/components/ui/QueryError";
 import { trpc } from "@/lib/trpc";
 import { Card, Skeleton } from "@/components/ui";
 import { BaseChart } from "@/components/charts/BaseChart";
 import type { EChartsOption } from "echarts";
-import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
+import { NOTICED, NOTICED_CHART_COLORS } from "@/lib/constants/noticed";
 
 const STATE_COLORS: Record<string, string> = {
-  unclaimed: "#949BA4",
-  pending_claim: "#f59e0b",
-  claimed: "#22c55e",
-  premium: "#9146ff",
+  unclaimed: NOTICED.slate,
+  pending_claim: NOTICED.warning,
+  claimed: NOTICED.success,
+  premium: NOTICED.navy,
 };
 
 const TIER_COLORS: Record<string, string> = {
-  tier1: "#f59e0b",
-  tier2: "#3b82f6",
-  tier3: "#949BA4",
+  tier1: NOTICED.warning,
+  tier2: NOTICED.navy,
+  tier3: NOTICED.slate,
 };
 
 function KpiCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-4 text-center">
-      <p className="text-2xl font-bold text-[#F2F3F5]">
+    <div className="border-t border-n-line py-5">
+      <p className="break-words text-3xl font-bold text-n-ink">
         {value.toLocaleString()}
       </p>
-      <p className="mt-1 text-xs text-[#949BA4]">{label}</p>
+      <p className="mt-1 text-xs text-n-slate">{label}</p>
     </div>
   );
 }
 
 export function SystemMetrics() {
-  const { data: metrics, isLoading: metricsLoading } =
-    trpc.admin.getSystemMetrics.useQuery();
-  const { data: trend, isLoading: trendLoading } =
-    trpc.admin.getSnapshotTrend.useQuery({ days: 30 });
+  const {
+    data: metrics,
+    isLoading: metricsLoading,
+    isError: metricsError,
+    refetch: retryMetrics,
+  } = trpc.admin.getSystemMetrics.useQuery();
+  const {
+    data: trend,
+    isLoading: trendLoading,
+    isError: trendError,
+    refetch: retryTrend,
+  } = trpc.admin.getSnapshotTrend.useQuery({ days: 30 });
 
   if (metricsLoading || trendLoading) {
     return (
@@ -46,23 +55,35 @@ export function SystemMetrics() {
     );
   }
 
+  if (metricsError || trendError)
+    return (
+      <QueryError
+        label="system metrics"
+        onRetry={() => {
+          void retryMetrics();
+          void retryTrend();
+        }}
+      />
+    );
+
   const stateDonutOption: EChartsOption = {
     series: [
       {
         type: "pie",
-        radius: ["40%", "70%"],
+        radius: ["35%", "60%"],
+        center: ["50%", "42%"],
         data: (metrics?.creatorsByState ?? []).map((r) => ({
           name: r.state,
           value: r.count,
-          itemStyle: { color: STATE_COLORS[r.state] ?? "#949BA4" },
+          itemStyle: { color: STATE_COLORS[r.state] ?? NOTICED.slate },
         })),
         label: { show: false },
       },
     ],
     legend: {
-      orient: "vertical",
-      right: 0,
-      textStyle: { color: "#DBDEE1" },
+      type: "scroll",
+      bottom: 0,
+      textStyle: { color: NOTICED.ink },
     },
     tooltip: { trigger: "item" },
   };
@@ -71,19 +92,20 @@ export function SystemMetrics() {
     series: [
       {
         type: "pie",
-        radius: ["40%", "70%"],
+        radius: ["35%", "60%"],
+        center: ["50%", "42%"],
         data: (metrics?.creatorsByTier ?? []).map((r) => ({
           name: r.tier,
           value: r.count,
-          itemStyle: { color: TIER_COLORS[r.tier] ?? "#949BA4" },
+          itemStyle: { color: TIER_COLORS[r.tier] ?? NOTICED.slate },
         })),
         label: { show: false },
       },
     ],
     legend: {
-      orient: "vertical",
-      right: 0,
-      textStyle: { color: "#DBDEE1" },
+      type: "scroll",
+      bottom: 0,
+      textStyle: { color: NOTICED.ink },
     },
     tooltip: { trigger: "item" },
   };
@@ -92,13 +114,13 @@ export function SystemMetrics() {
     xAxis: {
       type: "category",
       data: (metrics?.platformDist ?? []).map((r) => r.platform),
-      axisLabel: { color: "#949BA4" },
-      axisLine: { lineStyle: { color: "#3F4147" } },
+      axisLabel: { color: NOTICED.slate },
+      axisLine: { lineStyle: { color: NOTICED.line } },
     },
     yAxis: {
       type: "value",
-      axisLabel: { color: "#949BA4" },
-      splitLine: { lineStyle: { color: "#3F4147" } },
+      axisLabel: { color: NOTICED.slate },
+      splitLine: { lineStyle: { color: NOTICED.line } },
     },
     series: [
       {
@@ -107,8 +129,9 @@ export function SystemMetrics() {
           value: r.count,
           itemStyle: {
             color:
-              PLATFORM_CONFIG[r.platform as keyof typeof PLATFORM_CONFIG]
-                ?.color ?? "#949BA4",
+              NOTICED_CHART_COLORS[
+                r.platform as keyof typeof NOTICED_CHART_COLORS
+              ] ?? NOTICED.slate,
           },
         })),
       },
@@ -120,21 +143,21 @@ export function SystemMetrics() {
     xAxis: {
       type: "category",
       data: (trend ?? []).map((d) => d.date),
-      axisLabel: { color: "#949BA4", rotate: 30 },
-      axisLine: { lineStyle: { color: "#3F4147" } },
+      axisLabel: { color: NOTICED.slate, rotate: 30 },
+      axisLine: { lineStyle: { color: NOTICED.line } },
     },
     yAxis: {
       type: "value",
-      axisLabel: { color: "#949BA4" },
-      splitLine: { lineStyle: { color: "#3F4147" } },
+      axisLabel: { color: NOTICED.slate },
+      splitLine: { lineStyle: { color: NOTICED.line } },
     },
     series: [
       {
         type: "line",
         data: (trend ?? []).map((d) => d.count),
         smooth: true,
-        lineStyle: { color: "#E32C19" },
-        areaStyle: { color: "rgba(227,44,25,0.1)" },
+        lineStyle: { color: NOTICED.red },
+        areaStyle: { color: "rgba(196,38,44,0.1)" },
       },
     ],
     tooltip: { trigger: "axis" },
@@ -154,19 +177,19 @@ export function SystemMetrics() {
       {/* Charts row */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="p-4">
-          <h3 className="mb-2 text-sm font-semibold text-[#F2F3F5]">
+          <h3 className="mb-2 text-sm font-semibold text-n-ink">
             Creators by State
           </h3>
           <BaseChart option={stateDonutOption} className="h-48" />
         </Card>
         <Card className="p-4">
-          <h3 className="mb-2 text-sm font-semibold text-[#F2F3F5]">
+          <h3 className="mb-2 text-sm font-semibold text-n-ink">
             Creators by Tier
           </h3>
           <BaseChart option={tierDonutOption} className="h-48" />
         </Card>
         <Card className="p-4">
-          <h3 className="mb-2 text-sm font-semibold text-[#F2F3F5]">
+          <h3 className="mb-2 text-sm font-semibold text-n-ink">
             Platform Distribution
           </h3>
           <BaseChart option={platformBarOption} className="h-48" />
@@ -175,7 +198,7 @@ export function SystemMetrics() {
 
       {/* Snapshot trend */}
       <Card className="p-4">
-        <h3 className="mb-2 text-sm font-semibold text-[#F2F3F5]">
+        <h3 className="mb-2 text-sm font-semibold text-n-ink">
           Snapshot Activity (30 days)
         </h3>
         <BaseChart option={trendLineOption} className="h-56" />

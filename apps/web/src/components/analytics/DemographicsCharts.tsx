@@ -120,11 +120,9 @@ export function DemographicsCharts({
   if (!hasAnyData) {
     return (
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-[#F2F3F5]">
-          Audience insights
-        </h2>
-        <div className="flex h-40 items-center justify-center rounded-lg border border-[#3F4147] bg-[#313338]">
-          <p className="max-w-md px-6 text-center text-sm text-[#949BA4]">
+        <h2 className="text-xl font-semibold text-n-ink">Audience insights</h2>
+        <div className="flex h-40 items-center justify-center rounded-lg border border-n-line bg-white">
+          <p className="max-w-md px-6 text-center text-sm text-n-slate">
             Audience demographics aren&apos;t available yet. They appear here
             once a connected platform starts reporting them.
           </p>
@@ -135,13 +133,11 @@ export function DemographicsCharts({
 
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-semibold text-[#F2F3F5]">
-        Audience insights
-      </h2>
+      <h2 className="text-xl font-semibold text-n-ink">Audience insights</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {ageGenderData && Object.keys(ageGenderData).length > 0 ? (
-          <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-4">
-            <h3 className="mb-3 text-sm font-medium text-[#DBDEE1]">
+          <div className="min-w-0 border-t border-n-line py-6">
+            <h3 className="mb-3 text-sm font-medium text-n-ink">
               Age and gender
             </h3>
             <BaseChart option={ageGenderOption(ageGenderData)} height={320} />
@@ -149,10 +145,8 @@ export function DemographicsCharts({
         ) : null}
 
         {countryData && Object.keys(countryData).length > 0 ? (
-          <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-4">
-            <h3 className="mb-3 text-sm font-medium text-[#DBDEE1]">
-              Countries
-            </h3>
+          <div className="min-w-0 border-t border-n-line py-6">
+            <h3 className="mb-3 text-sm font-medium text-n-ink">Countries</h3>
             <BaseChart
               option={distributionBarOption("Country share", countryData)}
               height={320}
@@ -161,8 +155,8 @@ export function DemographicsCharts({
         ) : null}
 
         {deviceData && Object.keys(deviceData).length > 0 ? (
-          <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-4">
-            <h3 className="mb-3 text-sm font-medium text-[#DBDEE1]">
+          <div className="min-w-0 border-t border-n-line py-6">
+            <h3 className="mb-3 text-sm font-medium text-n-ink">
               Device split
             </h3>
             <BaseChart
@@ -173,8 +167,8 @@ export function DemographicsCharts({
         ) : null}
 
         {trafficSources && Object.keys(trafficSources).length > 0 ? (
-          <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-4">
-            <h3 className="mb-3 text-sm font-medium text-[#DBDEE1]">
+          <div className="min-w-0 border-t border-n-line py-6">
+            <h3 className="mb-3 text-sm font-medium text-n-ink">
               Traffic sources
             </h3>
             <BaseChart
