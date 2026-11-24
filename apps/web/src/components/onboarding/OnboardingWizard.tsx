@@ -54,55 +54,69 @@ export function OnboardingWizard({
 
   if (step === 1) {
     return (
-      <Card className="space-y-4">
-        <h2 className="font-display text-2xl font-bold tracking-tight text-[#F2F3F5]">
+      <Card appearance="noticed" className="space-y-4">
+        <h2 className="font-display text-2xl font-bold tracking-tight text-n-ink">
           What brings you here?
         </h2>
         <RolePicker value={role} onSelect={selectRole} />
-        {error ? <p className="text-sm text-[#f87171]">{error}</p> : null}
+        {error ? <p className="text-sm text-n-error">{error}</p> : null}
       </Card>
     );
   }
 
   if (step === 2) {
     return (
-      <Card className="space-y-4">
-        <h2 className="font-display text-2xl font-bold tracking-tight text-[#F2F3F5]">
+      <Card appearance="noticed" className="space-y-4">
+        <h2 className="font-display text-2xl font-bold tracking-tight text-n-ink">
           Tell us about yourself
         </h2>
+        <label htmlFor="onboarding-name" className="block text-sm font-medium">
+          Display name
+        </label>
         <input
+          id="onboarding-name"
+          autoComplete="name"
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Display name"
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-sm text-[#F2F3F5]"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2 text-sm text-n-ink"
         />
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {roleConfirmed ? null : (
-            <Button variant="secondary" onClick={() => setStep(1)}>
+            <Button
+              appearance="noticed"
+              variant="secondary"
+              onClick={() => setStep(1)}
+            >
               Back
             </Button>
           )}
-          <Button onClick={submitName} disabled={completeOnboarding.isPending}>
+          <Button
+            appearance="noticed"
+            onClick={submitName}
+            disabled={completeOnboarding.isPending}
+          >
             {completeOnboarding.isPending ? "Saving..." : "Continue"}
           </Button>
         </div>
-        {error ? <p className="text-sm text-[#f87171]">{error}</p> : null}
+        {error ? <p className="text-sm text-n-error">{error}</p> : null}
       </Card>
     );
   }
 
   return (
-    <Card className="space-y-4">
-      <h2 className="font-display text-2xl font-bold tracking-tight text-[#F2F3F5]">
-        Already tracked by TwitchMetrics?
+    <Card appearance="noticed" className="space-y-4">
+      <h2 className="font-display text-2xl font-bold tracking-tight text-n-ink">
+        Already tracked by Noticed?
       </h2>
-      <p className="text-sm text-[#949BA4]">
+      <p className="text-sm text-n-slate">
         If we&apos;ve already been importing your channel data, you can merge it
         with your account. You can always do this later from your dashboard.
       </p>
-      <SearchBar mode="full" />
-      <div className="flex gap-3">
+      <SearchBar mode="full" appearance="noticed" />
+      <div className="flex flex-wrap gap-3">
         <Button
+          appearance="noticed"
           onClick={() => {
             router.push("/dashboard/home");
             router.refresh();
@@ -111,6 +125,7 @@ export function OnboardingWizard({
           Go to dashboard
         </Button>
         <Button
+          appearance="noticed"
           variant="secondary"
           onClick={() => router.push("/dashboard/claim")}
         >

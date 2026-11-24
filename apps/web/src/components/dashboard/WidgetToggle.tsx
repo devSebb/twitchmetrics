@@ -8,6 +8,8 @@ import {
   type WidgetId,
 } from "@/lib/constants/widgets";
 import { trpc } from "@/lib/trpc";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
+import { groupProfileWidgets } from "@/lib/profile-sections";
 import { Button } from "@/components/ui";
 
 type WidgetToggleProps = {
@@ -36,19 +38,23 @@ export function WidgetToggle({
   );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevConfigRef = useRef<WidgetId[]>(enabledWidgets);
+  const savedPublicDemographicsRef = useRef(publicDemographicsEnabled);
 
   // Sync with parent when enabledWidgets changes externally
   useEffect(() => {
     setLocalConfig(new Set(enabledWidgets));
-    prevConfigRef.current = enabledWidgets;
   }, [enabledWidgets]);
 
   useEffect(() => {
     setLocalPublicDemographicsEnabled(publicDemographicsEnabled);
+    savedPublicDemographicsRef.current = publicDemographicsEnabled;
   }, [publicDemographicsEnabled]);
 
   const mutation = trpc.creator.updateWidgetConfig.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      prevConfigRef.current = WIDGET_ORDER.filter((id) =>
+        variables.widgetConfig.includes(id),
+      );
       setStatus("saved");
       setTimeout(() => setStatus("idle"), 1500);
     },
@@ -58,21 +64,20 @@ export function WidgetToggle({
       const rollback = prevConfigRef.current;
       setLocalConfig(new Set(rollback));
       onConfigChange(rollback);
-      setTimeout(() => setStatus("idle"), 2000);
     },
   });
 
   const publicVisibilityMutation =
     trpc.creator.updatePublicDataVisibility.useMutation({
       onSuccess: (data) => {
+        savedPublicDemographicsRef.current = data.publicDemographicsEnabled;
         setLocalPublicDemographicsEnabled(data.publicDemographicsEnabled);
         setStatus("saved");
         setTimeout(() => setStatus("idle"), 1500);
       },
       onError: () => {
         setStatus("error");
-        setLocalPublicDemographicsEnabled(publicDemographicsEnabled);
-        setTimeout(() => setStatus("idle"), 2000);
+        setLocalPublicDemographicsEnabled(savedPublicDemographicsRef.current);
       },
     });
 
@@ -81,7 +86,6 @@ export function WidgetToggle({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         setStatus("saving");
-        prevConfigRef.current = config;
         mutation.mutate({ widgetConfig: config });
       }, 400);
     },
@@ -90,20 +94,15 @@ export function WidgetToggle({
 
   const handleToggle = useCallback(
     (widgetId: WidgetId) => {
-      setLocalConfig((prev) => {
-        const next = new Set(prev);
-        if (next.has(widgetId)) {
-          next.delete(widgetId);
-        } else {
-          next.add(widgetId);
-        }
-        const arr = WIDGET_ORDER.filter((id) => next.has(id));
-        onConfigChange(arr);
-        persistConfig(arr);
-        return next;
-      });
+      const next = new Set(localConfig);
+      if (next.has(widgetId)) next.delete(widgetId);
+      else next.add(widgetId);
+      const config = WIDGET_ORDER.filter((id) => next.has(id));
+      setLocalConfig(next);
+      onConfigChange(config);
+      persistConfig(config);
     },
-    [onConfigChange, persistConfig],
+    [localConfig, onConfigChange, persistConfig],
   );
 
   const handleResetDefaults = useCallback(() => {
@@ -114,15 +113,11 @@ export function WidgetToggle({
   }, [onConfigChange, persistConfig]);
 
   const handlePublicDemographicsToggle = useCallback(() => {
-    setLocalPublicDemographicsEnabled((current) => {
-      const next = !current;
-      setStatus("saving");
-      publicVisibilityMutation.mutate({
-        publicDemographicsEnabled: next,
-      });
-      return next;
-    });
-  }, [publicVisibilityMutation]);
+    const next = !localPublicDemographicsEnabled;
+    setLocalPublicDemographicsEnabled(next);
+    setStatus("saving");
+    publicVisibilityMutation.mutate({ publicDemographicsEnabled: next });
+  }, [localPublicDemographicsEnabled, publicVisibilityMutation]);
 
   // ESC key to close
   useEffect(() => {
@@ -134,28 +129,40 @@ export function WidgetToggle({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
+  const dialogRef = useDialogFocus(open);
   if (!open) return null;
 
   return (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/40"
+        className="fixed inset-0 z-[80] bg-black/40"
         onClick={onClose}
         aria-hidden
       />
 
       {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-[#3F4147] bg-[#1E1F22] shadow-2xl">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-customisation-title"
+        tabIndex={-1}
+        className="fixed inset-y-0 right-0 z-[90] flex w-full max-w-sm flex-col border-l border-n-line bg-white shadow-2xl"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#3F4147] px-5 py-4">
-          <h2 className="text-base font-semibold text-[#F2F3F5]">
-            Customize Widgets
+        <div className="flex items-center justify-between border-b border-n-line px-5 py-4">
+          <h2
+            id="profile-customisation-title"
+            className="text-base font-semibold text-n-ink"
+          >
+            Customise profile
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-[#949BA4] transition-colors hover:bg-[#313338] hover:text-[#DBDEE1]"
+            aria-label="Close customisation"
+            className="rounded-md p-3 text-n-slate transition-colors hover:bg-n-surface hover:text-n-ink"
           >
             <svg
               width="18"
@@ -176,65 +183,79 @@ export function WidgetToggle({
         {/* Widget list */}
         <div className="flex-1 overflow-y-auto p-5">
           <div className="space-y-1">
-            {WIDGET_ORDER.map((widgetId) => {
-              const def = WIDGET_REGISTRY[widgetId];
-              const enabled = localConfig.has(widgetId);
+            {groupProfileWidgets(WIDGET_ORDER).map((group) => (
+              <section key={group.id} className="mb-6">
+                <h3 className="n-eyebrow mb-2 text-n-slate">{group.title}</h3>
+                {group.widgets.map((widgetId) => {
+                  const def = WIDGET_REGISTRY[widgetId];
+                  const enabled = localConfig.has(widgetId);
 
-              return (
-                <button
-                  key={widgetId}
-                  type="button"
-                  onClick={() => handleToggle(widgetId)}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#313338]"
-                >
-                  <div className="mr-3 flex-1">
-                    <span className="text-sm font-medium text-[#DBDEE1]">
-                      {def.label}
-                    </span>
-                    <p className="mt-0.5 text-xs text-[#949BA4]">
-                      {def.description}
-                    </p>
-                  </div>
+                  return (
+                    <button
+                      key={widgetId}
+                      type="button"
+                      role="switch"
+                      aria-checked={enabled}
+                      disabled={
+                        mutation.isPending || publicVisibilityMutation.isPending
+                      }
+                      onClick={() => handleToggle(widgetId)}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-n-surface"
+                    >
+                      <div className="mr-3 flex-1">
+                        <span className="text-sm font-medium text-n-ink">
+                          {def.label}
+                        </span>
+                        <p className="mt-0.5 text-xs text-n-slate">
+                          {def.description}
+                        </p>
+                      </div>
 
-                  {/* Toggle switch */}
-                  <div
-                    className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
-                      enabled ? "bg-[#E32C19]" : "bg-[#383A40]"
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                        enabled ? "translate-x-4" : "translate-x-0.5"
-                      }`}
-                    />
-                  </div>
-                </button>
-              );
-            })}
+                      {/* Toggle switch */}
+                      <div
+                        className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                          enabled ? "bg-n-red" : "bg-n-slate"
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                            enabled ? "translate-x-4" : "translate-x-0.5"
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </section>
+            ))}
           </div>
 
-          <div className="mt-6 border-t border-[#3F4147] pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#949BA4]">
+          <div className="mt-6 border-t border-n-line pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-n-slate">
               Public data sharing
             </h3>
             <button
               type="button"
+              role="switch"
+              aria-checked={localPublicDemographicsEnabled}
+              disabled={
+                publicVisibilityMutation.isPending || mutation.isPending
+              }
               onClick={handlePublicDemographicsToggle}
-              className="mt-3 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#313338]"
+              className="mt-3 flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-n-surface"
             >
               <div className="mr-3 flex-1">
-                <span className="text-sm font-medium text-[#DBDEE1]">
+                <span className="text-sm font-medium text-n-ink">
                   Show audience data publicly
                 </span>
-                <p className="mt-0.5 text-xs text-[#949BA4]">
-                  Allows visitors to see your real demographics data.
+                <p className="mt-0.5 text-xs text-n-slate">
+                  Share audience demographics from your connected accounts with
+                  visitors to your profile.
                 </p>
               </div>
               <div
                 className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
-                  localPublicDemographicsEnabled
-                    ? "bg-[#E32C19]"
-                    : "bg-[#383A40]"
+                  localPublicDemographicsEnabled ? "bg-n-red" : "bg-n-slate"
                 }`}
               >
                 <div
@@ -250,13 +271,21 @@ export function WidgetToggle({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[#3F4147] px-5 py-4">
+        <div className="border-t border-n-line px-5 py-4">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={handleResetDefaults}>
+            <Button
+              appearance="noticed"
+              variant="ghost"
+              size="sm"
+              disabled={
+                mutation.isPending || publicVisibilityMutation.isPending
+              }
+              onClick={handleResetDefaults}
+            >
               Reset to defaults
             </Button>
 
-            <span className="text-xs text-[#949BA4]">
+            <span role="status" className="text-xs text-n-slate">
               {status === "saving" && "Saving..."}
               {status === "saved" && "Saved"}
               {status === "error" && "Failed to save"}

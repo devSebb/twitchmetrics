@@ -92,7 +92,7 @@ export function RegisterForm({
       <div>
         <label
           htmlFor="register-name"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Display Name
         </label>
@@ -102,7 +102,7 @@ export function RegisterForm({
           required
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="Your display name"
         />
       </div>
@@ -110,7 +110,7 @@ export function RegisterForm({
       <div>
         <label
           htmlFor="register-email"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Email
         </label>
@@ -121,7 +121,7 @@ export function RegisterForm({
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="you@example.com"
         />
       </div>
@@ -129,7 +129,7 @@ export function RegisterForm({
       <div>
         <label
           htmlFor="register-password"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Password
         </label>
@@ -140,7 +140,7 @@ export function RegisterForm({
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="At least 8 characters"
         />
       </div>
@@ -148,7 +148,7 @@ export function RegisterForm({
       <div>
         <label
           htmlFor="register-confirm-password"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Confirm Password
         </label>
@@ -159,19 +159,19 @@ export function RegisterForm({
           required
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
           placeholder="Repeat password"
         />
       </div>
 
       {(error ?? validationError) && (
-        <p className="text-sm text-[#f87171]">{error ?? validationError}</p>
+        <p className="text-sm text-n-error">{error ?? validationError}</p>
       )}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? "Creating account..." : "Create Account"}
       </button>

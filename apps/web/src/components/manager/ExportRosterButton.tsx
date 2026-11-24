@@ -69,15 +69,14 @@ export function ExportRosterButton({
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        aria-haspopup="menu"
         aria-expanded={open}
         disabled={isDisabled}
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "flex h-9 items-center gap-1.5 rounded-md border border-[#3F4147] bg-[#1E1F22] px-3 text-sm font-medium transition-colors",
+          "flex h-9 items-center gap-1.5 rounded-md border border-n-line bg-white px-3 text-sm font-medium transition-colors",
           isDisabled
-            ? "cursor-not-allowed text-[#5C5F66]"
-            : "text-[#DBDEE1] hover:bg-[#2B2D31] hover:text-[#F2F3F5]",
+            ? "cursor-not-allowed text-n-slate"
+            : "text-n-ink hover:bg-n-surface hover:text-n-ink",
         )}
       >
         {isLoading ? (
@@ -99,34 +98,33 @@ export function ExportRosterButton({
       {open && !isDisabled && (
         <div className="absolute right-0 top-full z-50 pt-2">
           <div
-            role="menu"
-            className="w-56 overflow-hidden rounded-lg border border-[#3F4147] bg-[#2B2D31] shadow-lg"
+            role="group"
+            aria-label="Export format"
+            className="w-56 overflow-hidden rounded-lg border border-n-line bg-n-surface shadow-lg"
           >
             <button
               type="button"
-              role="menuitem"
               onClick={() => exportMutation.mutate({ format: "csv" })}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#383A40]"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-n-surface"
             >
-              <FileCsv size={18} weight="duotone" className="text-[#22c55e]" />
+              <FileCsv size={18} weight="duotone" className="text-n-success" />
               <div>
-                <p className="text-sm font-semibold text-[#F2F3F5]">CSV</p>
-                <p className="text-xs text-[#949BA4]">Spreadsheet (.csv)</p>
+                <p className="text-sm font-semibold text-n-ink">CSV</p>
+                <p className="text-xs text-n-slate">Spreadsheet (.csv)</p>
               </div>
             </button>
             <button
               type="button"
-              role="menuitem"
               onClick={() => {
                 setOpen(false);
                 setPdfModalOpen(true);
               }}
-              className="flex w-full items-center gap-3 border-t border-[#3F4147] px-4 py-3 text-left transition-colors hover:bg-[#383A40]"
+              className="flex w-full items-center gap-3 border-t border-n-line px-4 py-3 text-left transition-colors hover:bg-n-surface"
             >
-              <FilePdf size={18} weight="duotone" className="text-[#ef4444]" />
+              <FilePdf size={18} weight="duotone" className="text-n-error" />
               <div>
-                <p className="text-sm font-semibold text-[#F2F3F5]">PDF</p>
-                <p className="text-xs text-[#949BA4]">Pitch-ready report</p>
+                <p className="text-sm font-semibold text-n-ink">PDF</p>
+                <p className="text-xs text-n-slate">Pitch-ready report</p>
               </div>
             </button>
           </div>
@@ -134,7 +132,10 @@ export function ExportRosterButton({
       )}
 
       {error && (
-        <p className="absolute right-0 top-full mt-2 max-w-xs rounded-md border border-[#ef4444]/40 bg-[#ef4444]/10 px-3 py-1.5 text-xs text-[#fca5a5]">
+        <p
+          role="alert"
+          className="absolute right-0 top-full mt-2 max-w-xs rounded-md border border-n-error/40 bg-n-error/10 px-3 py-1.5 text-xs text-n-error"
+        >
           {error}
         </p>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { UploadSimple } from "@phosphor-icons/react";
@@ -83,6 +83,7 @@ type PartnerFormProps = {
 };
 
 function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
+  const formId = useId();
   const router = useRouter();
   const [brandName, setBrandName] = useState(partnership?.brandName ?? "");
   const [brandLogoUrl, setBrandLogoUrl] = useState(
@@ -224,11 +225,15 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
       className="space-y-3 rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] p-3"
     >
       <div>
-        <label className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]">
+        <label
+          htmlFor={`${formId}-brandName`}
+          className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]"
+        >
           Brand Name *
         </label>
         <input
           type="text"
+          id={`${formId}-brandName`}
           value={brandName}
           onChange={(e) => setBrandName(e.target.value)}
           maxLength={100}
@@ -266,13 +271,13 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1.5 text-xs font-medium text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-control,#4E5058)]">
+              <label className="relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1.5 text-xs font-medium text-[var(--view-ink,#DBDEE1)] transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-4 hover:bg-[var(--view-control,#4E5058)]">
                 <UploadSimple size={14} weight="bold" />
                 Choose logo
                 <input
                   type="file"
                   accept={LOGO_ACCEPT}
-                  className="hidden"
+                  className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) handleLogoFile(file);
@@ -280,7 +285,7 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
                   }}
                 />
               </label>
-              <p className="mt-1 truncate text-[10px] text-[var(--view-muted,#949BA4)]">
+              <p className="mt-1 truncate text-xs text-[var(--view-muted,#949BA4)]">
                 {logoFile ? logoFile.name : "JPG, PNG, WebP - max 2 MB"}
               </p>
             </div>
@@ -295,18 +300,22 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
             )}
           </div>
           {logoError && (
-            <p className="mt-2 rounded-md border border-[var(--view-error,#ef4444)] bg-[var(--view-error-fill,rgba(239,68,68,0.1))] px-2 py-1.5 text-xs text-[#fca5a5]">
+            <p className="mt-2 rounded-md border border-[var(--view-error,#ef4444)] bg-[var(--view-error-fill,rgba(239,68,68,0.1))] px-2 py-1.5 text-xs text-[var(--view-error,#ef4444)]">
               {logoError}
             </p>
           )}
         </div>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]">
+        <label
+          htmlFor={`${formId}-campaignName`}
+          className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]"
+        >
           Campaign Name (optional)
         </label>
         <input
           type="text"
+          id={`${formId}-campaignName`}
           value={campaignName}
           onChange={(e) => setCampaignName(e.target.value)}
           maxLength={200}
@@ -314,6 +323,11 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
           placeholder="e.g. Summer 2026"
         />
       </div>
+      {(addMutation.error || updateMutation.error) && (
+        <p role="alert" className="text-sm text-[var(--view-error,#ef4444)]">
+          {addMutation.error?.message ?? updateMutation.error?.message}
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"
@@ -409,14 +423,14 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
                   aria-label={`Edit ${p.brandName}`}
                 >
                   <BrandLogo partnership={p} />
-                  <span className="max-w-full truncate text-[10px] text-[var(--view-muted,#949BA4)]">
+                  <span className="max-w-full truncate text-xs text-[var(--view-muted,#949BA4)]">
                     {p.brandName}
                   </span>
                 </button>
               ) : (
                 <>
                   <BrandLogo partnership={p} />
-                  <span className="max-w-full truncate text-[10px] text-[var(--view-muted,#949BA4)]">
+                  <span className="max-w-full truncate text-xs text-[var(--view-muted,#949BA4)]">
                     {p.brandName}
                   </span>
                 </>
@@ -430,10 +444,12 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
                     event.stopPropagation();
                     removeMutation.mutate({ partnershipId: p.id });
                   }}
-                  className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-[var(--view-error,#ef4444)] text-[10px] text-white group-hover:flex"
+                  aria-label={`Remove ${p.brandName}`}
+                  disabled={removeMutation.isPending}
+                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--view-line,#3F4147)] px-3 text-xs text-[var(--view-error,#ef4444)]"
                   title="Remove"
                 >
-                  ×
+                  Remove
                 </button>
               )}
             </div>
@@ -445,6 +461,14 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
         </p>
       )}
 
+      {isOwner && removeMutation.error && (
+        <p
+          role="alert"
+          className="mt-4 text-sm text-[var(--view-error,#ef4444)]"
+        >
+          {removeMutation.error.message}
+        </p>
+      )}
       {/* Add button / form (owner only) */}
       {isOwner && (
         <div className="mt-4">

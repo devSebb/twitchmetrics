@@ -97,13 +97,13 @@ function TerminalCard({
   const msg = messages[kind];
 
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-      <h1 className="text-2xl font-bold text-[#F2F3F5]">{msg.title}</h1>
-      <p className="mt-2 text-sm text-[#DBDEE1]">{msg.body}</p>
+    <div className="rounded-xl border border-n-line bg-white p-6">
+      <h1 className="text-2xl font-bold text-n-ink">{msg.title}</h1>
+      <p className="mt-2 text-sm text-n-ink">{msg.body}</p>
       {kind === "accepted" && (
         <Link
           href="/dashboard/home"
-          className="mt-4 inline-block rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
+          className="mt-4 inline-block rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover"
         >
           Go to dashboard
         </Link>
@@ -111,7 +111,7 @@ function TerminalCard({
       {kind === "accepted" && creatorSlug && (
         <Link
           href={`/creator/${creatorSlug}`}
-          className="mt-2 ml-2 inline-block rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-2.5 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+          className="mt-2 ml-2 inline-block rounded-lg border border-n-line bg-n-surface px-4 py-2.5 text-sm font-semibold text-n-ink transition-colors hover:bg-n-surface"
         >
           {creatorName ? `View ${creatorName}` : "View profile"}
         </Link>
@@ -145,7 +145,7 @@ function PendingHeader({
     : null;
 
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
+    <div className="rounded-xl border border-n-line bg-white p-6">
       <div className="flex items-center gap-4">
         {managerAvatar ? (
           <Image
@@ -156,34 +156,32 @@ function PendingHeader({
             className="rounded-full"
           />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#383A40] text-xl font-bold text-[#F2F3F5]">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-n-surface text-xl font-bold text-n-ink">
             {managerName.charAt(0).toUpperCase()}
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wider text-[#949BA4]">
+          <p className="text-xs uppercase tracking-wider text-n-slate">
             Roster invitation
           </p>
-          <h1 className="text-xl font-bold text-[#F2F3F5]">
+          <h1 className="text-xl font-bold text-n-ink">
             {managerName}{" "}
-            <span className="font-normal text-[#DBDEE1]">
-              would like to manage
-            </span>{" "}
+            <span className="font-normal text-n-ink">would like to manage</span>{" "}
             {creatorName}
           </h1>
           {managerAgency && (
-            <p className="text-xs text-[#949BA4]">{managerAgency}</p>
+            <p className="text-xs text-n-slate">{managerAgency}</p>
           )}
         </div>
       </div>
 
       {managerBio && (
-        <p className="mt-3 text-sm italic text-[#DBDEE1]">
+        <p className="mt-3 text-sm italic text-n-ink">
           &ldquo;{managerBio}&rdquo;
         </p>
       )}
 
-      <div className="mt-4 flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#1E1F22] p-3">
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-n-line bg-white p-3">
         {creatorAvatar ? (
           <Image
             src={creatorAvatar}
@@ -193,21 +191,21 @@ function PendingHeader({
             className="rounded-full"
           />
         ) : (
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#383A40] text-sm font-bold text-[#F2F3F5]">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-n-surface text-sm font-bold text-n-ink">
             {creatorName.charAt(0).toUpperCase()}
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#F2F3F5]">
+          <p className="truncate text-sm font-medium text-n-ink">
             {creatorName}
           </p>
-          <p className="text-xs text-[#949BA4]">/{creatorSlug}</p>
+          <p className="text-xs text-n-slate">/{creatorSlug}</p>
         </div>
       </div>
 
-      <p className="mt-4 text-xs text-[#949BA4]">
+      <p className="mt-4 text-xs text-n-slate">
         Accepting grants {managerName} access to analytics and roster-gated data
-        only. It does <span className="text-[#DBDEE1]">not</span> grant login,
+        only. It does <span className="text-n-ink">not</span> grant login,
         billing, password, or settings access to your account.
       </p>
     </div>
@@ -252,20 +250,20 @@ function renderPendingBody({
     return (
       <div className="space-y-4">
         {header}
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-          <p className="text-sm text-[#DBDEE1]">
+        <div className="rounded-xl border border-n-line bg-white p-6">
+          <p className="text-sm text-n-ink">
             Sign in or create an account to respond to this invitation.
           </p>
           <div className="mt-4 flex gap-3">
             <Link
               href={`/register?returnTo=${encodeURIComponent(returnTo)}`}
-              className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
+              className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover"
             >
               Sign up
             </Link>
             <Link
               href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
-              className="rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-2.5 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+              className="rounded-lg border border-n-line bg-n-surface px-4 py-2.5 text-sm font-semibold text-n-ink transition-colors hover:bg-n-surface"
             >
               Log in
             </Link>
@@ -280,8 +278,8 @@ function renderPendingBody({
     return (
       <div className="space-y-4">
         {header}
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-          <p className="text-sm text-[#fcd34d]">
+        <div className="rounded-xl border border-n-line bg-white p-6">
+          <p className="text-sm text-n-warning">
             This is an invitation you sent. You can&apos;t accept your own
             invitation.
           </p>
@@ -295,17 +293,17 @@ function renderPendingBody({
     return (
       <div className="space-y-4">
         {header}
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-          <h2 className="text-lg font-semibold text-[#F2F3F5]">
+        <div className="rounded-xl border border-n-line bg-white p-6">
+          <h2 className="text-lg font-semibold text-n-ink">
             Claim {creatorName} first
           </h2>
-          <p className="mt-1 text-sm text-[#DBDEE1]">
+          <p className="mt-1 text-sm text-n-ink">
             To accept this invitation, you need to claim the profile. We&apos;ll
             bring you back here after verification.
           </p>
           <Link
             href={`/claim?profile=${access.creatorProfileId}&rosterInvite=${token}`}
-            className="mt-4 inline-block rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615]"
+            className="mt-4 inline-block rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover"
           >
             Claim profile
           </Link>
@@ -319,8 +317,8 @@ function renderPendingBody({
     return (
       <div className="space-y-4">
         {header}
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-          <p className="text-sm text-[#DBDEE1]">
+        <div className="rounded-xl border border-n-line bg-white p-6">
+          <p className="text-sm text-n-ink">
             This invitation is for the owner of {creatorName}. Sign out and sign
             back in with the right account to respond.
           </p>
@@ -333,11 +331,11 @@ function renderPendingBody({
   return (
     <div className="space-y-4">
       {header}
-      <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-        <h2 className="text-lg font-semibold text-[#F2F3F5]">
+      <div className="rounded-xl border border-n-line bg-white p-6">
+        <h2 className="text-lg font-semibold text-n-ink">
           Accept this invitation?
         </h2>
-        <p className="mt-1 text-sm text-[#DBDEE1]">
+        <p className="mt-1 text-sm text-n-ink">
           {managerName} will be able to view analytics and roster-gated data for{" "}
           {creatorName}. You can remove their access at any time from your
           dashboard.

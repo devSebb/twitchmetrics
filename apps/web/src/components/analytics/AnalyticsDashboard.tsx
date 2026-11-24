@@ -91,16 +91,6 @@ export function AnalyticsDashboard({
     return analytics.find((item) => item.platform === selectedPlatform) ?? null;
   }, [analytics, selectedPlatform]);
 
-  if (!selectedAnalytics) {
-    return (
-      <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-6">
-        <p className="text-sm text-[#949BA4]">
-          No enrichment data is available yet for your connected platforms.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
@@ -110,11 +100,12 @@ export function AnalyticsDashboard({
             <button
               key={platform}
               type="button"
+              aria-pressed={isActive}
               onClick={() => setSelectedPlatform(platform)}
               className={
                 isActive
-                  ? "rounded-lg border border-[#E32C19] bg-[#E32C19]/20 px-3 py-2 text-sm font-semibold text-[#F2F3F5]"
-                  : "rounded-lg border border-[#3F4147] bg-[#313338] px-3 py-2 text-sm font-medium text-[#949BA4]"
+                  ? "rounded-lg border border-n-red bg-n-red/20 px-3 py-2 text-sm font-semibold text-n-ink"
+                  : "rounded-lg border border-n-line bg-white px-3 py-2 text-sm font-medium text-n-slate"
               }
             >
               {PLATFORM_CONFIG[platform].name}
@@ -123,86 +114,104 @@ export function AnalyticsDashboard({
         })}
       </div>
 
-      {selectedPlatform === "youtube" ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Watch time"
-            value={formatWatchTimeHours(
-              selectedAnalytics.estimatedMinutesWatched,
-            )}
-          />
-          <StatCard
-            label="Subscribers gained"
-            value={formatInt(selectedAnalytics.subscribersGained)}
-          />
-          <StatCard
-            label="Views"
-            value={formatBigIntString(selectedAnalytics.views)}
-          />
-          <StatCard
-            label="Estimated revenue"
-            value={formatCurrency(selectedAnalytics.estimatedRevenue)}
-          />
-          <StatCard
-            label="Avg view duration"
-            value={formatDuration(selectedAnalytics.averageViewDuration)}
-          />
-          <StatCard label="Likes" value={formatInt(selectedAnalytics.likes)} />
-          <StatCard
-            label="Comments"
-            value={formatInt(selectedAnalytics.comments)}
-          />
-          <StatCard
-            label="Shares"
-            value={formatInt(selectedAnalytics.shares)}
-          />
-        </div>
-      ) : null}
+      {!selectedAnalytics ? (
+        <p role="status" className="border-t border-n-line py-8 text-n-slate">
+          No connected analytics are available for this platform yet. You can
+          still select another platform above.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-n-slate">
+            Reporting period:{" "}
+            {new Date(selectedAnalytics.periodStart).toLocaleDateString()} –{" "}
+            {new Date(selectedAnalytics.periodEnd).toLocaleDateString()}
+          </p>
+          {selectedPlatform === "youtube" ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                label="Watch time"
+                value={formatWatchTimeHours(
+                  selectedAnalytics.estimatedMinutesWatched,
+                )}
+              />
+              <StatCard
+                label="Subscribers gained"
+                value={formatInt(selectedAnalytics.subscribersGained)}
+              />
+              <StatCard
+                label="Views"
+                value={formatBigIntString(selectedAnalytics.views)}
+              />
+              <StatCard
+                label="Estimated revenue"
+                value={formatCurrency(selectedAnalytics.estimatedRevenue)}
+              />
+              <StatCard
+                label="Avg view duration"
+                value={formatDuration(selectedAnalytics.averageViewDuration)}
+              />
+              <StatCard
+                label="Likes"
+                value={formatInt(selectedAnalytics.likes)}
+              />
+              <StatCard
+                label="Comments"
+                value={formatInt(selectedAnalytics.comments)}
+              />
+              <StatCard
+                label="Shares"
+                value={formatInt(selectedAnalytics.shares)}
+              />
+            </div>
+          ) : null}
 
-      {selectedPlatform === "instagram" ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Reach"
-            value={formatBigIntString(selectedAnalytics.reach)}
-          />
-          <StatCard
-            label="Impressions"
-            value={formatBigIntString(selectedAnalytics.impressions)}
-          />
-          <StatCard
-            label="Profile views"
-            value={formatInt(selectedAnalytics.profileViews)}
-          />
-          <StatCard
-            label="Website clicks"
-            value={formatInt(selectedAnalytics.websiteClicks)}
-          />
-        </div>
-      ) : null}
+          {selectedPlatform === "instagram" ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                label="Reach"
+                value={formatBigIntString(selectedAnalytics.reach)}
+              />
+              <StatCard
+                label="Impressions"
+                value={formatBigIntString(selectedAnalytics.impressions)}
+              />
+              <StatCard
+                label="Profile views"
+                value={formatInt(selectedAnalytics.profileViews)}
+              />
+              <StatCard
+                label="Website clicks"
+                value={formatInt(selectedAnalytics.websiteClicks)}
+              />
+            </div>
+          ) : null}
 
-      {selectedPlatform === "twitch" ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <StatCard
-            label="Subscriber count"
-            value={formatInt(selectedAnalytics.subscriberCount)}
-          />
-          <StatCard
-            label="Subscriber points"
-            value={formatInt(selectedAnalytics.subscriberPoints)}
-          />
-        </div>
-      ) : null}
+          {selectedPlatform === "twitch" ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <StatCard
+                label="Subscriber count"
+                value={formatInt(selectedAnalytics.subscriberCount)}
+              />
+              <StatCard
+                label="Subscriber points"
+                value={formatInt(selectedAnalytics.subscriberPoints)}
+              />
+            </div>
+          ) : null}
 
-      <DemographicsCharts
-        ageGenderData={selectedAnalytics.ageGenderData}
-        countryData={selectedAnalytics.countryData}
-        deviceData={selectedAnalytics.deviceData}
-        trafficSources={selectedAnalytics.trafficSources}
-      />
+          <DemographicsCharts
+            ageGenderData={selectedAnalytics.ageGenderData}
+            countryData={selectedAnalytics.countryData}
+            deviceData={selectedAnalytics.deviceData}
+            trafficSources={selectedAnalytics.trafficSources}
+          />
 
-      <p className="text-xs text-[#949BA4]">
-        Last updated: {new Date(selectedAnalytics.fetchedAt).toLocaleString()}
-      </p>
+          <p className="text-xs text-n-slate">
+            Last updated:{" "}
+            {new Date(selectedAnalytics.fetchedAt).toLocaleString()}
+          </p>
+        </>
+      )}
     </div>
   );
 }

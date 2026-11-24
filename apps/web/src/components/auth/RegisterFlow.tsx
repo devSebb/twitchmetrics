@@ -26,7 +26,7 @@ export function RegisterFlow({
   if (!role) {
     return (
       <div className="space-y-5 text-left">
-        <p className="text-center text-sm text-[#DBDEE1]">
+        <p className="text-center text-sm text-n-ink">
           First, what brings you here?
         </p>
         <RolePicker value={null} onSelect={setRole} />
@@ -36,19 +36,19 @@ export function RegisterFlow({
 
   return (
     <div className="space-y-5 text-left">
-      <div className="flex items-center justify-between rounded-lg border border-[#3F4147] bg-[#2B2D31] px-3 py-2">
+      <div className="flex items-center justify-between rounded-lg border border-n-line bg-n-surface px-3 py-2">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-[#949BA4]">
+          <p className="text-xs uppercase tracking-wider text-n-slate">
             Signing up as
           </p>
-          <p className="truncate text-sm font-semibold text-[#F2F3F5]">
+          <p className="truncate text-sm font-semibold text-n-ink">
             {ROLE_LABELS[role]}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setRole(null)}
-          className="shrink-0 text-xs text-[#DBDEE1] underline-offset-2 hover:text-white hover:underline"
+          className="shrink-0 text-xs text-n-ink underline-offset-2 hover:text-n-ink hover:underline"
         >
           Change
         </button>
@@ -62,11 +62,11 @@ export function RegisterFlow({
             mode="register"
           />
           <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-[#3F4147]" />
-            <span className="text-xs uppercase tracking-wide text-[#949BA4]">
+            <div className="h-px flex-1 bg-n-line" />
+            <span className="text-xs uppercase tracking-wide text-n-slate">
               or
             </span>
-            <div className="h-px flex-1 bg-[#3F4147]" />
+            <div className="h-px flex-1 bg-n-line" />
           </div>
         </>
       ) : null}

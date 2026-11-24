@@ -210,3 +210,29 @@
 .noticed-analytics :where(section[id]) {
   scroll-margin-top: 11rem;
 }
+
+.n-workspace .font-display,
+.n-auth .font-display {
+  font-family: inherit;
+}
+.n-workspace
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+        [type="color"]
+      ),
+    select,
+    textarea
+  ),
+.n-auth
+  :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.n-workspace :where(button:not([aria-label^="About"])),
+.n-auth :where(button) {
+  min-height: 44px;
+}
+.n-workspace :where(input[type="checkbox"], input[type="radio"]),
+.n-auth :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--noticed-red);
+}

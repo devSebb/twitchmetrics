@@ -18,15 +18,16 @@ export function RolePicker({
       <button
         type="button"
         disabled={disabled}
+        aria-pressed={value === "creator"}
         onClick={() => onSelect("creator")}
         className={`rounded-lg border px-4 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
           value === "creator"
-            ? "border-[#E32C19] bg-[#E32C19]/10"
-            : "border-[#3F4147] bg-[#383A40] hover:bg-[#4E5058]"
+            ? "border-n-red bg-n-red/10"
+            : "border-n-line bg-n-surface hover:bg-n-surface"
         }`}
       >
-        <p className="text-base font-semibold text-[#F2F3F5]">Creator</p>
-        <p className="mt-1 text-xs text-[#949BA4]">
+        <p className="text-base font-semibold text-n-ink">Creator</p>
+        <p className="mt-1 text-xs text-n-slate">
           I create content on Twitch, YouTube, or other platforms. Track your
           growth, build your media kit, and connect with brands.
         </p>
@@ -34,17 +35,18 @@ export function RolePicker({
       <button
         type="button"
         disabled={disabled}
+        aria-pressed={value === "talent_manager"}
         onClick={() => onSelect("talent_manager")}
         className={`rounded-lg border px-4 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
           value === "talent_manager"
-            ? "border-[#E32C19] bg-[#E32C19]/10"
-            : "border-[#3F4147] bg-[#383A40] hover:bg-[#4E5058]"
+            ? "border-n-red bg-n-red/10"
+            : "border-n-line bg-n-surface hover:bg-n-surface"
         }`}
       >
-        <p className="text-base font-semibold text-[#F2F3F5]">Talent Manager</p>
-        <p className="mt-1 text-xs text-[#949BA4]">
+        <p className="text-base font-semibold text-n-ink">Talent Manager</p>
+        <p className="mt-1 text-xs text-n-slate">
           I manage creators and talent. Monitor your roster&apos;s performance
-          and coordinate campaigns.
+          and review the insights they share with you.
         </p>
       </button>
     </div>

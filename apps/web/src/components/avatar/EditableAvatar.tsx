@@ -35,7 +35,7 @@ export function EditableAvatar({
   const initial = displayName.charAt(0).toUpperCase() || "?";
 
   // Edit pencil scales down proportionally for very small avatars.
-  const buttonSize = Math.max(28, Math.round(size * 0.32));
+  const buttonSize = Math.max(44, Math.round(size * 0.32));
   const buttonIcon = Math.max(12, Math.round(buttonSize * 0.5));
 
   return (
@@ -54,7 +54,7 @@ export function EditableAvatar({
           />
         ) : (
           <div
-            className="flex h-full w-full items-center justify-center rounded-full bg-[#383A40] font-bold text-[#F2F3F5]"
+            className="flex h-full w-full items-center justify-center rounded-full bg-n-surface font-bold text-n-ink"
             style={{ fontSize: Math.round(size * 0.4) }}
             aria-label={displayName}
           >
@@ -67,7 +67,7 @@ export function EditableAvatar({
             type="button"
             onClick={() => setModalOpen(true)}
             aria-label="Edit profile picture"
-            className="absolute bottom-0 left-0 flex items-center justify-center rounded-full border-2 border-[#1E1F22] bg-[#E32C19] text-white shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E32C19]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1E1F22]"
+            className="absolute bottom-0 left-0 flex items-center justify-center rounded-full border-2 border-white bg-n-red text-white shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-n-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             style={{ width: buttonSize, height: buttonSize }}
           >
             <Pencil size={buttonIcon} weight="bold" />

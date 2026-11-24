@@ -176,7 +176,7 @@ export function RosterListView({
       type="button"
       onClick={() => toggleSort(field)}
       className={cn(
-        "flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-[#949BA4] hover:text-[#DBDEE1]",
+        "flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-n-slate hover:text-n-ink",
         className,
       )}
     >
@@ -190,240 +190,311 @@ export function RosterListView({
   );
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[#3F4147] bg-[#1E1F22]">
-      <table className="w-full">
-        <thead className="border-b border-[#3F4147] bg-[#161718]">
-          <tr>
-            <th className="px-3 py-2.5 text-left">
-              <SortHeader field="name" label="Creator" />
-            </th>
-            <th className="hidden px-3 py-2.5 text-left sm:table-cell">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-[#949BA4]">
-                Platforms
-              </span>
-            </th>
-            <th className="px-3 py-2.5 text-right">
-              <SortHeader
-                field="followers"
-                label="Followers"
-                className="ml-auto"
-              />
-            </th>
-            <th className="hidden px-3 py-2.5 text-right md:table-cell">
-              <SortHeader field="growth" label="7d" className="ml-auto" />
-            </th>
-            <th className="px-3 py-2.5 text-left">
-              <SortHeader field="status" label="Status" />
-            </th>
-            <th className="hidden px-3 py-2.5 text-left lg:table-cell">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-[#949BA4]">
-                Synced
-              </span>
-            </th>
-            <th className="px-3 py-2.5 text-right">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-[#949BA4]">
-                Actions
-              </span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row) => {
-            const { creator, accessId, inviteState, inviteExpiresAt } = row;
-            const avatarSrc = getSafeImageSrc(creator.avatarUrl);
-            const primaryGrowth =
-              creator.growthRollups.find(
-                (g) => g.platform === creator.primaryPlatform,
-              ) ?? creator.growthRollups[0];
-            // Color from the actual value so a loss never renders green.
-            const trendUp =
-              primaryGrowth?.pct7d != null && primaryGrowth.pct7d > 0;
-            const trendDown =
-              primaryGrowth?.pct7d != null && primaryGrowth.pct7d < 0;
-            const sortedPlatforms = sortByPlatformOrder(
-              creator.platformAccounts,
-            );
-            const isActive = inviteState === "active";
-            const profileHref = isActive
-              ? `/talent-manager/creator/${creator.slug}`
-              : `/creator/${creator.slug}`;
-            const regeneratedUrl = regeneratedUrls[accessId];
-
-            return (
-              <tr
-                key={accessId}
-                className={cn(
-                  "border-b border-[#3F4147] transition-colors hover:bg-[#1E1F22]/40 last:border-b-0",
-                  !isActive && "bg-[#1E1F22]/30",
-                )}
+    <div>
+      {regenerateMutation.error && (
+        <p role="alert" className="mb-4 text-sm text-n-error">
+          {regenerateMutation.error.message}
+        </p>
+      )}
+      <div
+        role="region"
+        aria-label="Creator roster table, scroll horizontally for all columns"
+        tabIndex={0}
+        className="overflow-x-auto border-y border-n-line bg-white"
+      >
+        <table className="w-full min-w-[960px]">
+          <caption className="sr-only">
+            Creators and invitations. Select a column heading to sort.
+          </caption>
+          <thead className="border-b border-n-line bg-white">
+            <tr>
+              <th
+                scope="col"
+                aria-sort={
+                  sortField === "name"
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+                className="px-3 py-2.5 text-left"
               >
-                <td className="px-3 py-2.5">
-                  <Link
-                    href={profileHref}
-                    className="flex items-center gap-2.5 hover:underline"
-                  >
-                    {avatarSrc ? (
-                      <Image
-                        src={avatarSrc}
-                        alt={creator.displayName}
-                        width={28}
-                        height={28}
-                        className="rounded-full"
-                      />
+                <SortHeader field="name" label="Creator" />
+              </th>
+              <th scope="col" className="px-3 py-2.5 text-left">
+                <span className="text-xs font-medium uppercase tracking-wider text-n-slate">
+                  Platforms
+                </span>
+              </th>
+              <th
+                scope="col"
+                aria-sort={
+                  sortField === "followers"
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+                className="px-3 py-2.5 text-right"
+              >
+                <SortHeader
+                  field="followers"
+                  label="Followers"
+                  className="ml-auto"
+                />
+              </th>
+              <th
+                scope="col"
+                aria-sort={
+                  sortField === "growth"
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+                className="px-3 py-2.5 text-right"
+              >
+                <SortHeader field="growth" label="7d" className="ml-auto" />
+              </th>
+              <th
+                scope="col"
+                aria-sort={
+                  sortField === "status"
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+                className="px-3 py-2.5 text-left"
+              >
+                <SortHeader field="status" label="Status" />
+              </th>
+              <th scope="col" className="px-3 py-2.5 text-left">
+                <span className="text-xs font-medium uppercase tracking-wider text-n-slate">
+                  Synced
+                </span>
+              </th>
+              <th scope="col" className="px-3 py-2.5 text-right">
+                <span className="text-xs font-medium uppercase tracking-wider text-n-slate">
+                  Actions
+                </span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row) => {
+              const { creator, accessId, inviteState, inviteExpiresAt } = row;
+              const avatarSrc = getSafeImageSrc(creator.avatarUrl);
+              const primaryGrowth =
+                creator.growthRollups.find(
+                  (g) => g.platform === creator.primaryPlatform,
+                ) ?? creator.growthRollups[0];
+              // Color from the actual value so a loss never renders green.
+              const trendUp =
+                primaryGrowth?.pct7d != null && primaryGrowth.pct7d > 0;
+              const trendDown =
+                primaryGrowth?.pct7d != null && primaryGrowth.pct7d < 0;
+              const sortedPlatforms = sortByPlatformOrder(
+                creator.platformAccounts,
+              );
+              const isActive = inviteState === "active";
+              const profileHref = isActive
+                ? `/talent-manager/creator/${creator.slug}`
+                : `/creator/${creator.slug}`;
+              const regeneratedUrl = regeneratedUrls[accessId];
+
+              return (
+                <tr
+                  key={accessId}
+                  className={cn(
+                    "border-b border-n-line transition-colors hover:bg-n-surface/50 last:border-b-0",
+                    !isActive && "bg-white/30",
+                  )}
+                >
+                  <td className="px-3 py-2.5">
+                    <Link
+                      href={profileHref}
+                      className="flex items-center gap-2.5 hover:underline"
+                    >
+                      {avatarSrc ? (
+                        <Image
+                          src={avatarSrc}
+                          alt={creator.displayName}
+                          width={28}
+                          height={28}
+                          className="rounded-full"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-n-surface text-xs font-bold text-n-ink">
+                          {creator.displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-n-ink">
+                          {creator.displayName}
+                        </p>
+                        <p className="text-xs text-n-slate">/{creator.slug}</p>
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {sortedPlatforms.length > 0 ? (
+                      <div
+                        className="flex flex-wrap items-center gap-1.5"
+                        aria-label="Connected platforms"
+                      >
+                        {sortedPlatforms.map((account) => (
+                          <span
+                            key={account.platform}
+                            title={`${PLATFORM_CONFIG[account.platform].name} — @${account.platformUsername}`}
+                          >
+                            <PlatformIcon
+                              platform={account.platform}
+                              size="xs"
+                              rounded="full"
+                            />
+                          </span>
+                        ))}
+                      </div>
                     ) : (
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#383A40] text-xs font-bold text-[#F2F3F5]">
-                        {creator.displayName.charAt(0).toUpperCase()}
+                      <span className="text-xs text-n-slate">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-sm font-medium text-n-ink">
+                    {formatNumber(Number(creator.totalFollowers ?? 0))}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {primaryGrowth?.pct7d != null ? (
+                      <span
+                        className={cn(
+                          "text-sm font-medium",
+                          trendUp && "text-n-success",
+                          trendDown && "text-n-red",
+                          !trendUp && !trendDown && "text-n-slate",
+                        )}
+                      >
+                        {formatPercent(primaryGrowth.pct7d)}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-n-slate">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {inviteState === "active" && (
+                      <span className="rounded-full bg-n-success/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-n-success">
+                        Active
+                      </span>
+                    )}
+                    {inviteState === "pending" && (
+                      <div>
+                        <span className="rounded-full bg-n-warning/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-n-warning">
+                          Pending
+                        </span>
+                        {inviteExpiresAt && (
+                          <p className="mt-0.5 text-xs text-n-slate">
+                            exp {new Date(inviteExpiresAt).toLocaleDateString()}
+                          </p>
+                        )}
                       </div>
                     )}
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-[#F2F3F5]">
-                        {creator.displayName}
-                      </p>
-                      <p className="text-[10px] text-[#949BA4]">
-                        /{creator.slug}
-                      </p>
-                    </div>
-                  </Link>
-                </td>
-                <td className="hidden px-3 py-2.5 sm:table-cell">
-                  {sortedPlatforms.length > 0 ? (
-                    <div
-                      className="flex flex-wrap items-center gap-1.5"
-                      aria-label="Connected platforms"
-                    >
-                      {sortedPlatforms.map((account) => (
-                        <span
-                          key={account.platform}
-                          title={`${PLATFORM_CONFIG[account.platform].name} — @${account.platformUsername}`}
-                        >
-                          <PlatformIcon
-                            platform={account.platform}
-                            size="xs"
-                            rounded="full"
-                          />
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-[#949BA4]">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-right text-sm font-medium text-[#F2F3F5]">
-                  {formatNumber(Number(creator.totalFollowers ?? 0))}
-                </td>
-                <td className="hidden px-3 py-2.5 text-right md:table-cell">
-                  {primaryGrowth?.pct7d != null ? (
-                    <span
-                      className={cn(
-                        "text-sm font-medium",
-                        trendUp && "text-[#22c55e]",
-                        trendDown && "text-[#E32C19]",
-                        !trendUp && !trendDown && "text-[#949BA4]",
-                      )}
-                    >
-                      {formatPercent(primaryGrowth.pct7d)}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-[#949BA4]">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5">
-                  {inviteState === "active" && (
-                    <span className="rounded-full bg-[#22c55e]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#86efac]">
-                      Active
-                    </span>
-                  )}
-                  {inviteState === "pending" && (
-                    <div>
-                      <span className="rounded-full bg-[#f59e0b]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#fcd34d]">
-                        Pending
+                    {inviteState === "expired" && (
+                      <span className="rounded-full bg-n-error/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-n-error">
+                        Expired
                       </span>
-                      {inviteExpiresAt && (
-                        <p className="mt-0.5 text-[10px] text-[#949BA4]">
-                          exp {new Date(inviteExpiresAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {inviteState === "expired" && (
-                    <span className="rounded-full bg-[#ef4444]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#fca5a5]">
-                      Expired
-                    </span>
-                  )}
-                </td>
-                <td className="hidden px-3 py-2.5 lg:table-cell">
-                  {creator.lastSnapshotAt ? (
-                    <span className="text-xs text-[#949BA4]">
-                      {formatRelativeTime(creator.lastSnapshotAt)}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-[#949BA4]">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {isActive ? (
-                      <Link href={profileHref}>
-                        <Button variant="ghost" size="sm">
-                          Manage
-                        </Button>
-                      </Link>
-                    ) : regeneratedUrl ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopy(accessId, regeneratedUrl)}
-                      >
-                        {copiedAccessId === accessId ? "Copied" : "Copy link"}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRegenerate(accessId)}
-                        disabled={regeneratingId === accessId}
-                      >
-                        {regeneratingId === accessId ? "…" : "Regenerate"}
-                      </Button>
                     )}
-                    {confirmingRemove === accessId ? (
-                      <>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {creator.lastSnapshotAt ? (
+                      <span className="text-xs text-n-slate">
+                        {formatRelativeTime(creator.lastSnapshotAt)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-n-slate">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {isActive ? (
+                        <Link href={profileHref}>
+                          <Button
+                            appearance="noticed"
+                            variant="ghost"
+                            size="sm"
+                          >
+                            Manage
+                          </Button>
+                        </Link>
+                      ) : regeneratedUrl ? (
                         <Button
+                          appearance="noticed"
                           variant="ghost"
                           size="sm"
-                          onClick={() => setConfirmingRemove(null)}
-                          className="text-[#949BA4]"
+                          onClick={() => handleCopy(accessId, regeneratedUrl)}
                         >
-                          Cancel
+                          {copiedAccessId === accessId ? "Copied" : "Copy link"}
                         </Button>
+                      ) : (
                         <Button
+                          appearance="noticed"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRegenerate(accessId)}
+                          disabled={regeneratingId === accessId}
+                        >
+                          {regeneratingId === accessId ? "…" : "Regenerate"}
+                        </Button>
+                      )}
+                      {confirmingRemove === accessId ? (
+                        <>
+                          <Button
+                            appearance="noticed"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmingRemove(null)}
+                            className="text-n-slate"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            appearance="noticed"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemove(accessId, creator.id)}
+                            disabled={isRemoving}
+                            className="text-n-error hover:bg-n-error/10 hover:text-n-error"
+                          >
+                            Confirm
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          appearance="noticed"
                           variant="ghost"
                           size="sm"
                           onClick={() => handleRemove(accessId, creator.id)}
                           disabled={isRemoving}
-                          className="text-[#ef4444] hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
+                          className="text-n-slate hover:bg-n-error/10 hover:text-n-error"
                         >
-                          Confirm
+                          {isActive ? "Remove" : "Cancel"}
                         </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemove(accessId, creator.id)}
-                        disabled={isRemoving}
-                        className="text-[#949BA4] hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
-                      >
-                        {isActive ? "Remove" : "Cancel"}
-                      </Button>
+                      )}
+                    </div>
+                    {regeneratedUrl && (
+                      <input
+                        aria-label={`Invitation link for ${creator.displayName}`}
+                        readOnly
+                        value={regeneratedUrl}
+                        onFocus={(event) => event.target.select()}
+                        className="n-input mt-2 max-w-64 text-xs"
+                      />
                     )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

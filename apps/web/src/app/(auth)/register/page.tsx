@@ -31,11 +31,11 @@ export default async function RegisterPage({
   const socialProviders = getConfiguredSocialLoginProviders();
 
   return (
-    <div className="w-full max-w-md">
+    <div className="w-full max-w-lg">
       {/* Back button */}
       <Link
         href="/"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-n-slate transition-colors hover:text-n-ink"
       >
         <svg
           className="h-4 w-4"
@@ -53,17 +53,15 @@ export default async function RegisterPage({
         Back
       </Link>
 
-      <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-8 text-center shadow-xl">
+      <div className="text-left">
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.16em] text-[#949BA4]">
+          <p className="text-xs uppercase tracking-[0.16em] text-n-slate">
             Get started
           </p>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-[#F2F3F5]">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-n-ink">
             Create Account
           </h1>
-          <p className="text-sm text-[#949BA4]">
-            Join TwitchMetrics in seconds
-          </p>
+          <p className="text-sm text-n-slate">Join Noticed in seconds</p>
         </div>
 
         <div className="mt-6">
@@ -73,9 +71,9 @@ export default async function RegisterPage({
           />
         </div>
 
-        <p className="mt-6 text-sm text-[#949BA4]">
+        <p className="mt-6 text-sm text-n-slate">
           Already have an account?{" "}
-          <Link href={loginHref} className="text-[#DBDEE1] hover:text-white">
+          <Link href={loginHref} className="text-n-ink hover:text-n-ink">
             Log in
           </Link>
         </p>

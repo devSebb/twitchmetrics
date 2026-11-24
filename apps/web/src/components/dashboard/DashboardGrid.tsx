@@ -382,7 +382,7 @@ export function DashboardGrid({
     dataAvailability,
   ]);
 
-  if (appearance === "noticed" && !isOwner) {
+  if (appearance === "noticed") {
     const widgets = enabledWidgets.filter((widgetId) =>
       hasContent(widgetId, {
         profile,
@@ -394,35 +394,52 @@ export function DashboardGrid({
     );
     const groups = groupProfileWidgets(widgets);
     return (
-      <EditorialSections
-        sections={groups.map((group) => ({
-          id: group.id,
-          title: group.title,
-          content: (
-            <div className="space-y-10">
-              {group.id === "partners" &&
-                profile.brandPartnerships.length > 0 && (
-                  <p className="text-sm text-n-slate">
-                    Partnerships added by the creator.
-                  </p>
-                )}
-              {group.widgets.map((widgetId) =>
-                renderGated(
-                  widgetId,
-                  isClaimed,
-                  renderWidget(
+      <>
+        <EditorialSections
+          sections={groups.map((group) => ({
+            id: group.id,
+            title: group.title,
+            content: (
+              <div key={group.id} className="space-y-10">
+                {group.id === "partners" &&
+                  profile.brandPartnerships.length > 0 && (
+                    <p className="text-sm text-n-slate">
+                      Partnerships added by the creator.
+                    </p>
+                  )}
+                {group.widgets.map((widgetId) =>
+                  renderGated(
                     widgetId,
-                    profile,
                     isClaimed,
-                    false,
-                    statsContext,
+                    renderWidget(
+                      widgetId,
+                      profile,
+                      isClaimed,
+                      isOwner,
+                      statsContext,
+                    ),
                   ),
-                ),
-              )}
-            </div>
-          ),
-        }))}
-      />
+                )}
+              </div>
+            ),
+          }))}
+        />
+        {isOwner && groups.length === 0 && (
+          <p className="mx-auto max-w-[1280px] px-5 py-12 text-n-slate">
+            Choose sections in Customise profile to build your page.
+          </p>
+        )}
+        {isOwner && customizeOpen !== undefined && (
+          <WidgetToggle
+            open={customizeOpen}
+            onClose={onCustomizeClose ?? (() => undefined)}
+            enabledWidgets={enabledWidgets}
+            onConfigChange={handleWidgetConfigChange}
+            profileSlug={profile.slug}
+            publicDemographicsEnabled={profile.publicDemographicsEnabled}
+          />
+        )}
+      </>
     );
   }
 

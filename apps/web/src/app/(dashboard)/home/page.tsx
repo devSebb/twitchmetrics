@@ -167,36 +167,36 @@ export default async function DashboardHomePage() {
     creatorProfile.platformAccounts.length === 0
   ) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[1280px] space-y-10 px-5 py-10 sm:px-8 lg:px-10">
         <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">
+          <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
             Welcome, {user?.name ?? "Creator"}
           </h1>
-          <p className="mt-1 text-sm text-[#949BA4]">
+          <p className="mt-1 text-sm text-n-slate">
             Connect your streaming platforms to start tracking your growth.
           </p>
         </div>
-        <Card>
+        <Card appearance="noticed">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-[#F2F3F5]">
+              <h2 className="text-base font-semibold text-n-ink">
                 Get started
               </h2>
-              <p className="mt-1 text-sm text-[#949BA4]">
+              <p className="mt-1 text-sm text-n-slate">
                 Link your Twitch, YouTube, or other accounts to begin importing
                 your channel data and analytics.
               </p>
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               <Link
                 href="/dashboard/connections"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#E32C19] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C72615]"
+                className="inline-flex items-center gap-2 rounded-lg bg-n-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-n-red-hover"
               >
                 Connect platforms
               </Link>
               <Link
                 href="/dashboard/claim"
-                className="inline-flex items-center gap-2 rounded-lg border border-[#3F4147] px-4 py-2 text-sm font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
+                className="inline-flex items-center gap-2 rounded-lg border border-n-line px-4 py-2 text-sm font-medium text-n-ink transition-colors hover:bg-n-surface"
               >
                 Claim existing profile
               </Link>
@@ -219,13 +219,14 @@ export default async function DashboardHomePage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-[1280px] space-y-10 px-5 py-10 sm:px-8 lg:px-10">
       <div>
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">
+        <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
           Welcome back, {user?.name ?? "Creator"}
         </h1>
-        <p className="mt-1 text-sm text-[#949BA4]">
-          Snapshot of your creator performance and quick actions.
+        <p className="mt-1 text-sm text-n-slate">
+          Your audience at a glance. Keep your profile current and explore your
+          connected insights.
         </p>
       </div>
 
@@ -236,14 +237,12 @@ export default async function DashboardHomePage() {
         lastEnrichmentAt={latestAnalytics?.fetchedAt.toISOString() ?? null}
       />
 
-      <Card>
-        <h2 className="text-base font-semibold text-[#F2F3F5]">
-          Quick actions
-        </h2>
+      <Card appearance="noticed">
+        <h2 className="text-base font-semibold text-n-ink">Quick actions</h2>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Link
             href={`/creator/${creatorProfile.slug}`}
-            className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-3 text-sm text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            className="flex items-center gap-2 rounded-lg border border-n-line bg-n-surface px-4 py-3 text-sm text-n-ink transition-colors hover:bg-n-line"
           >
             <svg
               width="14"
@@ -263,7 +262,7 @@ export default async function DashboardHomePage() {
           </Link>
           <Link
             href="/dashboard/connections"
-            className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-3 text-sm text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            className="flex items-center gap-2 rounded-lg border border-n-line bg-n-surface px-4 py-3 text-sm text-n-ink transition-colors hover:bg-n-line"
           >
             <svg
               width="14"
@@ -282,7 +281,7 @@ export default async function DashboardHomePage() {
           </Link>
           <Link
             href="/dashboard/analytics"
-            className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-3 text-sm text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+            className="flex items-center gap-2 rounded-lg border border-n-line bg-n-surface px-4 py-3 text-sm text-n-ink transition-colors hover:bg-n-line"
           >
             <svg
               width="14"

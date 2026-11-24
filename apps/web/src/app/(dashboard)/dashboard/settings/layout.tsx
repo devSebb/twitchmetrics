@@ -6,10 +6,12 @@ export default function DashboardSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="noticed n-workspace mx-auto w-full max-w-[1280px] space-y-8 px-5 py-10 sm:px-8 lg:px-10">
       <div>
-        <h1 className="text-3xl font-bold text-[#F2F3F5]">Settings</h1>
-        <p className="mt-2 text-sm text-[#949BA4]">
+        <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
+          Settings
+        </h1>
+        <p className="mt-2 text-sm text-n-slate">
           Manage your profile, password, and account preferences.
         </p>
       </div>

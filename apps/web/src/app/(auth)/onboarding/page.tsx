@@ -32,12 +32,10 @@ export default async function OnboardingPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-2 text-center">
-        <h1 className="font-display text-3xl font-bold tracking-tight text-[#F2F3F5]">
-          Welcome to TwitchMetrics
+        <h1 className="font-display text-3xl font-bold tracking-tight text-n-ink">
+          Welcome to Noticed
         </h1>
-        <p className="text-sm text-[#949BA4]">
-          Let&apos;s set up your account.
-        </p>
+        <p className="text-sm text-n-slate">Let&apos;s set up your account.</p>
       </div>
       <OnboardingWizard
         initialName={user?.name ?? session.user.name ?? null}

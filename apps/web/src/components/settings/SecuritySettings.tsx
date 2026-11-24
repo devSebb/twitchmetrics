@@ -43,26 +43,29 @@ export function SecuritySettings({ hasPassword }: SecuritySettingsProps) {
       setStatus("New password and confirmation do not match.");
       return;
     }
-    await changePassword.mutateAsync({ currentPassword, newPassword });
+    changePassword.mutate({ currentPassword, newPassword });
   }
 
-  const INPUT_CLS =
-    "w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#4E5058] placeholder:text-[#949BA4]";
+  const INPUT_CLS = "n-input";
 
   return (
     <div className="max-w-3xl space-y-6">
       {hasPassword ? (
-        <Card>
-          <h2 className="text-lg font-semibold text-[#F2F3F5]">
-            Change Password
-          </h2>
+        <Card appearance="noticed">
+          <h2 className="text-lg font-semibold text-n-ink">Change Password</h2>
           <form onSubmit={onSubmitPassword} className="mt-4 space-y-3">
             <div>
-              <label className="mb-1 block text-sm text-[#DBDEE1]">
+              <label
+                htmlFor="security-currentPassword"
+                className="mb-1 block text-sm text-n-ink"
+              >
                 Current password
               </label>
               <input
                 type="password"
+                id="security-currentPassword"
+                autoComplete="current-password"
+                required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 className={INPUT_CLS}
@@ -70,11 +73,17 @@ export function SecuritySettings({ hasPassword }: SecuritySettingsProps) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-[#DBDEE1]">
+              <label
+                htmlFor="security-newPassword"
+                className="mb-1 block text-sm text-n-ink"
+              >
                 New password
               </label>
               <input
                 type="password"
+                id="security-newPassword"
+                autoComplete="new-password"
+                required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className={INPUT_CLS}
@@ -82,11 +91,17 @@ export function SecuritySettings({ hasPassword }: SecuritySettingsProps) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-[#DBDEE1]">
+              <label
+                htmlFor="security-confirmPassword"
+                className="mb-1 block text-sm text-n-ink"
+              >
                 Confirm new password
               </label>
               <input
                 type="password"
+                id="security-confirmPassword"
+                autoComplete="new-password"
+                required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className={INPUT_CLS}
@@ -94,6 +109,7 @@ export function SecuritySettings({ hasPassword }: SecuritySettingsProps) {
               />
             </div>
             <Button
+              appearance="noticed"
               type="submit"
               variant="secondary"
               disabled={changePassword.isPending}
@@ -103,30 +119,31 @@ export function SecuritySettings({ hasPassword }: SecuritySettingsProps) {
           </form>
         </Card>
       ) : (
-        <Card>
-          <h2 className="text-lg font-semibold text-[#F2F3F5]">Password</h2>
-          <p className="mt-2 text-sm text-[#949BA4]">
+        <Card appearance="noticed">
+          <h2 className="text-lg font-semibold text-n-ink">Password</h2>
+          <p className="mt-2 text-sm text-n-slate">
             Your account uses OAuth sign-in. No password is set.
           </p>
         </Card>
       )}
 
-      <Card className="border-[#7f1d1d] bg-[#3f1f24]">
-        <h2 className="text-lg font-semibold text-[#F2F3F5]">Danger Zone</h2>
-        <p className="mt-2 text-sm text-[#fecaca]">
+      <Card appearance="noticed" className="border-n-error/30 bg-n-error/5">
+        <h2 className="text-lg font-semibold text-n-ink">Danger Zone</h2>
+        <p className="mt-2 text-sm text-n-error">
           Deleting your account will remove sessions and disconnect claimed
           profile ownership. This action cannot be undone.
         </p>
         <Button
+          appearance="noticed"
           type="button"
           variant="secondary"
-          className="mt-4 border border-[#dc2626] text-[#fecaca]"
+          className="mt-4 border border-n-error text-n-error"
           onClick={() => {
             const confirmed = window.confirm(
               "Delete account permanently? This action cannot be undone.",
             );
             if (!confirmed) return;
-            void deleteAccount.mutateAsync();
+            deleteAccount.mutate();
           }}
           disabled={deleteAccount.isPending}
         >
@@ -134,7 +151,11 @@ export function SecuritySettings({ hasPassword }: SecuritySettingsProps) {
         </Button>
       </Card>
 
-      {status && <p className="text-sm text-[#DBDEE1]">{status}</p>}
+      {status && (
+        <p role="status" className="text-sm text-n-ink">
+          {status}
+        </p>
+      )}
     </div>
   );
 }

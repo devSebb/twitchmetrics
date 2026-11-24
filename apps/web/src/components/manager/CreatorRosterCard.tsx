@@ -119,12 +119,12 @@ export function CreatorRosterCard({
 
   return (
     <Card
+      appearance="noticed"
       className={cn(
         "flex flex-col transition-colors",
-        isActive && "hover:border-[#4E5058]",
-        isPending && "border-dashed border-[#3F4147] bg-[#1E1F22]/60",
-        isExpired &&
-          "border-dashed border-[#3F4147] bg-[#1E1F22]/40 opacity-90",
+        isActive && "hover:border-n-ink/40",
+        isPending && "border-dashed border-n-line bg-white/60",
+        isExpired && "border-dashed border-n-line bg-white/40 opacity-90",
       )}
     >
       <div className="flex items-start gap-3">
@@ -139,7 +139,7 @@ export function CreatorRosterCard({
               className="rounded-full"
             />
           ) : (
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#383A40] text-lg font-bold text-[#F2F3F5]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-n-surface text-lg font-bold text-n-ink">
               {creator.displayName.charAt(0).toUpperCase()}
             </div>
           )}
@@ -149,22 +149,22 @@ export function CreatorRosterCard({
           <div className="flex items-center gap-2">
             <Link
               href={profileHref}
-              className="truncate text-sm font-semibold text-[#F2F3F5] hover:underline"
+              className="truncate text-sm font-semibold text-n-ink hover:underline"
             >
               {creator.displayName}
             </Link>
             {isPending && (
-              <span className="shrink-0 rounded-full bg-[#f59e0b]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#fcd34d]">
+              <span className="shrink-0 rounded-full bg-n-warning/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-n-warning">
                 Pending
               </span>
             )}
             {isExpired && (
-              <span className="shrink-0 rounded-full bg-[#ef4444]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#fca5a5]">
+              <span className="shrink-0 rounded-full bg-n-error/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-n-error">
                 Expired
               </span>
             )}
           </div>
-          <p className="text-xs text-[#949BA4]">/{creator.slug}</p>
+          <p className="text-xs text-n-slate">/{creator.slug}</p>
 
           {creator.platformAccounts.length > 0 && (
             <div
@@ -189,17 +189,17 @@ export function CreatorRosterCard({
       </div>
 
       {/* Public stats — same for active/pending/expired */}
-      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[#3F4147] pt-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-n-line pt-3">
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-[#949BA4]">
+          <p className="text-xs uppercase tracking-wider text-n-slate">
             Followers
           </p>
-          <p className="text-sm font-bold text-[#F2F3F5]">
+          <p className="text-sm font-bold text-n-ink">
             {formatNumber(Number(creator.totalFollowers ?? 0))}
           </p>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-[#949BA4]">
+          <p className="text-xs uppercase tracking-wider text-n-slate">
             7d Growth
           </p>
           <div className="flex items-center gap-1">
@@ -208,9 +208,9 @@ export function CreatorRosterCard({
                 <span
                   className={cn(
                     "text-sm font-bold",
-                    trendUp && "text-[#22c55e]",
-                    trendDown && "text-[#E32C19]",
-                    !trendUp && !trendDown && "text-[#949BA4]",
+                    trendUp && "text-n-success",
+                    trendDown && "text-n-red",
+                    !trendUp && !trendDown && "text-n-slate",
                   )}
                 >
                   {primaryGrowth.pct7d !== null
@@ -243,7 +243,7 @@ export function CreatorRosterCard({
                 )}
               </>
             ) : (
-              <span className="text-sm text-[#949BA4]">—</span>
+              <span className="text-sm text-n-slate">—</span>
             )}
           </div>
         </div>
@@ -252,17 +252,17 @@ export function CreatorRosterCard({
       {/* Last synced / Expiry */}
       <div className="mt-2 space-y-0.5">
         {creator.lastSnapshotAt && (
-          <p className="text-[10px] text-[#949BA4]">
+          <p className="text-xs text-n-slate">
             Synced {formatRelativeTime(creator.lastSnapshotAt)}
           </p>
         )}
         {isPending && inviteExpiresAt && (
-          <p className="text-[10px] text-[#fcd34d]">
+          <p className="text-xs text-n-warning">
             Expires {new Date(inviteExpiresAt).toLocaleDateString()}
           </p>
         )}
         {isExpired && inviteExpiresAt && (
-          <p className="text-[10px] text-[#fca5a5]">
+          <p className="text-xs text-n-error">
             Expired {formatRelativeTime(inviteExpiresAt)}
           </p>
         )}
@@ -270,8 +270,8 @@ export function CreatorRosterCard({
 
       {/* Regenerated URL display */}
       {regeneratedUrl && (
-        <div className="mt-3 rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/5 p-2">
-          <p className="mb-1 text-[10px] font-medium text-[#86efac]">
+        <div className="mt-3 rounded-lg border border-n-success/30 bg-n-success/5 p-2">
+          <p className="mb-1 text-xs font-medium text-n-success">
             New link generated
           </p>
           <div className="flex gap-2">
@@ -280,25 +280,41 @@ export function CreatorRosterCard({
               readOnly
               value={regeneratedUrl}
               onFocus={(e) => e.currentTarget.select()}
-              className="flex-1 rounded border border-[#3F4147] bg-[#1E1F22] px-2 py-1 text-[10px] text-[#DBDEE1] outline-none focus:border-[#E32C19]/50"
+              className="flex-1 rounded border border-n-line bg-white px-2 py-1 text-xs text-n-ink outline-none focus:border-n-red/50"
             />
-            <Button variant="ghost" size="sm" onClick={handleCopyUrl}>
+            <Button
+              appearance="noticed"
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyUrl}
+            >
               {copied ? "Copied!" : "Copy"}
             </Button>
           </div>
         </div>
       )}
 
+      {regenerateMutation.error && (
+        <p role="alert" className="mt-3 text-sm text-n-error">
+          {regenerateMutation.error.message}
+        </p>
+      )}
       {/* Actions */}
-      <div className="mt-auto flex items-center gap-2 border-t border-[#3F4147] pt-3 mt-3">
+      <div className="mt-auto flex items-center gap-2 border-t border-n-line pt-3 mt-3">
         {isActive ? (
           <Link href={profileHref} className="flex-1">
-            <Button variant="secondary" size="sm" className="w-full">
+            <Button
+              appearance="noticed"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+            >
               Manage
             </Button>
           </Link>
         ) : (
           <Button
+            appearance="noticed"
             variant="secondary"
             size="sm"
             className="flex-1"
@@ -312,30 +328,33 @@ export function CreatorRosterCard({
         {confirmingRemove ? (
           <div className="flex items-center gap-1">
             <Button
+              appearance="noticed"
               variant="ghost"
               size="sm"
               onClick={() => setConfirmingRemove(false)}
-              className="text-[#949BA4] hover:text-[#DBDEE1]"
+              className="text-n-slate hover:text-n-ink"
             >
               Cancel
             </Button>
             <Button
+              appearance="noticed"
               variant="ghost"
               size="sm"
               onClick={handleRemoveClick}
               disabled={isRemoving}
-              className="text-[#ef4444] hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
+              className="text-n-error hover:bg-n-error/10 hover:text-n-error"
             >
               Confirm
             </Button>
           </div>
         ) : (
           <Button
+            appearance="noticed"
             variant="ghost"
             size="sm"
             onClick={handleRemoveClick}
             disabled={isRemoving}
-            className="text-[#949BA4] hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
+            className="text-n-slate hover:bg-n-error/10 hover:text-n-error"
           >
             {isActive ? "Remove" : "Cancel"}
           </Button>

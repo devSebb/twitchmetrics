@@ -27,10 +27,10 @@ export default async function ClaimProfilePage({
     return (
       <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-6">
         <div>
-          <h1 className="text-3xl font-bold text-[#F2F3F5]">
+          <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
             Claim Your Profile
           </h1>
-          <p className="mt-2 text-sm text-[#949BA4]">
+          <p className="mt-2 text-sm text-n-slate">
             Search for your creator profile, verify ownership, and unlock
             analytics and creator tools.
           </p>
@@ -56,11 +56,9 @@ export default async function ClaimProfilePage({
   if (!profile) {
     return (
       <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-6">
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-          <h1 className="text-2xl font-bold text-[#F2F3F5]">
-            Claim Your Profile
-          </h1>
-          <p className="mt-2 text-sm text-[#f87171]">
+        <div className="rounded-xl border border-n-line bg-white p-6">
+          <h1 className="text-2xl font-bold text-n-ink">Claim Your Profile</h1>
+          <p className="mt-2 text-sm text-n-error">
             Profile not found. It may have been removed or the link is invalid.
           </p>
         </div>
@@ -71,7 +69,9 @@ export default async function ClaimProfilePage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-8 sm:px-6">
-      <h1 className="text-3xl font-bold text-[#F2F3F5]">Claim Your Profile</h1>
+      <h1 className="text-4xl font-extrabold tracking-tight text-n-ink">
+        Claim Your Profile
+      </h1>
       <ClaimFlow
         profile={{
           id: profile.id,

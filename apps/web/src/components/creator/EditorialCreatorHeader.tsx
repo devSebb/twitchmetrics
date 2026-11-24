@@ -17,10 +17,12 @@ import type { ReactNode } from "react";
 export function EditorialCreatorHeader({
   creator,
   kit = false,
+  owner = false,
   actions,
 }: {
   creator: CreatorHeaderProps["creator"];
   kit?: boolean;
+  owner?: boolean;
   actions?: ReactNode;
 }) {
   const banner = getSafeImageSrc(creator.bannerUrl);
@@ -46,13 +48,19 @@ export function EditorialCreatorHeader({
             <div className="absolute inset-0 bg-gradient-to-r from-n-ink to-transparent" />
           </div>
         )}
-        <Container className="relative py-12 sm:py-16 lg:py-20">
+        <Container
+          className={
+            owner
+              ? "relative py-8 sm:py-10"
+              : "relative py-12 sm:py-16 lg:py-20"
+          }
+        >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="n-eyebrow text-white/70">
               {kit ? "Creator media kit" : "Creator profile & analytics"}
             </p>
             <div className="flex flex-wrap items-center gap-4">
-              {managed ? (
+              {owner ? null : managed ? (
                 <span className="text-sm text-white/80">
                   {creator.state === "premium"
                     ? "Premium profile"
@@ -68,7 +76,7 @@ export function EditorialCreatorHeader({
               {actions}
             </div>
           </div>
-          <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-end">
+          <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-end">
             <div className="min-w-0">
               <CreatorPortrait
                 src={creator.avatarUrl}
@@ -76,7 +84,9 @@ export function EditorialCreatorHeader({
                 priority
                 className="mb-6 h-24 w-24 sm:h-28 sm:w-28"
               />
-              <h1 className="break-words text-[clamp(2.75rem,7vw,6rem)] font-extrabold leading-[.98] tracking-[-.055em]">
+              <h1
+                className={`break-words font-extrabold leading-[.98] tracking-[-.055em] ${owner ? "text-[clamp(2.5rem,5vw,4rem)]" : "text-[clamp(2.75rem,7vw,6rem)]"}`}
+              >
                 {creator.displayName}
                 <span className="text-n-red">.</span>
               </h1>
@@ -96,7 +106,9 @@ export function EditorialCreatorHeader({
                 Total audience{" "}
                 <InfoTip info={CREATOR_HEADER_INFO.totalFollowers} />
               </p>
-              <p className="mt-3 text-[clamp(3.5rem,7vw,6rem)] font-extrabold leading-none tracking-[-.06em]">
+              <p
+                className={`mt-3 font-extrabold leading-none tracking-[-.06em] ${owner ? "text-5xl" : "text-[clamp(3.5rem,7vw,6rem)]"}`}
+              >
                 {formatNumber(Number(creator.totalFollowers))}
               </p>
               <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">

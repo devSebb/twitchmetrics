@@ -50,7 +50,7 @@ function ProfileCard({ profile }: { profile: ClaimableProfile }) {
 
   return (
     <div className="flex items-center gap-4">
-      <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
+      <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-full bg-n-surface">
         {avatarSrc ? (
           <Image
             src={avatarSrc}
@@ -60,16 +60,16 @@ function ProfileCard({ profile }: { profile: ClaimableProfile }) {
             sizes="56px"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-lg font-bold text-white bg-[#9146ff]">
+          <div className="flex h-full w-full items-center justify-center text-lg font-bold text-white bg-n-navy">
             {profile.displayName.charAt(0)}
           </div>
         )}
       </div>
       <div>
-        <p className="text-lg font-semibold text-[#F2F3F5]">
+        <p className="text-lg font-semibold text-n-ink">
           {profile.displayName}
         </p>
-        <p className="text-sm text-[#949BA4]">
+        <p className="text-sm text-n-slate">
           <span
             className="mr-1.5 inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor: platformConfig.color }}
@@ -218,26 +218,54 @@ export function ClaimFlow({
     return `${hours}h ${minutes}m`;
   }, [status?.challengeExpiresAt]);
 
+  const progress = (
+    <ol
+      aria-label="Claim progress"
+      className="mb-6 flex flex-wrap gap-x-5 gap-y-2 border-b border-n-line pb-4 text-xs font-semibold text-n-slate"
+    >
+      {(["confirm", "method", "action", "result"] as const).map(
+        (item, index) => (
+          <li
+            key={item}
+            aria-current={step === item ? "step" : undefined}
+            className={step === item ? "text-n-red" : ""}
+          >
+            {index + 1}.{" "}
+            {
+              {
+                confirm: "Confirm profile",
+                method: "Choose method",
+                action: "Verify ownership",
+                result: "Claim status",
+              }[item]
+            }
+          </li>
+        ),
+      )}
+    </ol>
+  );
+
   // ─── Step: Confirm ───
   if (step === "confirm") {
     return (
-      <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-        <h2 className="text-lg font-semibold text-[#F2F3F5] mb-4">
+      <div className="rounded-xl border border-n-line bg-white p-6">
+        {progress}
+        <h2 className="text-lg font-semibold text-n-ink mb-4">
           Is this your profile?
         </h2>
         <ProfileCard profile={profile} />
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={() => setStep("method")}
-            className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors"
+            className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors"
           >
             Yes, this is me
           </button>
           <button
             type="button"
             onClick={() => router.push("/claim")}
-            className="rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-2.5 text-sm font-semibold text-[#DBDEE1] hover:bg-[#4E5058] transition-colors"
+            className="rounded-lg border border-n-line bg-n-surface px-4 py-2.5 text-sm font-semibold text-n-ink hover:bg-n-surface transition-colors"
           >
             Not my profile
           </button>
@@ -250,15 +278,16 @@ export function ClaimFlow({
   if (step === "method") {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
+        {progress}
+        <div className="rounded-xl border border-n-line bg-white p-6">
           <ProfileCard profile={profile} />
         </div>
 
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-          <h2 className="text-lg font-semibold text-[#F2F3F5] mb-1">
+        <div className="rounded-xl border border-n-line bg-white p-6">
+          <h2 className="text-lg font-semibold text-n-ink mb-1">
             Choose Verification Method
           </h2>
-          <p className="text-sm text-[#949BA4] mb-4">
+          <p className="text-sm text-n-slate mb-4">
             Select how you&apos;d like to prove ownership of this profile.
           </p>
 
@@ -270,7 +299,7 @@ export function ClaimFlow({
                 setSelectedMethod("oauth");
                 setStep("action");
               }}
-              className="flex items-start gap-4 rounded-lg border border-[#3F4147] bg-[#383A40] p-4 text-left transition-colors hover:border-[#E32C19]/50 hover:bg-[#3F4147]"
+              className="flex items-start gap-4 rounded-lg border border-n-line bg-n-surface p-4 text-left transition-colors hover:border-n-red/50 hover:bg-n-surface"
             >
               <div
                 className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg"
@@ -293,14 +322,14 @@ export function ClaimFlow({
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-[#F2F3F5]">
+                  <span className="text-sm font-semibold text-n-ink">
                     Verify with {platformConfig.name}
                   </span>
-                  <span className="rounded-full bg-[#E32C19]/20 px-2 py-0.5 text-[10px] font-semibold text-[#E32C19]">
+                  <span className="rounded-full bg-n-red/20 px-2 py-0.5 text-xs font-semibold text-n-red">
                     Recommended
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-[#949BA4]">
+                <p className="mt-0.5 text-xs text-n-slate">
                   Sign in with your {platformConfig.name} account to instantly
                   verify ownership. Takes ~30 seconds.
                 </p>
@@ -316,10 +345,10 @@ export function ClaimFlow({
                 setStep("action");
               }}
               className={cn(
-                "flex items-start gap-4 rounded-lg border border-[#3F4147] bg-[#383A40] p-4 text-left transition-colors",
+                "flex items-start gap-4 rounded-lg border border-n-line bg-n-surface p-4 text-left transition-colors",
                 isHighValue
                   ? "cursor-not-allowed opacity-50"
-                  : "hover:border-[#4E5058] hover:bg-[#3F4147]",
+                  : "hover:border-n-line hover:bg-n-surface",
               )}
               title={
                 isHighValue
@@ -327,9 +356,9 @@ export function ClaimFlow({
                   : undefined
               }
             >
-              <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[#f59e0b]/10">
+              <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-n-warning/10">
                 <svg
-                  className="h-5 w-5 text-[#f59e0b]"
+                  className="h-5 w-5 text-n-warning"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -343,15 +372,15 @@ export function ClaimFlow({
                 </svg>
               </div>
               <div className="flex-1">
-                <span className="text-sm font-semibold text-[#F2F3F5]">
+                <span className="text-sm font-semibold text-n-ink">
                   Bio Verification
                 </span>
-                <p className="mt-0.5 text-xs text-[#949BA4]">
+                <p className="mt-0.5 text-xs text-n-slate">
                   Add a code to your {platformConfig.name.toLowerCase()} bio and
                   we&apos;ll check it. Takes ~5 minutes.
                 </p>
                 {isHighValue && (
-                  <p className="mt-1 text-xs text-[#f87171]">
+                  <p className="mt-1 text-xs text-n-error">
                     Not available for profiles with 100k+ followers
                   </p>
                 )}
@@ -367,10 +396,10 @@ export function ClaimFlow({
                 setStep("action");
               }}
               className={cn(
-                "flex items-start gap-4 rounded-lg border border-[#3F4147] bg-[#383A40] p-4 text-left transition-colors",
+                "flex items-start gap-4 rounded-lg border border-n-line bg-n-surface p-4 text-left transition-colors",
                 isHighValue
                   ? "cursor-not-allowed opacity-50"
-                  : "hover:border-[#4E5058] hover:bg-[#3F4147]",
+                  : "hover:border-n-line hover:bg-n-surface",
               )}
               title={
                 isHighValue
@@ -378,9 +407,9 @@ export function ClaimFlow({
                   : undefined
               }
             >
-              <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[#6366f1]/10">
+              <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-n-navy/10">
                 <svg
-                  className="h-5 w-5 text-[#6366f1]"
+                  className="h-5 w-5 text-n-navy"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -394,14 +423,14 @@ export function ClaimFlow({
                 </svg>
               </div>
               <div className="flex-1">
-                <span className="text-sm font-semibold text-[#F2F3F5]">
+                <span className="text-sm font-semibold text-n-ink">
                   Manual Review
                 </span>
-                <p className="mt-0.5 text-xs text-[#949BA4]">
+                <p className="mt-0.5 text-xs text-n-slate">
                   Submit proof of ownership for our team to review. 24-48 hours.
                 </p>
                 {isHighValue && (
-                  <p className="mt-1 text-xs text-[#f87171]">
+                  <p className="mt-1 text-xs text-n-error">
                     Not available for profiles with 100k+ followers
                   </p>
                 )}
@@ -412,13 +441,13 @@ export function ClaimFlow({
           <button
             type="button"
             onClick={() => setStep("confirm")}
-            className="mt-4 text-xs text-[#949BA4] hover:text-[#DBDEE1] transition-colors"
+            className="mt-4 text-xs text-n-slate hover:text-n-ink transition-colors"
           >
             ← Back
           </button>
         </div>
 
-        {error && <p className="text-sm text-[#f87171]">{error}</p>}
+        {error && <p className="text-sm text-n-error">{error}</p>}
       </div>
     );
   }
@@ -427,26 +456,27 @@ export function ClaimFlow({
   if (step === "action") {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
+        {progress}
+        <div className="rounded-xl border border-n-line bg-white p-6">
           <ProfileCard profile={profile} />
         </div>
 
         {/* OAuth Action */}
         {selectedMethod === "oauth" && (
-          <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-            <h2 className="text-lg font-semibold text-[#F2F3F5] mb-2">
+          <div className="rounded-xl border border-n-line bg-white p-6">
+            <h2 className="text-lg font-semibold text-n-ink mb-2">
               Verify with {platformConfig.name}
             </h2>
 
             {connectionQuery.isLoading ? (
-              <p className="text-sm text-[#949BA4]">
+              <p className="text-sm text-n-slate">
                 Checking connection status...
               </p>
             ) : connectionQuery.data?.matches ? (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 rounded-lg bg-[#22c55e]/10 px-3 py-2">
+                <div className="flex items-center gap-2 rounded-lg bg-n-success/10 px-3 py-2">
                   <svg
-                    className="h-4 w-4 text-[#22c55e]"
+                    className="h-4 w-4 text-n-success"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -458,7 +488,7 @@ export function ClaimFlow({
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                  <span className="text-sm text-[#86efac]">
+                  <span className="text-sm text-n-success">
                     {platformConfig.name} account connected and matches!
                   </span>
                 </div>
@@ -466,7 +496,7 @@ export function ClaimFlow({
                   type="button"
                   onClick={() => handleInitiateClaim("oauth")}
                   disabled={initiateMutation.isPending}
-                  className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors disabled:opacity-50"
+                  className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors disabled:opacity-50"
                 >
                   {initiateMutation.isPending
                     ? "Verifying..."
@@ -475,7 +505,7 @@ export function ClaimFlow({
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-sm text-[#DBDEE1]">
+                <p className="text-sm text-n-ink">
                   {connectionQuery.data?.connected
                     ? `Your connected ${platformConfig.name} account doesn't match this profile. Please connect the correct account.`
                     : `Connect your ${platformConfig.name} account to verify you own this profile.`}
@@ -492,7 +522,7 @@ export function ClaimFlow({
                     }`;
                     void signIn(provider, { callbackUrl });
                   }}
-                  className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors"
+                  className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors"
                 >
                   Connect {platformConfig.name}
                 </button>
@@ -505,7 +535,7 @@ export function ClaimFlow({
                 setSelectedMethod(null);
                 setStep("method");
               }}
-              className="mt-4 text-xs text-[#949BA4] hover:text-[#DBDEE1] transition-colors"
+              className="mt-4 text-xs text-n-slate hover:text-n-ink transition-colors"
             >
               ← Choose different method
             </button>
@@ -535,23 +565,24 @@ export function ClaimFlow({
 
         {/* Manual Review Action */}
         {selectedMethod === "manual_review" && (
-          <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-            <h2 className="text-lg font-semibold text-[#F2F3F5] mb-2">
+          <div className="rounded-xl border border-n-line bg-white p-6">
+            <h2 className="text-lg font-semibold text-n-ink mb-2">
               Manual Review
             </h2>
-            <p className="text-sm text-[#949BA4] mb-4">
+            <p className="text-sm text-n-slate mb-4">
               Provide links that prove you own this profile (screenshots, social
               media posts, etc.)
             </p>
 
             <div className="space-y-2 mb-3">
-              <label className="text-xs font-medium text-[#DBDEE1]">
+              <label className="text-xs font-medium text-n-ink">
                 Evidence URLs (up to 5)
               </label>
               {evidenceUrls.map((url, i) => (
                 <div key={i} className="flex gap-2">
                   <input
                     type="url"
+                    aria-label={`Evidence URL ${i + 1}`}
                     value={url}
                     onChange={(e) => {
                       const next = [...evidenceUrls];
@@ -559,7 +590,7 @@ export function ClaimFlow({
                       setEvidenceUrls(next);
                     }}
                     placeholder="https://..."
-                    className="flex-1 rounded-lg border border-[#3F4147] bg-[#1E1F22] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#E32C19]/50 placeholder-[#949BA4]"
+                    className="min-w-0 flex-1 rounded-lg border border-n-line bg-white px-3 py-2 text-sm text-n-ink outline-none focus:border-n-red/50 placeholder:text-n-slate"
                   />
                   {evidenceUrls.length > 1 && (
                     <button
@@ -567,7 +598,8 @@ export function ClaimFlow({
                       onClick={() =>
                         setEvidenceUrls(evidenceUrls.filter((_, j) => j !== i))
                       }
-                      className="text-[#949BA4] hover:text-[#f87171] px-1"
+                      aria-label={`Remove evidence URL ${i + 1}`}
+                      className="min-w-11 text-n-slate hover:text-n-error px-1"
                     >
                       <svg
                         className="h-4 w-4"
@@ -590,7 +622,7 @@ export function ClaimFlow({
                 <button
                   type="button"
                   onClick={() => setEvidenceUrls([...evidenceUrls, ""])}
-                  className="text-xs text-[#E32C19] hover:underline"
+                  className="text-xs text-n-red hover:underline"
                 >
                   + Add another URL
                 </button>
@@ -598,17 +630,18 @@ export function ClaimFlow({
             </div>
 
             <div className="mb-4">
-              <label className="text-xs font-medium text-[#DBDEE1]">
+              <label className="text-xs font-medium text-n-ink">
                 Additional notes (optional)
               </label>
               <textarea
+                aria-label="Additional notes (optional)"
                 value={evidenceNotes}
                 onChange={(e) => setEvidenceNotes(e.target.value.slice(0, 500))}
                 placeholder="Any additional context..."
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-3 py-2 text-sm text-[#F2F3F5] outline-none focus:border-[#E32C19]/50 placeholder-[#949BA4] resize-none"
+                className="mt-1 w-full rounded-lg border border-n-line bg-white px-3 py-2 text-sm text-n-ink outline-none focus:border-n-red/50 placeholder:text-n-slate resize-none"
               />
-              <div className="text-right text-xs text-[#949BA4]">
+              <div className="text-right text-xs text-n-slate">
                 {evidenceNotes.length}/500
               </div>
             </div>
@@ -620,7 +653,7 @@ export function ClaimFlow({
                 initiateMutation.isPending ||
                 evidenceUrls.every((u) => u.trim().length === 0)
               }
-              className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors disabled:opacity-50"
+              className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors disabled:opacity-50"
             >
               {initiateMutation.isPending
                 ? "Submitting..."
@@ -633,7 +666,7 @@ export function ClaimFlow({
                 setSelectedMethod(null);
                 setStep("method");
               }}
-              className="ml-3 mt-4 text-xs text-[#949BA4] hover:text-[#DBDEE1] transition-colors"
+              className="ml-3 mt-4 text-xs text-n-slate hover:text-n-ink transition-colors"
             >
               ← Choose different method
             </button>
@@ -641,7 +674,7 @@ export function ClaimFlow({
         )}
 
         {error && selectedMethod !== "bio_challenge" && (
-          <p className="text-sm text-[#f87171]">{error}</p>
+          <p className="text-sm text-n-error">{error}</p>
         )}
       </div>
     );
@@ -663,11 +696,12 @@ export function ClaimFlow({
       : "Your claim was approved. Access creator tools and analytics from your dashboard.";
 
     return (
-      <div className="rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 p-6">
+      <div className="rounded-xl border border-n-success/40 bg-n-success/10 p-6">
+        {progress}
         <div className="flex items-center gap-3 mb-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#22c55e]/20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-n-success/20">
             <svg
-              className="h-5 w-5 text-[#22c55e]"
+              className="h-5 w-5 text-n-success"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -681,16 +715,16 @@ export function ClaimFlow({
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-[#86efac]">
+            <h2 className="text-xl font-bold text-n-success">
               You now manage {profile.displayName}!
             </h2>
-            <p className="text-sm text-[#DBDEE1]">{successCopy}</p>
+            <p className="text-sm text-n-ink">{successCopy}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => router.push(postClaimDestination)}
-          className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors"
+          className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors"
         >
           {ctaLabel}
         </button>
@@ -702,7 +736,8 @@ export function ClaimFlow({
   if (resultStatus === "pending" && resultMethod === "bio_challenge") {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
+        {progress}
+        <div className="rounded-xl border border-n-line bg-white p-6">
           <ProfileCard profile={profile} />
         </div>
         <BioActionStep
@@ -728,11 +763,12 @@ export function ClaimFlow({
 
   if (resultStatus === "pending" && resultMethod === "manual_review") {
     return (
-      <div className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-6">
+      <div className="rounded-xl border border-n-warning/30 bg-n-warning/10 p-6">
+        {progress}
         <div className="flex items-center gap-3 mb-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f59e0b]/20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-n-warning/20">
             <svg
-              className="h-5 w-5 text-[#f59e0b]"
+              className="h-5 w-5 text-n-warning"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -746,10 +782,10 @@ export function ClaimFlow({
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-[#fcd34d]">
+            <h2 className="text-xl font-bold text-n-warning">
               Claim Submitted
             </h2>
-            <p className="text-sm text-[#DBDEE1]">
+            <p className="text-sm text-n-ink">
               Your claim has been submitted for review. We&apos;ll notify you
               within 24-48 hours.
             </p>
@@ -758,7 +794,7 @@ export function ClaimFlow({
         <button
           type="button"
           onClick={() => router.push("/dashboard/home")}
-          className="rounded-lg border border-[#3F4147] bg-[#383A40] px-4 py-2.5 text-sm font-semibold text-[#DBDEE1] hover:bg-[#4E5058] transition-colors"
+          className="rounded-lg border border-n-line bg-n-surface px-4 py-2.5 text-sm font-semibold text-n-ink hover:bg-n-surface transition-colors"
         >
           Back to Dashboard
         </button>
@@ -768,11 +804,12 @@ export function ClaimFlow({
 
   if (resultStatus === "rejected" || resultStatus === "expired") {
     return (
-      <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 p-6">
+      <div className="rounded-xl border border-n-error/30 bg-n-error/10 p-6">
+        {progress}
         <div className="flex items-center gap-3 mb-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ef4444]/20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-n-error/20">
             <svg
-              className="h-5 w-5 text-[#ef4444]"
+              className="h-5 w-5 text-n-error"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -786,12 +823,12 @@ export function ClaimFlow({
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-[#fca5a5]">
+            <h2 className="text-xl font-bold text-n-error">
               {resultStatus === "expired"
                 ? "Verification Expired"
                 : "Claim Rejected"}
             </h2>
-            <p className="text-sm text-[#DBDEE1]">
+            <p className="text-sm text-n-ink">
               {resultStatus === "expired"
                 ? "Your verification window expired. Please try again."
                 : "Your claim could not be verified. Please try a different method."}
@@ -806,7 +843,7 @@ export function ClaimFlow({
             setActiveClaimId(null);
             setStep("method");
           }}
-          className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors"
+          className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors"
         >
           Try Another Method
         </button>
@@ -816,8 +853,8 @@ export function ClaimFlow({
 
   // Fallback: loading/pending state
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6 text-center">
-      <p className="text-sm text-[#949BA4]">Processing your claim...</p>
+    <div className="rounded-xl border border-n-line bg-white p-6 text-center">
+      <p className="text-sm text-n-slate">Processing your claim...</p>
     </div>
   );
 }
@@ -882,14 +919,14 @@ function BioActionStep({
   }, [challengeCode]);
 
   return (
-    <div className="rounded-xl border border-[#3F4147] bg-[#313338] p-6">
-      <h2 className="text-lg font-semibold text-[#F2F3F5] mb-2">
+    <div className="rounded-xl border border-n-line bg-white p-6">
+      <h2 className="text-lg font-semibold text-n-ink mb-2">
         Bio Verification
       </h2>
 
       {!hasChallenge ? (
         <div className="space-y-3">
-          <p className="text-sm text-[#DBDEE1]">
+          <p className="text-sm text-n-ink">
             We&apos;ll generate a unique code for you to add to your{" "}
             {platformConfig.name} bio.
           </p>
@@ -897,7 +934,7 @@ function BioActionStep({
             type="button"
             onClick={onInitiate}
             disabled={initiateMutation.isPending}
-            className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors disabled:opacity-50"
+            className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors disabled:opacity-50"
           >
             {initiateMutation.isPending
               ? "Generating code..."
@@ -909,17 +946,17 @@ function BioActionStep({
           {/* Challenge code with copy */}
           {challengeCode && (
             <div>
-              <label className="text-xs font-medium text-[#949BA4] mb-1 block">
+              <label className="text-xs font-medium text-n-slate mb-1 block">
                 Your verification code
               </label>
               <div className="flex items-center gap-2">
-                <code className="flex-1 rounded-lg bg-[#1E1F22] px-3 py-2.5 text-sm font-mono text-[#fca5a5] select-all">
+                <code className="min-w-0 flex-1 rounded-lg bg-white px-3 py-2.5 text-sm font-mono text-n-error select-all">
                   {challengeCode}
                 </code>
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-xs font-medium text-[#DBDEE1] hover:bg-[#4E5058] transition-colors"
+                  className="rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-xs font-medium text-n-ink hover:bg-n-surface transition-colors"
                 >
                   {copied ? "Copied!" : "Copy"}
                 </button>
@@ -928,27 +965,27 @@ function BioActionStep({
           )}
 
           {/* Platform instructions */}
-          <div className="rounded-lg bg-[#1E1F22] px-3 py-2.5">
-            <p className="text-xs font-medium text-[#949BA4] mb-1">
+          <div className="rounded-lg bg-white px-3 py-2.5">
+            <p className="text-xs font-medium text-n-slate mb-1">
               Instructions
             </p>
-            <p className="text-sm text-[#DBDEE1]">{instructions}</p>
+            <p className="text-sm text-n-ink">{instructions}</p>
           </div>
 
           {/* Expiry countdown */}
           {challengeExpiresIn && (
-            <p className="text-xs text-[#949BA4]">
+            <p className="text-xs text-n-slate">
               Expires in {challengeExpiresIn}
             </p>
           )}
 
           {/* Verify button */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={onVerify}
               disabled={verifyBioMutation.isPending || bioCooldown > 0}
-              className="rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#C72615] transition-colors disabled:opacity-50"
+              className="rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white hover:bg-n-red-hover transition-colors disabled:opacity-50"
             >
               {verifyBioMutation.isPending
                 ? "Checking..."
@@ -957,7 +994,7 @@ function BioActionStep({
                   : "I've added the code — Verify Now"}
             </button>
             {status?.attemptsRemaining != null && (
-              <span className="text-xs text-[#949BA4]">
+              <span className="text-xs text-n-slate">
                 Attempts remaining: {status.attemptsRemaining}/3
               </span>
             )}
@@ -965,12 +1002,12 @@ function BioActionStep({
         </div>
       )}
 
-      {error && <p className="mt-3 text-sm text-[#f87171]">{error}</p>}
+      {error && <p className="mt-3 text-sm text-n-error">{error}</p>}
 
       <button
         type="button"
         onClick={onBack}
-        className="mt-4 text-xs text-[#949BA4] hover:text-[#DBDEE1] transition-colors"
+        className="mt-4 text-xs text-n-slate hover:text-n-ink transition-colors"
       >
         ← Choose different method
       </button>

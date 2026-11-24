@@ -66,16 +66,16 @@ function RegisterChannelForm({
   };
 
   return (
-    <div className="mt-6 rounded-lg border border-dashed border-[#3F4147] bg-[#2B2D31] px-5 py-5">
-      <p className="text-sm font-medium text-[#DBDEE1]">
+    <div className="mt-6 rounded-lg border border-dashed border-n-line bg-n-surface px-5 py-5">
+      <p className="text-sm font-medium text-n-ink">
         Don&apos;t see your channel?
       </p>
-      <p className="mt-0.5 text-xs text-[#949BA4]">
+      <p className="mt-0.5 text-xs text-n-slate">
         Enter your Twitch username to register your channel and get it tracked.
       </p>
       <form onSubmit={handleSubmit} className="mt-3 flex items-center gap-2">
-        <div className="flex h-9 flex-1 items-center gap-2 rounded-md border border-[#3F4147] bg-[#1E1F22] px-3 focus-within:border-[#9146ff]/60">
-          <span className="text-xs text-[#949BA4]">twitch.tv/</span>
+        <div className="flex h-9 flex-1 items-center gap-2 rounded-md border border-n-line bg-white px-3 focus-within:border-[#9146ff]/60">
+          <span className="text-xs text-n-slate">twitch.tv/</span>
           <input
             type="text"
             value={twitchLogin}
@@ -86,13 +86,13 @@ function RegisterChannelForm({
             placeholder="yourusername"
             maxLength={25}
             pattern="[a-zA-Z0-9_]+"
-            className="flex-1 bg-transparent text-sm text-[#DBDEE1] placeholder-[#5C5F66] outline-none"
+            className="flex-1 bg-transparent text-sm text-n-ink placeholder-[#5C5F66] outline-none"
           />
         </div>
         <button
           type="submit"
           disabled={isPending || !twitchLogin.trim()}
-          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-[#9146ff] px-3 text-sm font-medium text-white transition-colors hover:bg-[#7c2ff7] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-n-navy px-3 text-sm font-medium text-white transition-colors hover:bg-[#7c2ff7] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? (
             <svg
@@ -118,7 +118,7 @@ function RegisterChannelForm({
           {isPending ? "Registering..." : "Register"}
         </button>
       </form>
-      {error && <p className="mt-2 text-xs text-[#fca5a5]">{error}</p>}
+      {error && <p className="mt-2 text-xs text-n-error">{error}</p>}
     </div>
   );
 }
@@ -176,9 +176,9 @@ export function ClaimSearchBar() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 rounded-lg border border-[#3F4147] bg-[#1E1F22] h-11 px-4 transition-colors focus-within:border-[#E32C19]/50">
+      <div className="flex items-center gap-2 rounded-lg border border-n-line bg-white h-11 px-4 transition-colors focus-within:border-n-red/50">
         <svg
-          className="h-4 w-4 flex-shrink-0 text-[#949BA4]"
+          className="h-4 w-4 flex-shrink-0 text-n-slate"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -201,7 +201,7 @@ export function ClaimSearchBar() {
           onKeyDown={handleKeyDown}
           placeholder="Search for your creator profile..."
           autoFocus
-          className="w-full bg-transparent text-base text-[#DBDEE1] placeholder-[#949BA4] outline-none"
+          className="w-full bg-transparent text-base text-n-ink placeholder:text-n-slate outline-none"
         />
         {query && (
           <button
@@ -210,7 +210,7 @@ export function ClaimSearchBar() {
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="flex-shrink-0 text-[#949BA4] hover:text-[#DBDEE1]"
+            className="flex-shrink-0 text-n-slate hover:text-n-ink"
           >
             <svg
               className="h-4 w-4"
@@ -232,16 +232,16 @@ export function ClaimSearchBar() {
       {shouldFetch && (
         <div className="mt-4">
           {isLoading && (
-            <div className="text-sm text-[#949BA4]">Searching...</div>
+            <div className="text-sm text-n-slate">Searching...</div>
           )}
 
           {!isLoading && creators.length === 0 && (
             <div>
-              <div className="rounded-lg border border-[#3F4147] bg-[#313338] px-6 py-6 text-center">
-                <p className="text-sm font-medium text-[#DBDEE1]">
+              <div className="rounded-lg border border-n-line bg-white px-6 py-6 text-center">
+                <p className="text-sm font-medium text-n-ink">
                   No creators found for &ldquo;{debouncedQuery}&rdquo;
                 </p>
-                <p className="mt-1 text-xs text-[#949BA4]">
+                <p className="mt-1 text-xs text-n-slate">
                   Try a different name or username
                 </p>
               </div>
@@ -261,11 +261,11 @@ export function ClaimSearchBar() {
                   type="button"
                   onClick={() => router.push(`/claim?profile=${c.id}`)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border border-[#3F4147] bg-[#313338] p-3 text-left transition-colors hover:border-[#4E5058] hover:bg-[#383A40]",
-                    activeIndex === i && "border-[#E32C19]/50 bg-[#383A40]",
+                    "flex items-center gap-3 rounded-lg border border-n-line bg-white p-3 text-left transition-colors hover:border-n-line hover:bg-n-surface",
+                    activeIndex === i && "border-n-red/50 bg-n-surface",
                   )}
                 >
-                  <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[#383A40]">
+                  <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-n-surface">
                     {getSafeImageSrc(c.avatarUrl) ? (
                       <Image
                         src={getSafeImageSrc(c.avatarUrl)!}
@@ -275,22 +275,20 @@ export function ClaimSearchBar() {
                         sizes="40px"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white bg-[#9146ff]">
+                      <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white bg-n-navy">
                         {c.displayName.charAt(0)}
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-[#DBDEE1]">
+                    <div className="truncate text-sm font-medium text-n-ink">
                       {c.displayName}
                     </div>
-                    <div className="text-xs text-[#949BA4]">
+                    <div className="text-xs text-n-slate">
                       {formatNumber(Number(c.totalFollowers))} followers
                     </div>
                   </div>
-                  <span className="text-xs font-medium text-[#E32C19]">
-                    Claim
-                  </span>
+                  <span className="text-xs font-medium text-n-red">Claim</span>
                 </button>
               ))}
             </div>

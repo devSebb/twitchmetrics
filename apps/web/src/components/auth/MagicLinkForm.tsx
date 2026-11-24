@@ -38,7 +38,7 @@ export function MagicLinkForm({ callbackUrl = "/home" }: MagicLinkFormProps) {
 
   if (isSent) {
     return (
-      <p className="rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/10 px-3 py-2 text-sm text-[#86efac]">
+      <p className="rounded-lg border border-n-success/30 bg-n-success/10 px-3 py-2 text-sm text-n-success">
         Magic link sent. Check your inbox for a sign-in link.
       </p>
     );
@@ -49,7 +49,7 @@ export function MagicLinkForm({ callbackUrl = "/home" }: MagicLinkFormProps) {
       <div>
         <label
           htmlFor="magic-link-email"
-          className="mb-1 block text-sm text-[#DBDEE1]"
+          className="mb-1 block text-sm text-n-ink"
         >
           Email
         </label>
@@ -61,16 +61,16 @@ export function MagicLinkForm({ callbackUrl = "/home" }: MagicLinkFormProps) {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@example.com"
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] px-3 py-2.5 text-sm text-[#F2F3F5] outline-none transition-colors placeholder:text-[#949BA4] focus:border-[#E32C19]/70"
+          className="w-full rounded-lg border border-n-line bg-n-surface px-3 py-2.5 text-sm text-n-ink outline-none transition-colors placeholder:text-n-slate focus:border-n-red/70"
         />
       </div>
 
-      {error && <p className="text-sm text-[#f87171]">{error}</p>}
+      {error && <p className="text-sm text-n-error">{error}</p>}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full rounded-lg bg-[#E32C19] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg bg-n-red px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? "Sending..." : "Send Magic Link"}
       </button>

@@ -24,7 +24,7 @@ export function LoginMethodSwitcher({
       <button
         type="button"
         onClick={() => setShowMagicLink((value) => !value)}
-        className="text-sm text-[#949BA4] transition-colors hover:text-[#DBDEE1]"
+        className="text-sm text-n-slate transition-colors hover:text-n-ink"
       >
         {showMagicLink
           ? "Use email + password instead"

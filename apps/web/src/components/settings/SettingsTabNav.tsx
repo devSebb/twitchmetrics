@@ -13,7 +13,10 @@ export function SettingsTabNav() {
   const pathname = usePathname();
 
   return (
-    <div className="flex gap-1 border-b border-[#3F4147]">
+    <nav
+      aria-label="Settings sections"
+      className="flex gap-1 border-b border-n-line"
+    >
       {TABS.map((tab) => {
         const isProfile = tab.href === "/dashboard/settings";
         const isActive = isProfile
@@ -24,17 +27,18 @@ export function SettingsTabNav() {
           <Link
             key={tab.href}
             href={tab.href}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
               "border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
               isActive
-                ? "border-[#E32C19] text-[#F2F3F5]"
-                : "border-transparent text-[#949BA4] hover:text-[#DBDEE1]",
+                ? "border-n-red text-n-ink"
+                : "border-transparent text-n-slate hover:text-n-ink",
             )}
           >
             {tab.label}
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
