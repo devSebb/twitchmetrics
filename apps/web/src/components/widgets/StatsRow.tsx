@@ -58,8 +58,8 @@ function PeriodSelector({
           aria-pressed={value === p.value}
           className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
             value === p.value
-              ? "bg-[var(--view-red,#5865F2)] text-white"
-              : "bg-[var(--view-canvas,#2B2D31)] text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#F2F3F5)]"
+              ? "bg-n-red text-white"
+              : "bg-n-canvas text-n-slate hover:text-n-ink"
           }`}
         >
           {p.label}
@@ -88,11 +88,11 @@ function StreamingStatCard({
   info: MetricInfo;
 }) {
   return (
-    <div className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] px-4 py-3">
+    <div className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-lg border border-n-line bg-n-canvas px-4 py-3">
       {/* The label wraps rather than truncates: with the "?" beside it,
           "Best-Platform Peak · 30d" no longer fits one line in a narrow tile. */}
       <div className="flex items-start gap-1.5">
-        <span className="min-w-0 text-xs leading-4 text-[var(--view-muted,#949BA4)]">
+        <span className="min-w-0 text-xs leading-4 text-n-slate">
           {label}
           {platforms?.map((p) => (
             <span key={p} className="ml-1.5 inline-flex align-middle">
@@ -105,14 +105,8 @@ function StreamingStatCard({
       {/* Bottom-aligned, so values line up across tiles whose labels wrap. */}
       {/* The note shares the value's baseline, so values still line up. */}
       <p className="mt-auto flex flex-wrap items-baseline gap-x-1.5">
-        <span className="text-xl font-bold text-[var(--view-ink,#F2F3F5)]">
-          {value}
-        </span>
-        {note && (
-          <span className="text-xs text-[var(--view-muted,#949BA4)]">
-            {note}
-          </span>
-        )}
+        <span className="text-xl font-bold text-n-ink">{value}</span>
+        {note && <span className="text-xs text-n-slate">{note}</span>}
       </p>
     </div>
   );
@@ -121,9 +115,9 @@ function StreamingStatCard({
 /** Same footprint as a StreamingStatCard, while the period loads. */
 function StatCardSkeleton() {
   return (
-    <div className="flex min-w-[140px] flex-1 flex-col gap-2 rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] px-4 py-3">
-      <div className="h-3.5 w-20 animate-pulse rounded bg-[var(--view-surface,#383A40)]" />
-      <div className="mt-auto h-6 w-16 animate-pulse rounded bg-[var(--view-surface,#383A40)]" />
+    <div className="flex min-w-[140px] flex-1 flex-col gap-2 rounded-lg border border-n-line bg-n-canvas px-4 py-3">
+      <div className="h-3.5 w-20 animate-pulse rounded bg-n-surface" />
+      <div className="mt-auto h-6 w-16 animate-pulse rounded bg-n-surface" />
     </div>
   );
 }
@@ -134,13 +128,11 @@ function StatCardSkeleton() {
  */
 function NoStreamsCard({ detail }: { detail: string | null }) {
   return (
-    <div className="flex min-w-[140px] flex-[4] flex-col justify-center gap-1 rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] px-4 py-3">
-      <p className="text-sm font-semibold text-[var(--view-ink,#F2F3F5)]">
+    <div className="flex min-w-[140px] flex-[4] flex-col justify-center gap-1 rounded-lg border border-n-line bg-n-canvas px-4 py-3">
+      <p className="text-sm font-semibold text-n-ink">
         No streams in this period
       </p>
-      {detail && (
-        <p className="text-xs text-[var(--view-muted,#949BA4)]">{detail}</p>
-      )}
+      {detail && <p className="text-xs text-n-slate">{detail}</p>}
     </div>
   );
 }
@@ -304,16 +296,14 @@ export function StatsRow({ profile, statsContext }: StatsRowProps) {
         <PeriodSelector value={period} onChange={choosePeriod} />
         {/* Both days inclusive; the newest complete day of data, not today. */}
         {range && (
-          <span className="flex items-center gap-1 text-xs text-[var(--view-muted,#949BA4)]">
+          <span className="flex items-center gap-1 text-xs text-n-slate">
             {range}
             <InfoTip info={CREATOR_STATS_INFO.period} />
           </span>
         )}
       </div>
 
-      {autoNote && (
-        <p className="text-xs text-[var(--view-muted,#949BA4)]">{autoNote}</p>
-      )}
+      {autoNote && <p className="text-xs text-n-slate">{autoNote}</p>}
 
       {/* Streaming stats row */}
       <div className="flex flex-wrap gap-3">

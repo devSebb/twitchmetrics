@@ -111,5 +111,5 @@ export function tooltipHtml(title: string, rows: TooltipRow[]): string {
       return `<div${styles ? ` style="${styles}"` : ""}>${bullet}${label}${value}</div>`;
     })
     .join("");
-  return `<div style="font-size:13px"><div style="margin-bottom:4px;color:var(--view-muted,${THEME.colors.textMuted})">${esc(title)}</div>${body}</div>`;
+  return `<div style="font-size:13px"><div style="margin-bottom:4px;color:${THEME.colors.textMuted}">${esc(title)}</div>${body}</div>`;
 }

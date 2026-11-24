@@ -14,7 +14,7 @@ export default function PublicLayout({
       <main
         id="main-content"
         tabIndex={-1}
-        className="min-h-screen bg-[#2B2D31]"
+        className="min-h-screen bg-n-canvas"
       >
         {children}
       </main>

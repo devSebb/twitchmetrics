@@ -47,7 +47,7 @@ export function CreatorSortControls() {
 
   return (
     <div className="flex min-w-0 basis-full flex-wrap items-center justify-between gap-3 lg:flex-1">
-      <div className="flex max-w-full flex-wrap gap-1 rounded-md bg-[var(--view-canvas,#1E1F22)] p-0.5">
+      <div className="flex max-w-full flex-wrap gap-1 rounded-md bg-n-canvas p-0.5">
         {SORTS.map((s) => {
           const isActive = currentSort === s.value;
           return (
@@ -59,8 +59,8 @@ export function CreatorSortControls() {
               className={cn(
                 "min-h-11 rounded px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
-                  : "text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#DBDEE1)]",
+                  ? "bg-n-surface text-n-ink"
+                  : "text-n-slate hover:text-n-ink",
               )}
             >
               {s.label}
@@ -69,7 +69,7 @@ export function CreatorSortControls() {
         })}
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs text-[var(--view-muted,#949BA4)]">
+      <div className="flex items-center gap-1.5 text-xs text-n-slate">
         <span>{status}</span>
       </div>
     </div>

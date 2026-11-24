@@ -11,5 +11,9 @@ export default async function AdminLayout({
     redirect("/dashboard/home");
   }
 
-  return <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</div>;
+  return (
+    <div className="mx-auto max-w-[1280px] px-5 py-10 sm:px-8 lg:px-10">
+      {children}
+    </div>
+  );
 }

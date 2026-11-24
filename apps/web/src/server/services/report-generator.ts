@@ -286,7 +286,7 @@ async function generateGamesReport(
   lines.push(csvRow("Period End", generatedAt.toISOString()));
   lines.push(csvRow("Platforms", config.platforms.join(" + ")));
   lines.push(csvRow("Generated", generatedAt.toISOString()));
-  lines.push(csvRow("Source", "Twitch API via TwitchMetrics game snapshots"));
+  lines.push(csvRow("Source", "Twitch API via Noticed game snapshots"));
   lines.push(csvRow("Snapshot Cadence", "Every 30 minutes"));
   lines.push(
     csvRow(
@@ -395,7 +395,7 @@ async function generateGamesReport(
       ),
     );
   }
-  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.net"));
+  lines.push(csvRow("", "© Noticed · powered by Hatchet — twitchmetrics.net"));
 
   return lines.join("\n");
 }
@@ -529,7 +529,7 @@ async function generateChannelsReport(
   lines.push(csvRow("Period", periodLabel(config.timePeriod)));
   lines.push(csvRow("Platforms", config.platforms.join(" + ")));
   lines.push(csvRow("Generated", generatedAt.toISOString().split("T")[0]));
-  lines.push(csvRow("Source", "TwitchMetrics"));
+  lines.push(csvRow("Source", "Noticed"));
   if (needsViewerStats) {
     lines.push(
       csvRow(
@@ -622,7 +622,7 @@ async function generateChannelsReport(
       `Total followers across ${creators.length} channels: ${fmt(Number(totalFollowers))}`,
     ),
   );
-  lines.push(csvRow("", "© TwitchMetrics — twitchmetrics.net"));
+  lines.push(csvRow("", "© Noticed · powered by Hatchet — twitchmetrics.net"));
 
   return lines.join("\n");
 }

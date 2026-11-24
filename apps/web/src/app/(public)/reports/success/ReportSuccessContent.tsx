@@ -19,6 +19,7 @@ type State =
 export function ReportSuccessContent() {
   const params = useSearchParams();
   const [state, setState] = useState<State>({ status: "loading" });
+  const [retry, setRetry] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -43,6 +44,8 @@ export function ReportSuccessContent() {
       return;
     }
 
+    let cancelled = false;
+    setState({ status: "loading" });
     fetch(url)
       .then((r) => r.json())
       .then(
@@ -50,6 +53,7 @@ export function ReportSuccessContent() {
           purchase?: { id: string; templateName: string };
           error?: string;
         }) => {
+          if (cancelled) return;
           if (data.purchase) {
             setState({
               status: "ready",
@@ -64,13 +68,17 @@ export function ReportSuccessContent() {
           }
         },
       )
-      .catch(() =>
-        setState({
-          status: "error",
-          message: "Network error during verification.",
-        }),
-      );
-  }, [params]);
+      .catch(() => {
+        if (!cancelled)
+          setState({
+            status: "error",
+            message: "Network error during verification.",
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [params, retry]);
 
   async function handleDownload() {
     if (state.status !== "ready") return;
@@ -107,24 +115,28 @@ export function ReportSuccessContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#1E1F22] px-4">
-      <div className="w-full max-w-md rounded-2xl border border-[#3F4147] bg-[#2B2D31] p-8 text-center">
+    <div className="n-form flex min-h-[65vh] items-center justify-center bg-white px-5 py-16">
+      <div className="w-full max-w-xl border-y border-n-line py-10 text-center">
         {state.status === "loading" && (
           <>
-            <div className="mx-auto mb-6 h-10 w-10 animate-spin rounded-full border-2 border-[#3F4147] border-t-[#E32C19]" />
-            <p className="text-sm text-[#949BA4]">Verifying your payment…</p>
+            <div className="mx-auto mb-6 h-10 w-10 animate-spin rounded-full border-2 border-n-line border-t-n-red" />
+            <h1 className="text-2xl font-bold">Checking your report</h1>
+            <p role="status" className="mt-3 text-sm text-n-slate">
+              Verifying your payment…
+            </p>
           </>
         )}
 
         {state.status === "quote" && (
           <>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#22c55e]/10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-n-success/10">
               <svg
                 width="28"
                 height="28"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#22c55e"
+                stroke="currentColor"
+                className="text-n-success"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -132,22 +144,22 @@ export function ReportSuccessContent() {
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             </div>
-            <h2 className="mb-1 text-xl font-bold text-[#F2F3F5]">
+            <h1 className="mb-1 text-3xl font-extrabold tracking-tight text-n-ink">
               Request received
-            </h2>
-            <p className="mb-6 text-sm leading-relaxed text-[#DBDEE1]">
+            </h1>
+            <p className="mb-6 text-sm leading-relaxed text-n-ink">
               Thanks for the details. Our team will review your request and
               reach out within{" "}
-              <span className="font-semibold text-[#F2F3F5]">24 hours</span>{" "}
-              with a custom quote for your report.
+              <span className="font-semibold text-n-ink">24 hours</span> with a
+              custom quote for your report.
             </p>
             <Link
               href="/reports"
-              className="inline-block rounded-lg bg-[#383A40] px-6 py-2.5 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+              className="inline-block rounded-lg bg-n-surface px-6 py-2.5 text-sm font-semibold text-n-ink transition-colors hover:bg-n-control"
             >
               Back to Reports
             </Link>
-            <p className="mt-6 text-xs text-[#4E5058]">
+            <p className="mt-6 text-xs text-n-slate">
               Keep an eye on your inbox — we&apos;ll reply to the email you
               provided.
             </p>
@@ -156,13 +168,14 @@ export function ReportSuccessContent() {
 
         {state.status === "error" && (
           <>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#ef4444]/10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-n-error/10">
               <svg
                 width="24"
                 height="24"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#ef4444"
+                stroke="currentColor"
+                className="text-n-error"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -172,13 +185,24 @@ export function ReportSuccessContent() {
                 <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
             </div>
-            <h2 className="mb-2 text-lg font-bold text-[#F2F3F5]">
+            <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-n-ink">
               Verification Failed
-            </h2>
-            <p className="mb-6 text-sm text-[#949BA4]">{state.message}</p>
+            </h1>
+            <p role="alert" className="mb-6 text-sm text-n-slate">
+              {state.message}
+            </p>
+            {(params.get("purchase_id") || params.get("session_id")) && (
+              <button
+                type="button"
+                className="n-button n-button-secondary mb-4 mr-4"
+                onClick={() => setRetry((value) => value + 1)}
+              >
+                Try verification again
+              </button>
+            )}
             <Link
               href="/reports"
-              className="text-sm text-[#E32C19] underline underline-offset-2"
+              className="text-sm text-n-red underline underline-offset-2"
             >
               Back to Reports
             </Link>
@@ -187,13 +211,14 @@ export function ReportSuccessContent() {
 
         {state.status === "ready" && (
           <>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#22c55e]/10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-n-success/10">
               <svg
                 width="28"
                 height="28"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#22c55e"
+                stroke="currentColor"
+                className="text-n-success"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -201,13 +226,13 @@ export function ReportSuccessContent() {
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             </div>
-            <h2 className="mb-1 text-xl font-bold text-[#F2F3F5]">
+            <h1 className="mb-1 text-3xl font-extrabold tracking-tight text-n-ink">
               Payment Confirmed
-            </h2>
-            <p className="mb-2 text-sm font-medium text-[#DBDEE1]">
+            </h1>
+            <p className="mb-2 text-sm font-medium text-n-ink">
               {state.templateName}
             </p>
-            <p className="mb-8 text-sm text-[#949BA4]">
+            <p className="mb-8 text-sm text-n-slate">
               Your report is ready. Click below to download it as a CSV file.
             </p>
 
@@ -215,7 +240,7 @@ export function ReportSuccessContent() {
               type="button"
               onClick={handleDownload}
               disabled={downloading}
-              className="w-full rounded-lg bg-[#E32C19] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
+              className="w-full rounded-lg bg-n-red px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:opacity-50"
             >
               {downloading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -244,10 +269,12 @@ export function ReportSuccessContent() {
             </button>
 
             {downloadError && (
-              <p className="mt-4 text-xs text-[#ef4444]">{downloadError}</p>
+              <p role="alert" className="mt-4 text-sm text-n-error">
+                {downloadError}
+              </p>
             )}
 
-            <p className="mt-6 text-xs text-[#4E5058]">
+            <p className="mt-6 text-xs text-n-slate">
               You can re-download this report at any time using this page link —
               we&apos;ve also emailed you a confirmation that includes it.
             </p>
@@ -256,13 +283,14 @@ export function ReportSuccessContent() {
 
         {state.status === "downloaded" && (
           <>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#22c55e]/10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-n-success/10">
               <svg
                 width="28"
                 height="28"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#22c55e"
+                stroke="currentColor"
+                className="text-n-success"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -270,20 +298,20 @@ export function ReportSuccessContent() {
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             </div>
-            <h2 className="mb-1 text-xl font-bold text-[#F2F3F5]">
-              Report Downloaded
-            </h2>
-            <p className="mb-2 text-sm font-medium text-[#DBDEE1]">
+            <h1 className="mb-1 text-3xl font-extrabold tracking-tight text-n-ink">
+              Download started
+            </h1>
+            <p className="mb-2 text-sm font-medium text-n-ink">
               {state.templateName}
             </p>
-            <p className="mb-8 text-sm text-[#949BA4]">
-              <span className="font-mono text-[#DBDEE1]">{state.filename}</span>{" "}
-              has been saved to your device.
+            <p className="mb-8 text-sm text-n-slate">
+              <span className="font-mono text-n-ink">{state.filename}</span> has
+              been sent to your browser. Check your downloads.
             </p>
 
             <Link
               href="/reports"
-              className="inline-block w-full rounded-lg bg-[#383A40] px-6 py-3 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
+              className="inline-block w-full rounded-lg bg-n-surface px-6 py-3 text-sm font-semibold text-n-ink transition-colors hover:bg-n-control"
             >
               Back to Reports
             </Link>
@@ -297,7 +325,7 @@ export function ReportSuccessContent() {
                   templateName: state.templateName,
                 })
               }
-              className="mt-3 text-xs text-[#949BA4] underline-offset-2 hover:underline"
+              className="mt-3 text-xs text-n-slate underline-offset-2 hover:underline"
             >
               Download again
             </button>

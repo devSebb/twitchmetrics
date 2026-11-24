@@ -14,7 +14,7 @@ export function InterestsSection({ interests }: InterestsSectionProps) {
           {interests!.map((interest) => (
             <li
               key={interest}
-              className="rounded-full border border-[var(--view-line,#3F4147)] bg-[var(--view-surface,#383A40)] px-3 py-1 text-xs font-medium text-[var(--view-ink,#DBDEE1)]"
+              className="rounded-full border border-n-line bg-n-surface px-3 py-1 text-xs font-medium text-n-ink"
             >
               {interest}
             </li>

@@ -5,10 +5,10 @@ import { prisma } from "@twitchmetrics/database";
 const RESET_TOKEN_BYTES = 32;
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 const MAX_RESET_REQUESTS_PER_HOUR = 3;
-const EMAIL_FROM = "TwitchMetrics <noreply@twitchmetrics.net>";
+const EMAIL_FROM = "Noticed <noreply@twitchmetrics.net>";
 
 export const PASSWORD_RESET_REQUEST_MESSAGE =
-  "If a TwitchMetrics account exists for that email, a reset link has been sent.";
+  "If a Noticed account exists for that email, a reset link has been sent.";
 
 export function normalizeResetEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -75,18 +75,18 @@ async function sendPasswordResetEmail({
     body: JSON.stringify({
       from: EMAIL_FROM,
       to,
-      subject: "Reset your TwitchMetrics password",
+      subject: "Reset your Noticed password",
       html: `
-        <div style="font-family: Arial, sans-serif; background: #2B2D31; color: #DBDEE1; padding: 24px;">
-          <h2 style="margin: 0 0 12px; color: #F2F3F5;">Reset your password</h2>
-          <p style="margin: 0 0 20px; color: #949BA4;">Use this secure link to reset your TwitchMetrics account password. The link expires in 30 minutes.</p>
-          <a href="${resetUrl}" style="display: inline-block; background: #E32C19; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">
+        <div style="font-family: 'Golos Text', Arial, sans-serif; background: #FFFFFF; color: #151F2C; padding: 24px;">
+          <h2 style="margin: 0 0 12px; color: #151F2C;">Reset your password</h2>
+          <p style="margin: 0 0 20px; color: #4A505B;">Use this secure link to reset your Noticed account password. The link expires in 30 minutes.</p>
+          <a href="${resetUrl}" style="display: inline-block; background: #C4262C; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">
             Reset Password
           </a>
-          <p style="margin: 20px 0 0; font-size: 12px; color: #949BA4;">If you did not request this, you can ignore this email.</p>
+          <p style="margin: 20px 0 0; font-size: 12px; color: #4A505B;">If you did not request this, you can ignore this email.</p>
         </div>
       `,
-      text: `Reset your TwitchMetrics password: ${resetUrl}\n\nThis link expires in 30 minutes. If you did not request this, you can ignore this email.`,
+      text: `Reset your Noticed password: ${resetUrl}\n\nThis link expires in 30 minutes. If you did not request this, you can ignore this email.`,
     }),
   });
 

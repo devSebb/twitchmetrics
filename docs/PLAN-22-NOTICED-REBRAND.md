@@ -1,6 +1,6 @@
 # PLAN-22 — Noticed frontend rebrand
 
-**Status:** Implementation authorised by the user on 23 November 2026. Chunks 1 (design foundation and homepage), 2 (channels and creator views), 3 (categories and games) and 4 (creator and talent-manager workspaces) are implemented. Remaining browser interaction, authenticated journey and mobile visual checks are explicitly recorded in `docs/noticed-design-system.md` for final integration. Chunk 5 remains.
+**Status:** All five implementation chunks are delivered as of 23 November 2026: design foundation and homepage; channels and creator views; categories and games; creator and talent-manager workspaces; supporting screens and final integration. The final production build, 438 web tests, 86 core tests and 55 HTTP checks pass. Controlled-account journeys and the remaining visual/accessibility/performance release checks are explicitly open in [the implementation record](noticed-design-system.md#release-checks-still-open); this is not exhaustive release sign-off.
 **Branch:** `codex/noticed-rebrand`. All five chunks stay on this branch. The user will merge; do not merge to main.
 **Audit date:** 23 November 2026.
 **Objective:** Apply the approved Noticed design system to the complete existing product, preserving its working information, interactions, data and architecture.
@@ -450,8 +450,8 @@ Before release, verify the public pages remain server-rendered and cached as int
 
 ## 15. Remaining inputs, without blocking the plan
 
-The user has resolved the two structural questions: retain two creator views and use the temporary wordmark. No further answer is required to start the design-specification phase when implementation is requested.
+The user resolved the two structural questions: retain two creator views and use the temporary wordmark. Implementation was subsequently authorised and all five chunks are delivered on the shared branch.
 
 Later inputs are final logo assets, approved agency/pricing wording, approved Hatchet discovery claims and launch/domain details. Use accurate current-functionality copy and the temporary brand in the meantime. Press, ranking products, new contact workflows and unsupported editors remain separate product decisions rather than prerequisites for this frontend rebrand.
 
-**Implementation record:** See [Noticed design system](noticed-design-system.md) for the foundation, component contract, verification record and remaining chunks. Report a brief after each completed chunk and relist the remaining work.
+**Implementation record:** See [Noticed design system](noticed-design-system.md) for the foundation, component contract, all five chunk records, verification evidence and remaining release checks. Report a brief after each completed chunk and relist the remaining work.

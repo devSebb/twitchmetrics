@@ -71,7 +71,7 @@ export function SocialLoginButtons({
               className={cn(
                 "flex flex-col items-center gap-2 rounded-xl px-1 pt-1 pb-0.5 transition-transform",
                 "hover:scale-[1.03] active:scale-[0.98]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-n-red/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#313338]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-n-red/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
               )}
             >
               {item.bgColor ? (

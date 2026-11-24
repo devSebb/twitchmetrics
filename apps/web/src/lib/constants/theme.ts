@@ -1,31 +1,29 @@
-/**
- * Design tokens for the TwitchMetrics design system.
- * Discord dark gray palette + brand red #E32C19, Gotham typography.
- */
+import { NOTICED } from "./noticed";
 
+/** Shared presentation tokens for the Noticed web and export surfaces. */
 export const THEME = {
   colors: {
-    // Discord dark gray palette
-    background: "#2B2D31", // Discord sidebar
-    surface: "#313338", // Discord chat bg
-    surfaceHover: "#383A40", // Input bg
-    surfaceElevated: "#1E1F22", // Darkest
-    border: "#3F4147",
-    borderHover: "#4E5058",
+    // Surfaces
+    background: NOTICED.canvas,
+    surface: NOTICED.canvas,
+    surfaceHover: NOTICED.surface,
+    surfaceElevated: NOTICED.surface,
+    border: NOTICED.line,
+    borderHover: NOTICED.control,
 
     // Text
-    text: "#DBDEE1",
-    textHeader: "#F2F3F5",
-    textMuted: "#949BA4",
+    text: NOTICED.ink,
+    textHeader: NOTICED.ink,
+    textMuted: NOTICED.slate,
 
     // Brand
-    brandRed: "#E32C19",
-    brandRedHover: "#C72615",
+    brandRed: NOTICED.red,
+    brandRedHover: NOTICED.redHover,
 
     // Semantic
-    success: "#22c55e",
-    warning: "#f59e0b",
-    error: "#ef4444",
+    success: NOTICED.success,
+    warning: NOTICED.warning,
+    error: NOTICED.error,
 
     // Platform
     twitch: "#9146ff",
@@ -48,8 +46,8 @@ export const THEME = {
   },
 
   fontFamily: {
-    display: "var(--font-gotham-black), system-ui, sans-serif",
-    body: "var(--font-gotham), system-ui, sans-serif",
+    display: NOTICED.font,
+    body: NOTICED.font,
     mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace",
   },
 

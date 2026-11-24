@@ -6,29 +6,8 @@
   font-display: swap;
 }
 
-/* Opt-in during the migration. Legacy pages retain their existing palette. */
+/* One shared appearance across public pages, workspaces and portals. */
 .noticed {
-  --view-ink: var(--noticed-ink);
-  --view-muted: var(--noticed-slate);
-  --view-canvas: var(--noticed-canvas);
-  --view-surface: var(--noticed-surface);
-  --view-control: var(--noticed-control);
-  --view-line: var(--noticed-line);
-  --view-red: var(--noticed-red);
-  --view-red-hover: var(--noticed-red-hover);
-  --view-success: var(--noticed-success);
-  --view-error: var(--noticed-error);
-  --view-red-fill: #fbedee;
-  --view-error-fill: #fbedee;
-  --view-success-fill: #edf6f0;
-  --chrome-line: var(--noticed-line);
-  --chrome-ink: var(--noticed-ink);
-  --chrome-slate: var(--noticed-slate);
-  --chrome-canvas: var(--noticed-canvas);
-  --chrome-surface: var(--noticed-surface);
-  --chrome-control: var(--noticed-control);
-  --chrome-red: var(--noticed-red);
-  --chrome-red-hover: var(--noticed-red-hover);
   color-scheme: light;
   color: var(--noticed-ink);
   background: var(--noticed-canvas);
@@ -175,15 +154,12 @@
   }
 }
 
-/* Reused analytical modules inherit the new surface without changing owner screens. */
+/* Dense analytical layouts retain their own table and anchor spacing. */
 .noticed-analytics :where(button:not([aria-label^="About"])) {
   min-height: 36px;
 }
 .noticed-analytics :where(table) {
   min-width: 640px;
-}
-.noticed-analytics .font-display {
-  font-family: inherit;
 }
 .noticed-analytics [data-widget-id] {
   min-width: 0;
@@ -194,27 +170,10 @@
 .noticed .n-dark [data-platform="x"] {
   filter: none;
 }
-.noticed .n-dark {
-  --view-ink: #ffffff;
-  --view-muted: #d2d5d7;
-}
-.noticed .n-dark .text-red-400 {
-  color: #fca5a5;
-}
-.noticed :is(.text-red-400, .text-rose-400) {
-  color: var(--noticed-error);
-}
-.noticed .text-yellow-400 {
-  color: var(--noticed-warning);
-}
 .noticed-analytics :where(section[id]) {
   scroll-margin-top: 11rem;
 }
 
-.n-workspace .font-display,
-.n-auth .font-display {
-  font-family: inherit;
-}
 .n-workspace
   :where(
     input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
@@ -234,5 +193,17 @@
 }
 .n-workspace :where(input[type="checkbox"], input[type="radio"]),
 .n-auth :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--noticed-red);
+}
+
+.n-form
+  :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.n-form :where(button) {
+  min-height: 44px;
+}
+.n-form :where(input[type="checkbox"], input[type="radio"]) {
   accent-color: var(--noticed-red);
 }

@@ -130,18 +130,18 @@ function internalHtml(input: ReportLeadNotificationInput, fields: Field[]) {
     .map(
       (f) => `
         <tr>
-          <td style="padding: 8px 16px 8px 0; color: #949BA4; font-size: 13px; vertical-align: top; white-space: nowrap;">${esc(f.label)}</td>
-          <td style="padding: 8px 0; color: #F2F3F5; font-size: 13px;">${esc(f.value)}</td>
+          <td style="padding: 8px 16px 8px 0; color: #4A505B; font-size: 13px; vertical-align: top; white-space: nowrap;">${esc(f.label)}</td>
+          <td style="padding: 8px 0; color: #151F2C; font-size: 13px;">${esc(f.value)}</td>
         </tr>`,
     )
     .join("");
 
   return `
-    <div style="font-family: Arial, sans-serif; background: #2B2D31; color: #DBDEE1; padding: 24px; max-width: 640px;">
-      <h2 style="margin: 0 0 4px; color: #F2F3F5;">New custom report request</h2>
-      <p style="margin: 0 0 20px; color: #949BA4; font-size: 13px;">A visitor submitted a report combination that needs a manual quote. Reply to this email to respond directly to the customer.</p>
-      <table style="width: 100%; border-collapse: collapse; border-top: 1px solid #3F4147;">${rows}</table>
-      <p style="margin: 20px 0 0; font-size: 12px; color: #6D7178;">Sent by TwitchMetrics · reports pipeline</p>
+    <div style="font-family: 'Golos Text', Arial, sans-serif; background: #FFFFFF; color: #151F2C; padding: 24px; max-width: 640px;">
+      <h2 style="margin: 0 0 4px; color: #151F2C;">New custom report request</h2>
+      <p style="margin: 0 0 20px; color: #4A505B; font-size: 13px;">A visitor submitted a report combination that needs a manual quote. Reply to this email to respond directly to the customer.</p>
+      <table style="width: 100%; border-collapse: collapse; border-top: 1px solid #D9D9D9;">${rows}</table>
+      <p style="margin: 20px 0 0; font-size: 12px; color: #4A505B;">Sent by Noticed · reports pipeline</p>
     </div>`;
 }
 
@@ -177,15 +177,15 @@ async function sendCustomerConfirmation(input: ReportLeadNotificationInput) {
   const firstName = input.name.trim().split(/\s+/)[0] || "there";
 
   const html = `
-    <div style="font-family: Arial, sans-serif; background: #2B2D31; color: #DBDEE1; padding: 24px; max-width: 560px;">
-      <h2 style="margin: 0 0 12px; color: #F2F3F5;">Thanks, ${esc(firstName)} — we've got your request</h2>
-      <p style="margin: 0 0 16px; color: #DBDEE1; font-size: 14px; line-height: 1.5;">
+    <div style="font-family: 'Golos Text', Arial, sans-serif; background: #FFFFFF; color: #151F2C; padding: 24px; max-width: 560px;">
+      <h2 style="margin: 0 0 12px; color: #151F2C;">Thanks, ${esc(firstName)} — we've got your request</h2>
+      <p style="margin: 0 0 16px; color: #151F2C; font-size: 14px; line-height: 1.5;">
         Your custom report request has been received. Our team is reviewing the details and will get back to you shortly with next steps.
       </p>
-      <p style="margin: 0 0 20px; color: #949BA4; font-size: 13px; line-height: 1.5;">
+      <p style="margin: 0 0 20px; color: #4A505B; font-size: 13px; line-height: 1.5;">
         No action is needed from you right now. If anything is urgent, just reply to this email.
       </p>
-      <p style="margin: 0; font-size: 13px; color: #949BA4;">— The TwitchMetrics team</p>
+      <p style="margin: 0; font-size: 13px; color: #4A505B;">— The Noticed team</p>
     </div>`;
 
   const text = [
@@ -195,7 +195,7 @@ async function sendCustomerConfirmation(input: ReportLeadNotificationInput) {
     "",
     "No action is needed from you right now. If anything is urgent, just reply to this email.",
     "",
-    "— The TwitchMetrics team",
+    "— The Noticed team",
   ].join("\n");
 
   await sendEmail({
@@ -258,22 +258,22 @@ function inquiryInternalHtml(input: ReportInquiryNotificationInput) {
     .map(
       (f) => `
         <tr>
-          <td style="padding: 8px 16px 8px 0; color: #949BA4; font-size: 13px; vertical-align: top; white-space: nowrap;">${esc(f.label)}</td>
-          <td style="padding: 8px 0; color: #F2F3F5; font-size: 13px;">${esc(f.value)}</td>
+          <td style="padding: 8px 16px 8px 0; color: #4A505B; font-size: 13px; vertical-align: top; white-space: nowrap;">${esc(f.label)}</td>
+          <td style="padding: 8px 0; color: #151F2C; font-size: 13px;">${esc(f.value)}</td>
         </tr>`,
     )
     .join("");
 
   return `
-    <div style="font-family: Arial, sans-serif; background: #2B2D31; color: #DBDEE1; padding: 24px; max-width: 640px;">
-      <h2 style="margin: 0 0 4px; color: #F2F3F5;">New industry data inquiry</h2>
-      <p style="margin: 0 0 20px; color: #949BA4; font-size: 13px;">A visitor asked about custom industry data or a bespoke quote. Reply to this email to respond directly to the customer.</p>
-      <table style="width: 100%; border-collapse: collapse; border-top: 1px solid #3F4147;">${rows}</table>
-      <div style="margin: 20px 0 0; padding: 16px; background: #1E1F22; border-radius: 8px; border: 1px solid #3F4147;">
-        <div style="color: #949BA4; font-size: 12px; margin-bottom: 8px;">Their request</div>
-        <div style="color: #F2F3F5; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${esc(input.message)}</div>
+    <div style="font-family: 'Golos Text', Arial, sans-serif; background: #FFFFFF; color: #151F2C; padding: 24px; max-width: 640px;">
+      <h2 style="margin: 0 0 4px; color: #151F2C;">New industry data inquiry</h2>
+      <p style="margin: 0 0 20px; color: #4A505B; font-size: 13px;">A visitor asked about custom industry data or a bespoke quote. Reply to this email to respond directly to the customer.</p>
+      <table style="width: 100%; border-collapse: collapse; border-top: 1px solid #D9D9D9;">${rows}</table>
+      <div style="margin: 20px 0 0; padding: 16px; background: #EFEFEF; border-radius: 8px; border: 1px solid #D9D9D9;">
+        <div style="color: #4A505B; font-size: 12px; margin-bottom: 8px;">Their request</div>
+        <div style="color: #151F2C; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${esc(input.message)}</div>
       </div>
-      <p style="margin: 20px 0 0; font-size: 12px; color: #6D7178;">Sent by TwitchMetrics · reports pipeline</p>
+      <p style="margin: 20px 0 0; font-size: 12px; color: #4A505B;">Sent by Noticed · reports pipeline</p>
     </div>`;
 }
 
@@ -311,19 +311,19 @@ async function sendInquiryCustomerConfirmation(
   const firstName = input.name.trim().split(/\s+/)[0] || "there";
 
   const html = `
-    <div style="font-family: Arial, sans-serif; background: #2B2D31; color: #DBDEE1; padding: 24px; max-width: 560px;">
-      <h2 style="margin: 0 0 12px; color: #F2F3F5;">Thanks, ${esc(firstName)} — we've got your request</h2>
-      <p style="margin: 0 0 16px; color: #DBDEE1; font-size: 14px; line-height: 1.5;">
+    <div style="font-family: 'Golos Text', Arial, sans-serif; background: #FFFFFF; color: #151F2C; padding: 24px; max-width: 560px;">
+      <h2 style="margin: 0 0 12px; color: #151F2C;">Thanks, ${esc(firstName)} — we've got your request</h2>
+      <p style="margin: 0 0 16px; color: #151F2C; font-size: 14px; line-height: 1.5;">
         Your industry data inquiry has been received. Our team is reviewing what you're after and will get back to you shortly with next steps.
       </p>
-      <div style="margin: 0 0 16px; padding: 16px; background: #1E1F22; border-radius: 8px; border: 1px solid #3F4147;">
-        <div style="color: #949BA4; font-size: 12px; margin-bottom: 8px;">What you asked us</div>
-        <div style="color: #DBDEE1; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${esc(input.message)}</div>
+      <div style="margin: 0 0 16px; padding: 16px; background: #EFEFEF; border-radius: 8px; border: 1px solid #D9D9D9;">
+        <div style="color: #4A505B; font-size: 12px; margin-bottom: 8px;">What you asked us</div>
+        <div style="color: #151F2C; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${esc(input.message)}</div>
       </div>
-      <p style="margin: 0 0 20px; color: #949BA4; font-size: 13px; line-height: 1.5;">
+      <p style="margin: 0 0 20px; color: #4A505B; font-size: 13px; line-height: 1.5;">
         No action is needed from you right now. If anything is urgent, just reply to this email.
       </p>
-      <p style="margin: 0; font-size: 13px; color: #949BA4;">— The TwitchMetrics team</p>
+      <p style="margin: 0; font-size: 13px; color: #4A505B;">— The Noticed team</p>
     </div>`;
 
   const text = [
@@ -336,7 +336,7 @@ async function sendInquiryCustomerConfirmation(
     "",
     "No action is needed from you right now. If anything is urgent, just reply to this email.",
     "",
-    "— The TwitchMetrics team",
+    "— The Noticed team",
   ].join("\n");
 
   await sendEmail({

@@ -29,7 +29,7 @@ export function ReportLeadForm() {
       <div>
         <label
           htmlFor="lead-name"
-          className="mb-1 block text-sm font-medium text-[#DBDEE1]"
+          className="mb-1 block text-sm font-medium text-n-ink"
         >
           Name
         </label>
@@ -40,13 +40,13 @@ export function ReportLeadForm() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Your name"
-          className="w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-4 py-2.5 text-sm text-[#DBDEE1] placeholder-[#949BA4] outline-none transition-colors focus:border-[#E32C19]/50"
+          className="n-input"
         />
       </div>
       <div>
         <label
           htmlFor="lead-email"
-          className="mb-1 block text-sm font-medium text-[#DBDEE1]"
+          className="mb-1 block text-sm font-medium text-n-ink"
         >
           Email
         </label>
@@ -57,13 +57,13 @@ export function ReportLeadForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@company.com"
-          className="w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-4 py-2.5 text-sm text-[#DBDEE1] placeholder-[#949BA4] outline-none transition-colors focus:border-[#E32C19]/50"
+          className="n-input"
         />
       </div>
       <div>
         <label
           htmlFor="lead-company"
-          className="mb-1 block text-sm font-medium text-[#DBDEE1]"
+          className="mb-1 block text-sm font-medium text-n-ink"
         >
           Company
         </label>
@@ -74,12 +74,12 @@ export function ReportLeadForm() {
           value={company}
           onChange={(e) => setCompany(e.target.value)}
           placeholder="Your company"
-          className="w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-4 py-2.5 text-sm text-[#DBDEE1] placeholder-[#949BA4] outline-none transition-colors focus:border-[#E32C19]/50"
+          className="n-input"
         />
       </div>
 
       {state === "error" && (
-        <p className="text-sm text-[#ef4444]">
+        <p role="alert" className="text-sm text-n-error">
           Something went wrong. Please try again.
         </p>
       )}
@@ -87,7 +87,7 @@ export function ReportLeadForm() {
       <button
         type="submit"
         disabled={state === "submitting"}
-        className="w-full rounded-lg bg-[#E32C19] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
+        className="w-full rounded-lg bg-n-red px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:opacity-50"
       >
         {state === "submitting" ? "Loading…" : "Continue to Details →"}
       </button>

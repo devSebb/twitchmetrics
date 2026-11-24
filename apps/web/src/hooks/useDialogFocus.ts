@@ -3,8 +3,12 @@
 import { useEffect, useRef } from "react";
 
 /** Keep modal focus inside its surface, then restore the invoking control. */
-export function useDialogFocus(open: boolean) {
+export function useDialogFocus(open: boolean, onClose?: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     if (!open || !ref.current) return;
     const dialog = ref.current;
@@ -22,6 +26,11 @@ export function useDialogFocus(open: boolean) {
     document.body.style.overflow = "hidden";
     (controls()[0] ?? dialog).focus();
     function trap(event: KeyboardEvent) {
+      if (event.key === "Escape" && closeRef.current) {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
       if (event.key !== "Tab") return;
       const items = controls();
       const first = items[0];

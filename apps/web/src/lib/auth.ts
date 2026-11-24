@@ -202,7 +202,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     ResendProvider({
       apiKey: process.env.RESEND_API_KEY ?? "",
-      from: "TwitchMetrics <noreply@twitchmetrics.net>",
+      from: "Noticed <noreply@twitchmetrics.net>",
       sendVerificationRequest: async ({ identifier, url, provider }) => {
         if (!provider.apiKey) {
           throw new Error(
@@ -219,18 +219,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           body: JSON.stringify({
             from: provider.from,
             to: identifier,
-            subject: "Your TwitchMetrics magic sign-in link",
+            subject: "Your Noticed magic sign-in link",
             html: `
-              <div style="font-family: Arial, sans-serif; background: #2B2D31; color: #DBDEE1; padding: 24px;">
-                <h2 style="margin: 0 0 12px; color: #F2F3F5;">Sign in to TwitchMetrics</h2>
-                <p style="margin: 0 0 20px; color: #949BA4;">Click the button below to securely sign in.</p>
-                <a href="${url}" style="display: inline-block; background: #E32C19; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">
+              <div style="font-family: 'Golos Text', Arial, sans-serif; background: #FFFFFF; color: #151F2C; padding: 24px;">
+                <h2 style="margin: 0 0 12px; color: #151F2C;">Sign in to Noticed</h2>
+                <p style="margin: 0 0 20px; color: #4A505B;">Click the button below to securely sign in.</p>
+                <a href="${url}" style="display: inline-block; background: #C4262C; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">
                   Sign In
                 </a>
-                <p style="margin: 20px 0 0; font-size: 12px; color: #949BA4;">If you did not request this, you can ignore this email.</p>
+                <p style="margin: 20px 0 0; font-size: 12px; color: #4A505B;">If you did not request this, you can ignore this email.</p>
               </div>
             `,
-            text: `Sign in to TwitchMetrics: ${url}`,
+            text: `Sign in to Noticed: ${url}`,
           }),
         });
 

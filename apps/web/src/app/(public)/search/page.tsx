@@ -217,8 +217,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 aria-current={type === tab.value ? "page" : undefined}
                 className={`min-h-11 rounded-full px-5 py-3 text-sm font-medium transition-colors ${
                   type === tab.value
-                    ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
-                    : "text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#DBDEE1)]"
+                    ? "bg-n-surface text-n-ink"
+                    : "text-n-slate hover:text-n-ink"
                 }`}
               >
                 {tab.label}
@@ -233,11 +233,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {results.creators.length === 0 &&
               results.games.length === 0 &&
               results.untrackedCreators.length === 0 && (
-                <div className="rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#313338)] px-6 py-10 text-center">
-                  <p className="text-lg font-medium text-[var(--view-ink,#DBDEE1)]">
+                <div className="rounded-lg border border-n-line bg-n-canvas px-6 py-10 text-center">
+                  <p className="text-lg font-medium text-n-ink">
                     No results for &ldquo;{query}&rdquo;
                   </p>
-                  <p className="mt-1 text-sm text-[var(--view-muted,#949BA4)]">
+                  <p className="mt-1 text-sm text-n-slate">
                     Try a different search term or check the spelling
                   </p>
                 </div>
@@ -247,10 +247,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {results.creators.length === 0 &&
               results.untrackedCreators.length > 0 && (
                 <div className="mb-8">
-                  <h2 className="mb-1 text-sm font-semibold uppercase text-[var(--view-muted,#949BA4)]">
+                  <h2 className="mb-1 text-sm font-semibold uppercase text-n-slate">
                     On Twitch — not tracked yet
                   </h2>
-                  <p className="mb-3 text-xs text-[var(--view-muted,#72767D)]">
+                  <p className="mb-3 text-xs text-n-slate">
                     These channels match your search but we haven&apos;t indexed
                     them yet. Check back after our next refresh.
                   </p>
@@ -261,9 +261,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                         href={`https://twitch.tv/${c.username}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-3 rounded-lg border border-dashed border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] p-3 transition-colors hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-canvas,#313338)]"
+                        className="flex items-center gap-3 rounded-lg border border-dashed border-n-line bg-n-canvas p-3 transition-colors hover:border-n-control hover:bg-n-canvas"
                       >
-                        <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[var(--view-surface,#383A40)]">
+                        <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-n-surface">
                           {c.avatarUrl ? (
                             <Image
                               src={c.avatarUrl}
@@ -280,16 +280,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
+                            <span className="truncate text-sm font-medium text-n-ink">
                               {c.displayName}
                             </span>
                             {c.isLive && (
-                              <span className="flex-shrink-0 rounded bg-[var(--view-red,#E32C19)] px-1 py-0.5 text-[9px] font-bold text-white">
+                              <span className="flex-shrink-0 rounded bg-n-red px-1 py-0.5 text-[9px] font-bold text-white">
                                 LIVE
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-[var(--view-muted,#72767D)]">
+                          <div className="text-xs text-n-slate">
                             @{c.username} · on twitch.tv ↗
                           </div>
                         </div>
@@ -301,7 +301,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
             {results.creators.length > 0 && (
               <div className="mb-8">
-                <h2 className="mb-3 text-sm font-semibold uppercase text-[var(--view-muted,#949BA4)]">
+                <h2 className="mb-3 text-sm font-semibold uppercase text-n-slate">
                   Creators ({results.creatorTotal})
                 </h2>
                 <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -309,9 +309,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     <Link
                       key={c.id}
                       href={`/creator/${c.slug}`}
-                      className="flex items-center gap-3 border-b border-n-line py-5 transition-colors hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-surface,#383A40)]"
+                      className="flex items-center gap-3 border-b border-n-line py-5 transition-colors hover:border-n-control hover:bg-n-surface"
                     >
-                      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-[var(--view-surface,#383A40)]">
+                      <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-n-surface">
                         {c.avatarUrl ? (
                           <Image
                             src={c.avatarUrl}
@@ -327,10 +327,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
+                        <div className="truncate text-sm font-medium text-n-ink">
                           {c.displayName}
                         </div>
-                        <div className="text-xs text-[var(--view-muted,#949BA4)]">
+                        <div className="text-xs text-n-slate">
                           {formatNumber(Number(c.totalFollowers))} followers
                         </div>
                       </div>
@@ -342,7 +342,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
             {results.games.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-semibold uppercase text-[var(--view-muted,#949BA4)]">
+                <h2 className="mb-3 text-sm font-semibold uppercase text-n-slate">
                   Categories ({results.gameTotal})
                 </h2>
                 <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -350,9 +350,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     <Link
                       key={g.id}
                       href={`/game/${g.slug}`}
-                      className="flex items-center gap-3 border-b border-n-line py-5 transition-colors hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-surface,#383A40)]"
+                      className="flex items-center gap-3 border-b border-n-line py-5 transition-colors hover:border-n-control hover:bg-n-surface"
                     >
-                      <div className="relative h-10 w-14 flex-shrink-0 overflow-hidden rounded bg-[var(--view-surface,#383A40)]">
+                      <div className="relative h-10 w-14 flex-shrink-0 overflow-hidden rounded bg-n-surface">
                         <GameCoverImage
                           src={g.coverImageUrl}
                           name={g.name}
@@ -362,10 +362,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                         />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-[var(--view-ink,#DBDEE1)]">
+                        <div className="truncate text-sm font-medium text-n-ink">
                           {g.name}
                         </div>
-                        <div className="text-xs text-[var(--view-muted,#949BA4)]">
+                        <div className="text-xs text-n-slate">
                           {formatNumber(g.currentViewers)} viewers
                         </div>
                       </div>
@@ -381,27 +381,27 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 {page > 1 ? (
                   <Link
                     href={pageUrl(page - 1)}
-                    className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-control,#4E5058)]"
+                    className="rounded-md bg-n-surface px-4 py-2 text-sm font-medium text-n-ink transition-colors hover:bg-n-control"
                   >
                     Previous
                   </Link>
                 ) : (
-                  <span className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] opacity-40 pointer-events-none">
+                  <span className="rounded-md bg-n-surface px-4 py-2 text-sm font-medium text-n-ink opacity-40 pointer-events-none">
                     Previous
                   </span>
                 )}
-                <span className="text-sm text-[var(--view-muted,#949BA4)]">
+                <span className="text-sm text-n-slate">
                   Page {page} of {totalPages}
                 </span>
                 {page < totalPages ? (
                   <Link
                     href={pageUrl(page + 1)}
-                    className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-control,#4E5058)]"
+                    className="rounded-md bg-n-surface px-4 py-2 text-sm font-medium text-n-ink transition-colors hover:bg-n-control"
                   >
                     Next
                   </Link>
                 ) : (
-                  <span className="rounded-md bg-[var(--view-surface,#383A40)] px-4 py-2 text-sm font-medium text-[var(--view-ink,#DBDEE1)] opacity-40 pointer-events-none">
+                  <span className="rounded-md bg-n-surface px-4 py-2 text-sm font-medium text-n-ink opacity-40 pointer-events-none">
                     Next
                   </span>
                 )}

@@ -109,7 +109,7 @@ export function CreatorGrid({
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-[220px] animate-pulse rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#313338)]"
+              className="h-[220px] animate-pulse rounded-lg border border-n-line bg-n-canvas"
             />
           ))}
         </div>
@@ -120,7 +120,7 @@ export function CreatorGrid({
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-10 animate-pulse rounded-lg bg-[var(--view-surface,#383A40)]"
+              className="h-10 animate-pulse rounded-lg bg-n-surface"
             />
           ))}
         </div>
@@ -139,10 +139,8 @@ export function CreatorGrid({
         </div>
       )}
       {!isLoading && !isError && creators.length === 0 && (
-        <div className="rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#313338)] px-6 py-10 text-center">
-          <p className="text-sm text-[var(--view-muted,#949BA4)]">
-            No creators found
-          </p>
+        <div className="rounded-lg border border-n-line bg-n-canvas px-6 py-10 text-center">
+          <p className="text-sm text-n-slate">No creators found</p>
         </div>
       )}
 
@@ -177,13 +175,13 @@ export function CreatorGrid({
                 className={cn(
                   "rounded-md px-4 py-2 text-sm font-medium transition-colors",
                   page === 1
-                    ? "pointer-events-none bg-[var(--view-surface,#383A40)] text-[var(--view-muted,#949BA4)] opacity-40"
-                    : "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#DBDEE1)] hover:bg-[var(--view-control,#4E5058)]",
+                    ? "pointer-events-none bg-n-surface text-n-slate opacity-40"
+                    : "bg-n-surface text-n-ink hover:bg-n-control",
                 )}
               >
                 Previous
               </Link>
-              <span className="text-sm text-[var(--view-muted,#949BA4)]">
+              <span className="text-sm text-n-slate">
                 Page {page} of {meta.totalPages}
               </span>
               <Link
@@ -193,8 +191,8 @@ export function CreatorGrid({
                 className={cn(
                   "rounded-md px-4 py-2 text-sm font-medium transition-colors",
                   page === meta.totalPages
-                    ? "pointer-events-none bg-[var(--view-surface,#383A40)] text-[var(--view-muted,#949BA4)] opacity-40"
-                    : "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#DBDEE1)] hover:bg-[var(--view-control,#4E5058)]",
+                    ? "pointer-events-none bg-n-surface text-n-slate opacity-40"
+                    : "bg-n-surface text-n-ink hover:bg-n-control",
                 )}
               >
                 Next

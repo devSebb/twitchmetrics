@@ -19,7 +19,18 @@ const MANAGER_LINKS = [
   ["/dashboard/roster", "My roster"],
   ["/dashboard/settings", "Agency & account"],
 ] as const;
+const ADMIN_LINKS = [
+  ["/dashboard/home", "Overview"],
+  ["/dashboard/admin/claims", "Claims"],
+  ["/dashboard/admin/manage-creators", "Creators"],
+  ["/dashboard/admin/users", "Users"],
+  ["/dashboard/admin/audit-log", "Audit log"],
+  ["/dashboard/admin/health", "Health"],
+  ["/dashboard/admin/metrics", "Metrics"],
+] as const;
 const ALIASES: Record<string, string> = {
+  "/claims": "/dashboard/admin/claims",
+  "/manage-creators": "/dashboard/admin/manage-creators",
   "/home": "/dashboard/home",
   "/roster": "/dashboard/roster",
   "/analytics": "/dashboard/analytics",
@@ -34,15 +45,13 @@ export function WorkspaceShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  // Admin surfaces receive their own migration in the final integration chunk.
-  if (role === "admin")
-    return (
-      <main id="main-content" className="flex-1">
-        {children}
-      </main>
-    );
   const current = ALIASES[pathname] ?? pathname;
-  const links = role === "talent_manager" ? MANAGER_LINKS : CREATOR_LINKS;
+  const links =
+    role === "admin"
+      ? ADMIN_LINKS
+      : role === "talent_manager"
+        ? MANAGER_LINKS
+        : CREATOR_LINKS;
   return (
     <AppearanceProvider>
       <main id="main-content" className="noticed n-workspace flex-1">
@@ -50,9 +59,11 @@ export function WorkspaceShell({
           <Container>
             <nav
               aria-label={
-                role === "talent_manager"
-                  ? "Manager workspace"
-                  : "Creator workspace"
+                role === "admin"
+                  ? "Admin workspace"
+                  : role === "talent_manager"
+                    ? "Manager workspace"
+                    : "Creator workspace"
               }
               className="flex gap-6 overflow-x-auto"
             >

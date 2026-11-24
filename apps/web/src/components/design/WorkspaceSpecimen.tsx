@@ -1,6 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
+import {
+  ClaimReviewQueue,
+  CreatorManagement,
+  UserManagement,
+  SystemMetrics,
+  AuditLogViewer,
+  SystemHealth,
+} from "@/components/admin";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { observable } from "@trpc/server/observable";
 import { TRPCClientError } from "@trpc/client";
@@ -75,7 +83,114 @@ const roster = ["active", "pending", "expired"].map((inviteState, index) => ({
     slug: `preview-creator-${index}`,
   },
 }));
+const ADMIN_VIEWS: Record<string, ComponentType> = {
+  "Admin metrics": SystemMetrics,
+  "Admin claims": ClaimReviewQueue,
+  "Admin creators": CreatorManagement,
+  "Admin users": UserManagement,
+  "Admin audit": AuditLogViewer,
+  "Admin health": SystemHealth,
+};
+const fixtureDate = new Date("2026-11-23T12:00:00Z");
 const fixtures: Record<string, unknown> = {
+  "admin.getSystemMetrics": {
+    totalUsers: 250,
+    totalCreators: 12000,
+    totalSnapshots: 1250000,
+    snapshots24h: 42000,
+    totalGames: 1800,
+    leads7d: 12,
+    usersByRole: [
+      { role: "creator", count: 225 },
+      { role: "talent_manager", count: 25 },
+    ],
+    creatorsByState: [
+      { state: "claimed", count: 250 },
+      { state: "unclaimed", count: 11750 },
+    ],
+    creatorsByTier: [
+      { tier: "tier1", count: 2000 },
+      { tier: "tier2", count: 5000 },
+      { tier: "tier3", count: 5000 },
+    ],
+    platformDist: [
+      { platform: "twitch", count: 6000 },
+      { platform: "youtube", count: 4000 },
+      { platform: "kick", count: 2000 },
+    ],
+  },
+  "admin.getSnapshotTrend": Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.UTC(2026, 10, i + 1)).toISOString().slice(0, 10),
+    count: 30000 + (i % 7) * 2000,
+  })),
+  "admin.getSystemHealth": {
+    db: { ok: true },
+    snapshotFreshness: {
+      tier1: { lastAt: fixtureDate.toISOString(), stale: false },
+      tier2: { lastAt: fixtureDate.toISOString(), stale: false },
+      tier3: { lastAt: null, stale: true },
+    },
+    gameFreshness: {
+      lastSnapshotAt: fixtureDate.toISOString(),
+      stale: false,
+      gamesSnapshotted24h: 1800,
+      gamesMissingSnapshots: 2,
+      totalGames: 1802,
+    },
+    staleCreators: 12,
+    oldestPendingClaim: fixtureDate.toISOString(),
+  },
+  "admin.listUsers": {
+    total: 1,
+    items: [
+      {
+        id: "example-user",
+        name: "Example manager",
+        email: "manager@example.test",
+        role: "talent_manager",
+        suspended: false,
+        createdAt: fixtureDate,
+        _count: { creatorProfiles: 0 },
+      },
+    ],
+  },
+  "admin.getCreatorList": {
+    total: 1,
+    items: [{ ...creator, snapshotTier: "tier1", lastSnapshotAt: fixtureDate }],
+  },
+  "admin.getClaimQueue": {
+    total: 1,
+    items: [
+      {
+        id: "example-claim",
+        createdAt: fixtureDate,
+        status: "pending",
+        method: "manual",
+        evidenceUrls: ["https://example.test/evidence"],
+        reviewNotes: null,
+        creatorProfile: { ...creator, totalFollowers: BigInt(125000) },
+        user: {
+          id: "example-user",
+          name: "Example creator",
+          email: "creator@example.test",
+        },
+      },
+    ],
+  },
+  "admin.getAuditLog": {
+    total: 1,
+    items: [
+      {
+        id: "example-audit",
+        createdAt: fixtureDate,
+        user: { name: "Example admin", email: "admin@example.test" },
+        action: "creator.update_tier",
+        targetType: "creator",
+        targetId: "preview-creator",
+        metadata: { previousTier: "tier2", newTier: "tier1", fixture: true },
+      },
+    ],
+  },
   "talentManager.getRoster": roster,
   "talentManager.getMyProfile": manager,
   "talentManager.searchCreators": [{ ...creator, isClaimed: true }],
@@ -92,6 +207,7 @@ export function WorkspaceSpecimen({
   initialDrawer?: boolean;
 }) {
   const [view, setView] = useState(initialView);
+  const AdminView = ADMIN_VIEWS[view];
   const [drawer, setDrawer] = useState(initialDrawer);
   const [widgets, setWidgets] = useState(getDefaultWidgets());
   const [queryClient] = useState(
@@ -129,6 +245,7 @@ export function WorkspaceSpecimen({
                 "Agency settings",
                 "Creator settings",
                 "Creator detail",
+                ...Object.keys(ADMIN_VIEWS),
               ].map((label) => (
                 <button
                   key={label}
@@ -148,13 +265,24 @@ export function WorkspaceSpecimen({
             </div>
           </div>
           <WorkspaceShell
-            role={view === "Creator settings" ? "creator" : "talent_manager"}
+            role={
+              AdminView
+                ? "admin"
+                : view === "Creator settings"
+                  ? "creator"
+                  : "talent_manager"
+            }
           >
             {view === "Roster" ? (
               <ManagerDashboard userId="preview-user" />
             ) : (
               <div className="mx-auto max-w-[1280px] px-5 py-10 sm:px-8 lg:px-10">
-                {view === "Agency settings" ? (
+                {AdminView ? (
+                  <>
+                    <h1 className="mb-8 text-3xl font-extrabold">{view}</h1>
+                    <AdminView />
+                  </>
+                ) : view === "Agency settings" ? (
                   <ManagerSettingsForm
                     user={user}
                     profile={manager}

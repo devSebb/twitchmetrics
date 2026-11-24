@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-/** Shared values for DOM, canvas charts and, later, export presentation. */
+/** Shared values for DOM, canvas charts and export presentation. */
 export const NOTICED = {
   canvas: "#FFFFFF",
   ink: "#151F2C",
@@ -18,10 +18,21 @@ export const NOTICED = {
 } as const;
 
 export const NOTICED_CSS_VARS = Object.fromEntries(
-  Object.entries(NOTICED).map(([name, value]) => [
-    `--noticed-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
-    value,
-  ]),
+  Object.entries(NOTICED).flatMap(([name, value]) => {
+    const variable = `--noticed-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+    // Tailwind's opacity modifiers need RGB channels. Keep the resolved hex
+    // tokens alongside them for handwritten CSS, canvas and PDF consumers.
+    const entries = [[variable, value]];
+    if (/^#[\da-f]{6}$/i.test(value)) {
+      entries.push([
+        `${variable}-rgb`,
+        [1, 3, 5]
+          .map((offset) => parseInt(value.slice(offset, offset + 2), 16))
+          .join(" "),
+      ]);
+    }
+    return entries;
+  }),
 ) as CSSProperties;
 
 /** Adjusted for legibility on white; platform marks keep their original assets. */

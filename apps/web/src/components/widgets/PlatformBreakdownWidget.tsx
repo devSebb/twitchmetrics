@@ -83,7 +83,7 @@ export function PlatformBreakdownWidget({ profile, isOwner = false }: Props) {
     <div className="flex flex-1 flex-col justify-center">
       <BaseChart option={option} height={Math.max(bars.length * 48, 120)} />
       {isOwner && bars.length === 1 && (
-        <p className="mt-2 text-center text-xs text-[var(--view-muted,#949BA4)]">
+        <p className="mt-2 text-center text-xs text-n-slate">
           Connect more platforms to compare.
         </p>
       )}

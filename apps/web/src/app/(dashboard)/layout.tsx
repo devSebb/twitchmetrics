@@ -18,7 +18,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#2B2D31]">
+    <div className="flex min-h-screen flex-col bg-n-canvas">
       <Header />
       <WorkspaceShell role={session.user.role}>{children}</WorkspaceShell>
       <Footer />

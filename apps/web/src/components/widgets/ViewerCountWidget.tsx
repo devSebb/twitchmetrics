@@ -57,16 +57,14 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {liveInfo && (
-            <div className="flex items-center gap-1.5 rounded-full bg-[var(--view-error-fill,rgba(239,68,68,0.2))] px-2.5 py-0.5">
+            <div className="flex items-center gap-1.5 rounded-full bg-n-error/5 px-2.5 py-0.5">
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--view-error,#ef4444)] opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--view-error,#ef4444)]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-n-error opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-n-error" />
               </span>
-              <span className="text-xs font-semibold text-[var(--view-error,#ef4444)]">
-                LIVE
-              </span>
+              <span className="text-xs font-semibold text-n-error">LIVE</span>
               {liveInfo.viewers !== null && (
-                <span className="text-xs font-medium text-[var(--view-ink,#F2F3F5)]">
+                <span className="text-xs font-medium text-n-ink">
                   {formatNumber(liveInfo.viewers)}
                 </span>
               )}
@@ -86,8 +84,8 @@ export function ViewerCountWidget({ profile }: ViewerCountWidgetProps) {
               }}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 period === p
-                  ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
-                  : "text-[var(--view-muted,#949BA4)] hover:bg-[var(--view-surface,#383A40)] hover:text-[var(--view-ink,#DBDEE1)]"
+                  ? "bg-n-surface text-n-ink"
+                  : "text-n-slate hover:bg-n-surface hover:text-n-ink"
               }`}
             >
               {p.toUpperCase()}

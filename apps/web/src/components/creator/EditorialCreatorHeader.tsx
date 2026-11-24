@@ -104,7 +104,7 @@ export function EditorialCreatorHeader({
             <div className="border-t border-white/25 pt-6 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
               <p className="n-eyebrow flex items-center gap-2 text-white/70">
                 Total audience{" "}
-                <InfoTip info={CREATOR_HEADER_INFO.totalFollowers} />
+                <InfoTip inverted info={CREATOR_HEADER_INFO.totalFollowers} />
               </p>
               <p
                 className={`mt-3 font-extrabold leading-none tracking-[-.06em] ${owner ? "text-5xl" : "text-[clamp(3.5rem,7vw,6rem)]"}`}
@@ -115,7 +115,7 @@ export function EditorialCreatorHeader({
                 Followers across tracked accounts. Not a unique audience count.
               </p>
               <div className="mt-6">
-                <SyncStatus lastSyncedAt={creator.lastSnapshotAt} />
+                <SyncStatus inverted lastSyncedAt={creator.lastSnapshotAt} />
               </div>
               <Link
                 href={

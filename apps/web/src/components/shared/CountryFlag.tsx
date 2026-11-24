@@ -20,7 +20,7 @@ export function CountryFlag({ code }: { code: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      className="shrink-0 text-[var(--view-muted,#949BA4)]"
+      className="shrink-0 text-n-slate"
     >
       <circle cx="12" cy="12" r="9" />
       <ellipse cx="12" cy="12" rx="4" ry="9" />

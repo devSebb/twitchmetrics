@@ -37,7 +37,7 @@ type SearchBarProps = {
   defaultQuery?: string;
   autoFocus?: boolean;
   searchType?: SearchType;
-  appearance?: "legacy" | "noticed";
+  appearance?: "noticed";
 };
 
 export function SearchBar({
@@ -45,7 +45,7 @@ export function SearchBar({
   defaultQuery = "",
   autoFocus = false,
   searchType = "all",
-  appearance = "legacy",
+  appearance: _appearance,
 }: SearchBarProps) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultQuery);
@@ -56,7 +56,6 @@ export function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const id = useId();
   const autocomplete = mode !== "full";
-  const noticed = appearance === "noticed" || mode === "hero";
   const trimmedQuery = query.trim();
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(trimmedQuery), 300);
@@ -150,11 +149,9 @@ export function SearchBar({
       });
     }
   }
-  const surface = noticed
-    ? "border-n-control bg-white text-n-ink"
-    : "border-[#3F4147] bg-[#1E1F22] text-[#DBDEE1]";
-  const muted = noticed ? "text-n-slate" : "text-[#949BA4]";
-  const selected = noticed ? "bg-n-surface" : "bg-[#383A40]";
+  const surface = "border-n-control bg-white text-n-ink";
+  const muted = "text-n-slate";
+  const selected = "bg-n-surface";
   return (
     <div ref={containerRef} className="relative min-w-0">
       <form
@@ -232,9 +229,7 @@ export function SearchBar({
               }
               className={cn(
                 "min-w-0 w-full bg-transparent py-2 outline-none [&::-webkit-search-cancel-button]:hidden",
-                noticed
-                  ? "text-n-ink placeholder:text-n-slate"
-                  : "text-[#DBDEE1] placeholder:text-[#949BA4]",
+                "text-n-ink placeholder:text-n-slate",
                 mode === "compact" ? "text-sm" : "text-base",
               )}
             />
@@ -313,7 +308,7 @@ export function SearchBar({
                   onMouseEnter={() => setActiveIndex(index)}
                   className={cn(
                     "flex items-center gap-3 px-3 py-3",
-                    noticed ? "hover:bg-n-surface" : "hover:bg-[#383A40]",
+                    "hover:bg-n-surface",
                     activeIndex === index && selected,
                   )}
                 >
@@ -362,9 +357,7 @@ export function SearchBar({
             onClick={() => setOpen(false)}
             className={cn(
               "block border-t px-4 py-3 text-center text-sm font-semibold",
-              noticed
-                ? "border-n-line text-n-red hover:bg-n-surface"
-                : "border-[#3F4147] text-[#E32C19] hover:bg-[#383A40]",
+              "border-n-line text-n-red hover:bg-n-surface",
             )}
           >
             View all results

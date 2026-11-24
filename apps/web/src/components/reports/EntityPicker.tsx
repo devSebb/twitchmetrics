@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useId } from "react";
 
 type Entity = {
   id: string;
@@ -38,12 +38,20 @@ export function EntityPicker({
   selected,
   onChange,
 }: Props) {
+  const id = useId();
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [results, setResults] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // A result belongs to its completed query. Hide it as soon as typing resumes,
+  // including during the debounce, so Enter cannot select a stale suggestion.
+  const searching = loading || query.trim() !== debounced;
+  const visibleResults = searching ? [] : results;
 
   // Debounce
   useEffect(() => {
@@ -55,13 +63,19 @@ export function EntityPicker({
   useEffect(() => {
     if (!debounced || disabled) {
       setResults([]);
+      setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
+    setError(false);
+    setActiveIndex(-1);
     const type = kind === "games" ? "games" : "creators";
     fetch(`/api/search?q=${encodeURIComponent(debounced)}&type=${type}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Search unavailable");
+        return r.json();
+      })
       .then(
         (data: { data?: { creators?: CreatorRow[]; games?: GameRow[] } }) => {
           if (cancelled) return;
@@ -83,7 +97,10 @@ export function EntityPicker({
         },
       )
       .catch(() => {
-        if (!cancelled) setResults([]);
+        if (!cancelled) {
+          setResults([]);
+          setError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -91,7 +108,7 @@ export function EntityPicker({
     return () => {
       cancelled = true;
     };
-  }, [debounced, kind, disabled]);
+  }, [debounced, kind, disabled, retry]);
 
   // Close on outside click
   useEffect(() => {
@@ -125,19 +142,25 @@ export function EntityPicker({
       : "Search channels by name…";
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+    >
       {selected.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {selected.map((s) => (
             <span
               key={s.id}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#E32C19]/15 px-2 py-1 text-xs text-[#F2F3F5]"
+              className="inline-flex items-center gap-1.5 rounded-md bg-n-red/15 px-2 py-1 text-xs text-n-ink"
             >
               {s.label}
               <button
                 type="button"
                 onClick={() => removeChip(s.id)}
-                className="text-[#E32C19] hover:text-[#F2F3F5]"
+                className="flex h-11 w-11 items-center justify-center text-n-red hover:text-n-ink"
                 aria-label={`Remove ${s.label}`}
               >
                 <svg
@@ -160,7 +183,7 @@ export function EntityPicker({
 
       <div className="relative">
         <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4E5058]"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-n-slate"
           width="14"
           height="14"
           viewBox="0 0 24 24"
@@ -175,79 +198,133 @@ export function EntityPicker({
         </svg>
         <input
           type="text"
+          role="combobox"
+          aria-label={`Search ${kind}`}
+          aria-autocomplete="list"
+          aria-expanded={open && !disabled && query.trim().length > 0}
+          aria-controls={open ? `${id}-results` : undefined}
+          aria-activedescendant={
+            open && visibleResults[activeIndex]
+              ? `${id}-result-${activeIndex}`
+              : undefined
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setOpen(false);
+              setActiveIndex(-1);
+            }
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setOpen(true);
+              if (visibleResults.length)
+                setActiveIndex((current) =>
+                  event.key === "ArrowDown"
+                    ? (current + 1) % visibleResults.length
+                    : current <= 0
+                      ? visibleResults.length - 1
+                      : current - 1,
+                );
+            }
+            if (event.key === "Enter" && open && visibleResults[activeIndex]) {
+              event.preventDefault();
+              toggle(visibleResults[activeIndex]!);
+            }
+          }}
           value={query}
           disabled={disabled}
           onChange={(e) => {
             setQuery(e.target.value);
+            setActiveIndex(-1);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-[#3F4147] bg-[#383A40] py-2 pl-8 pr-3 text-sm text-[#DBDEE1] placeholder-[#4E5058] outline-none transition-colors focus:border-[#E32C19]/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-lg border border-n-line bg-n-surface py-2 pl-8 pr-3 text-sm text-n-ink placeholder-n-slate outline-none transition-colors focus:border-n-red/50 disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
 
       {open && !disabled && (query.trim().length > 0 || loading) && (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-[#3F4147] bg-[#2B2D31] shadow-xl">
-          {loading && results.length === 0 && (
-            <div className="px-3 py-3 text-xs text-[#4E5058]">Searching…</div>
+        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-n-line bg-n-surface shadow-xl">
+          {searching && (
+            <div className="px-3 py-3 text-xs text-n-slate">Searching…</div>
           )}
-          {!loading && results.length === 0 && debounced && (
-            <div className="px-3 py-3 text-xs text-[#4E5058]">
+          {error && !searching && (
+            <p role="alert" className="px-3 py-3 text-sm text-n-error">
+              Search could not load.{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => setRetry((value) => value + 1)}
+              >
+                Try again
+              </button>
+            </p>
+          )}
+          {!searching && !error && results.length === 0 && debounced && (
+            <div className="px-3 py-3 text-xs text-n-slate">
               No indexed {kind} match “{debounced}”.
             </div>
           )}
-          {results.map((r) => {
-            const checked = selected.some((s) => s.id === r.id);
-            return (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => toggle(r)}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[#383A40]"
-              >
-                <div
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                    checked
-                      ? "border-[#E32C19] bg-[#E32C19]"
-                      : "border-[#4E5058] bg-[#2B2D31]"
-                  }`}
+          <div
+            id={`${id}-results`}
+            role="listbox"
+            aria-label={`${kind} search results`}
+            aria-multiselectable="true"
+            aria-busy={searching}
+          >
+            {visibleResults.map((r, index) => {
+              const checked = selected.some((s) => s.id === r.id);
+              return (
+                <button
+                  key={r.id}
+                  id={`${id}-result-${index}`}
+                  role="option"
+                  aria-selected={checked}
+                  type="button"
+                  onClick={() => toggle(r)}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-n-surface ${activeIndex === index ? "bg-n-surface outline outline-1 outline-n-control" : ""}`}
                 >
-                  {checked && (
-                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                      <path
-                        d="M1 4L3.5 6.5L9 1"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </div>
-                {r.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={r.imageUrl}
-                    alt=""
-                    className="h-6 w-6 shrink-0 rounded object-cover"
-                  />
-                ) : (
-                  <div className="h-6 w-6 shrink-0 rounded bg-[#383A40]" />
-                )}
-                <div className="min-w-0">
-                  <div className="truncate text-sm text-[#DBDEE1]">
-                    {r.label}
+                  <div
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                      checked
+                        ? "border-n-red bg-n-red"
+                        : "border-n-control bg-n-surface"
+                    }`}
+                  >
+                    {checked && (
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path
+                          d="M1 4L3.5 6.5L9 1"
+                          stroke="white"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
                   </div>
-                  {r.sublabel && (
-                    <div className="truncate text-[10px] text-[#4E5058]">
-                      {r.sublabel}
-                    </div>
+                  {r.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={r.imageUrl}
+                      alt=""
+                      className="h-6 w-6 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="h-6 w-6 shrink-0 rounded bg-n-surface" />
                   )}
-                </div>
-              </button>
-            );
-          })}
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-n-ink">{r.label}</div>
+                    {r.sublabel && (
+                      <div className="truncate text-[10px] text-n-slate">
+                        {r.sublabel}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

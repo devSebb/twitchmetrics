@@ -35,7 +35,7 @@ export function CreatorViewToggle() {
   }
 
   return (
-    <div className="flex w-fit gap-1 rounded-md bg-[var(--view-canvas,#1E1F22)] p-0.5">
+    <div className="flex w-fit gap-1 rounded-md bg-n-canvas p-0.5">
       {VIEWS.map(({ value, label, Icon }) => {
         const isActive = current === value;
         return (
@@ -48,8 +48,8 @@ export function CreatorViewToggle() {
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded transition-colors",
               isActive
-                ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
-                : "text-[var(--view-muted,#949BA4)] hover:text-[var(--view-ink,#DBDEE1)]",
+                ? "bg-n-surface text-n-ink"
+                : "text-n-slate hover:text-n-ink",
             )}
           >
             <Icon size={18} weight="duotone" />

@@ -27,8 +27,8 @@ function fieldRows(fields: { label: string; value: string }[]): string {
   return fields
     .map(
       (f) => `<tr>
-        <td style="padding: 8px 16px 8px 0; color: #949BA4; font-size: 13px; vertical-align: top; white-space: nowrap;">${esc(f.label)}</td>
-        <td style="padding: 8px 0; color: #F2F3F5; font-size: 13px;">${esc(f.value)}</td>
+        <td style="padding: 8px 16px 8px 0; color: #4A505B; font-size: 13px; vertical-align: top; white-space: nowrap;">${esc(f.label)}</td>
+        <td style="padding: 8px 0; color: #151F2C; font-size: 13px;">${esc(f.value)}</td>
       </tr>`,
     )
     .join("");
@@ -51,15 +51,15 @@ export async function sendContactNotification(
   ];
 
   const html = `
-    <div style="background: #1E1F22; padding: 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-      <div style="max-width: 560px; margin: 0 auto; background: #313338; border: 1px solid #3F4147; border-radius: 12px; padding: 32px;">
-        <p style="margin: 0; color: #E32C19; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em;">Contact form</p>
-        <h1 style="margin: 12px 0 20px; color: #F2F3F5; font-size: 20px;">New message from ${esc(input.name)}</h1>
+    <div style="background: #EFEFEF; padding: 32px; font-family: 'Golos Text', Arial, sans-serif;">
+      <div style="max-width: 560px; margin: 0 auto; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 12px; padding: 32px;">
+        <p style="margin: 0; color: #C4262C; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em;">Contact form</p>
+        <h1 style="margin: 12px 0 20px; color: #151F2C; font-size: 20px;">New message from ${esc(input.name)}</h1>
         <table style="border-collapse: collapse;">${fieldRows(fields)}</table>
-        <div style="margin-top: 20px; padding: 16px; background: #2B2D31; border: 1px solid #3F4147; border-radius: 8px;">
-          <p style="margin: 0; color: #DBDEE1; font-size: 13px; line-height: 1.6; white-space: pre-wrap;">${esc(input.message)}</p>
+        <div style="margin-top: 20px; padding: 16px; background: #FFFFFF; border: 1px solid #D9D9D9; border-radius: 8px;">
+          <p style="margin: 0; color: #151F2C; font-size: 13px; line-height: 1.6; white-space: pre-wrap;">${esc(input.message)}</p>
         </div>
-        <p style="margin: 20px 0 0; color: #949BA4; font-size: 12px;">Reply to this email to answer ${esc(input.name)} directly.</p>
+        <p style="margin: 20px 0 0; color: #4A505B; font-size: 12px;">Reply to this email to answer ${esc(input.name)} directly.</p>
       </div>
     </div>`;
 

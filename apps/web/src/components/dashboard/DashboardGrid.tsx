@@ -1,20 +1,15 @@
 "use client";
 
-import { useAppearance } from "@/components/ui/Appearance";
 import { groupProfileWidgets } from "@/lib/profile-sections";
 import { EditorialSections } from "@/components/creator/EditorialSections";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import type { Platform } from "@twitchmetrics/database";
 import {
   WIDGET_REGISTRY,
   getEnabledWidgets,
   type WidgetId,
 } from "@/lib/constants/widgets";
-import {
-  packProfileLayout,
-  type LayoutCell,
-  type ProfileDataAvailability,
-} from "@/lib/profile-layout";
+import { type ProfileDataAvailability } from "@/lib/profile-layout";
 import type { StatsContext } from "@/lib/stats-period";
 import { serializedPlatformFollowerCount } from "@/lib/platform-follower-count";
 import {
@@ -195,49 +190,6 @@ function hasContent(widgetId: WidgetId, ctx: ContentContext): boolean {
 // ----------------------------------------------------------------
 
 // Static class names so Tailwind keeps them (spans are twelfths).
-const SPAN_BASIS: Record<number, string> = {
-  1: "lg:basis-1/12",
-  2: "lg:basis-2/12",
-  3: "lg:basis-3/12",
-  4: "lg:basis-4/12",
-  5: "lg:basis-5/12",
-  6: "lg:basis-6/12",
-  7: "lg:basis-7/12",
-  8: "lg:basis-8/12",
-  9: "lg:basis-9/12",
-  10: "lg:basis-10/12",
-  11: "lg:basis-11/12",
-  12: "lg:basis-full",
-};
-
-// Scrollable list widgets keep a fixed height; cards sharing their row
-// match it on desktop.
-const FIXED_HEIGHT_WIDGETS = new Set<WidgetId>([
-  "popular_games",
-  "recent_streams",
-]);
-
-// Rows are flex (basis + grow), not fixed grid tracks: if a card still
-// self-hides client-side, its neighbours grow into the space instead of
-// leaving a hole. A row whose cards all hid collapses, so the column gap
-// doesn't double up. Browsers drop :has() nested inside :has(), so the
-// "all cards empty" check is spelled out for 1- and 2-card rows (the
-// packer never builds wider rows).
-const ROW_CLASS = [
-  "flex flex-col gap-4 lg:flex-row",
-  "[&:has(>[data-widget-id]:only-child_[data-widget-empty])]:hidden",
-  "[&:has(>[data-widget-id]:first-child_[data-widget-empty]):has(>[data-widget-id]:nth-child(2):last-child_[data-widget-empty])]:hidden",
-].join(" ");
-
-function cellClassName(cell: LayoutCell, rowHasFixedHeight: boolean): string {
-  const height = FIXED_HEIGHT_WIDGETS.has(cell.id)
-    ? "h-80"
-    : rowHasFixedHeight
-      ? "lg:h-80 lg:overflow-y-auto"
-      : "";
-  return `min-w-0 lg:grow ${SPAN_BASIS[cell.span] ?? ""} ${height}`;
-}
-
 // ----------------------------------------------------------------
 // Access-gated widget renderer
 //
@@ -353,7 +305,6 @@ export function DashboardGrid({
   customizeOpen,
   onCustomizeClose,
 }: DashboardGridProps) {
-  const appearance = useAppearance();
   const [enabledWidgets, setEnabledWidgets] = useState<WidgetId[]>(() =>
     getEnabledWidgets(widgetConfig),
   );
@@ -362,128 +313,52 @@ export function DashboardGrid({
     setEnabledWidgets(newConfig);
   }, []);
 
-  const layout = useMemo(() => {
-    const ctx: ContentContext = {
+  const widgets = enabledWidgets.filter((widgetId) =>
+    hasContent(widgetId, {
       profile,
       widgetConfig,
       isClaimed,
       isOwner,
       dataAvailability,
-    };
-    return packProfileLayout(
-      enabledWidgets.filter((widgetId) => hasContent(widgetId, ctx)),
-    );
-  }, [
-    enabledWidgets,
-    profile,
-    widgetConfig,
-    isClaimed,
-    isOwner,
-    dataAvailability,
-  ]);
-
-  if (appearance === "noticed") {
-    const widgets = enabledWidgets.filter((widgetId) =>
-      hasContent(widgetId, {
-        profile,
-        widgetConfig,
-        isClaimed,
-        isOwner,
-        dataAvailability,
-      }),
-    );
-    const groups = groupProfileWidgets(widgets);
-    return (
-      <>
-        <EditorialSections
-          sections={groups.map((group) => ({
-            id: group.id,
-            title: group.title,
-            content: (
-              <div key={group.id} className="space-y-10">
-                {group.id === "partners" &&
-                  profile.brandPartnerships.length > 0 && (
-                    <p className="text-sm text-n-slate">
-                      Partnerships added by the creator.
-                    </p>
-                  )}
-                {group.widgets.map((widgetId) =>
-                  renderGated(
-                    widgetId,
-                    isClaimed,
-                    renderWidget(
-                      widgetId,
-                      profile,
-                      isClaimed,
-                      isOwner,
-                      statsContext,
-                    ),
-                  ),
-                )}
-              </div>
-            ),
-          }))}
-        />
-        {isOwner && groups.length === 0 && (
-          <p className="mx-auto max-w-[1280px] px-5 py-12 text-n-slate">
-            Choose sections in Customise profile to build your page.
-          </p>
-        )}
-        {isOwner && customizeOpen !== undefined && (
-          <WidgetToggle
-            open={customizeOpen}
-            onClose={onCustomizeClose ?? (() => undefined)}
-            enabledWidgets={enabledWidgets}
-            onConfigChange={handleWidgetConfigChange}
-            profileSlug={profile.slug}
-            publicDemographicsEnabled={profile.publicDemographicsEnabled}
-          />
-        )}
-      </>
-    );
-  }
-
+    }),
+  );
+  const groups = groupProfileWidgets(widgets);
   return (
-    <div>
-      {/* flex+gap (not space-y) so hidden rows don't leave ghost margins. */}
-      <div className="flex flex-col gap-4">
-        {layout.pinned.map((widgetId) =>
-          renderGated(
-            widgetId,
-            isClaimed,
-            renderWidget(widgetId, profile, isClaimed, isOwner, statsContext),
-          ),
-        )}
-
-        {layout.rows.map((row) => {
-          const rowHasFixedHeight = row.some((cell) =>
-            FIXED_HEIGHT_WIDGETS.has(cell.id),
-          );
-          return (
-            <div
-              key={row.map((cell) => cell.id).join("+")}
-              className={ROW_CLASS}
-            >
-              {row.map((cell) =>
+    <>
+      <EditorialSections
+        sections={groups.map((group) => ({
+          id: group.id,
+          title: group.title,
+          content: (
+            <div key={group.id} className="space-y-10">
+              {group.id === "partners" &&
+                profile.brandPartnerships.length > 0 && (
+                  <p className="text-sm text-n-slate">
+                    Partnerships added by the creator.
+                  </p>
+                )}
+              {group.widgets.map((widgetId) =>
                 renderGated(
-                  cell.id,
+                  widgetId,
                   isClaimed,
                   renderWidget(
-                    cell.id,
+                    widgetId,
                     profile,
                     isClaimed,
                     isOwner,
                     statsContext,
                   ),
-                  cellClassName(cell, rowHasFixedHeight),
                 ),
               )}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Widget toggle drawer — controlled by parent in owner mode. */}
+          ),
+        }))}
+      />
+      {isOwner && groups.length === 0 && (
+        <p className="mx-auto max-w-[1280px] px-5 py-12 text-n-slate">
+          Choose sections in Customise profile to build your page.
+        </p>
+      )}
       {isOwner && customizeOpen !== undefined && (
         <WidgetToggle
           open={customizeOpen}
@@ -494,6 +369,6 @@ export function DashboardGrid({
           publicDemographicsEnabled={profile.publicDemographicsEnabled}
         />
       )}
-    </div>
+    </>
   );
 }

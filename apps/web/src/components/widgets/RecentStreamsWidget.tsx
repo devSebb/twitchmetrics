@@ -31,9 +31,7 @@ const COLUMNS = [
 function SortArrow({ active, order }: { active: boolean; order: SortOrder }) {
   if (!active) return null;
   return (
-    <span className="ml-1 text-[var(--view-muted,#949BA4)]">
-      {order === "asc" ? "▲" : "▼"}
-    </span>
+    <span className="ml-1 text-n-slate">{order === "asc" ? "▲" : "▼"}</span>
   );
 }
 
@@ -41,10 +39,7 @@ function SortArrow({ active, order }: { active: boolean; order: SortOrder }) {
 function ViewerCount({ value }: { value: number | null }) {
   if (value === null) {
     return (
-      <span
-        className="text-[var(--view-muted,#949BA4)]"
-        title="No viewer data for this stream"
-      >
+      <span className="text-n-slate" title="No viewer data for this stream">
         &mdash;
       </span>
     );
@@ -89,10 +84,7 @@ export function RecentStreamsWidget({ profile }: Props) {
     return (
       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-10 animate-pulse rounded-lg bg-[var(--view-surface,#383A40)]"
-          />
+          <div key={i} className="h-10 animate-pulse rounded-lg bg-n-surface" />
         ))}
       </div>
     );
@@ -113,15 +105,13 @@ export function RecentStreamsWidget({ profile }: Props) {
         tabIndex={0}
       >
         <table className="w-full text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-[var(--view-canvas,#313338)]">
-            <tr className="border-b border-[var(--view-line,#3F4147)]">
+          <thead className="sticky top-0 z-10 bg-n-canvas">
+            <tr className="border-b border-n-line">
               {COLUMNS.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-3 py-2 text-xs font-medium text-[var(--view-muted,#949BA4)] transition-colors ${
-                    col.sortable
-                      ? "cursor-pointer hover:text-[var(--view-ink,#DBDEE1)]"
-                      : ""
+                  className={`px-3 py-2 text-xs font-medium text-n-slate transition-colors ${
+                    col.sortable ? "cursor-pointer hover:text-n-ink" : ""
                   }`}
                   aria-sort={
                     col.sortable && sortBy === col.key
@@ -154,12 +144,12 @@ export function RecentStreamsWidget({ profile }: Props) {
             {data.sessions.map((session, i) => (
               <tr
                 key={i}
-                className="border-b border-[var(--view-line,#3F4147)] transition-colors hover:bg-[var(--view-surface,#383A40)]"
+                className="border-b border-n-line transition-colors hover:bg-n-surface"
               >
-                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
+                <td className="px-3 py-2.5 text-n-ink">
                   {formatDate(session.startedAt)}
                 </td>
-                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
+                <td className="px-3 py-2.5 text-n-ink">
                   <span className="inline-flex items-center gap-1.5">
                     <span
                       className="h-2 w-2 rounded-full"
@@ -171,20 +161,18 @@ export function RecentStreamsWidget({ profile }: Props) {
                     {PLATFORM_CONFIG[session.platform].name}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
+                <td className="px-3 py-2.5 text-n-ink">
                   {session.game ?? (
-                    <span className="text-[var(--view-muted,#949BA4)]">
-                      &mdash;
-                    </span>
+                    <span className="text-n-slate">&mdash;</span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
+                <td className="px-3 py-2.5 text-n-ink">
                   {formatDuration(session.durationMinutes * 60)}
                 </td>
-                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
+                <td className="px-3 py-2.5 text-n-ink">
                   {session.viewerData === "processing" ? (
                     <span
-                      className="rounded bg-[var(--view-surface,#383A40)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--view-muted,#949BA4)]"
+                      className="rounded bg-n-surface px-1.5 py-0.5 text-[10px] font-medium text-n-slate"
                       title="Viewer stats arrive with Stream Hatchet's daily data, usually by the next morning (UTC)."
                     >
                       Processing
@@ -193,7 +181,7 @@ export function RecentStreamsWidget({ profile }: Props) {
                     <ViewerCount value={session.avgViewers} />
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-[var(--view-ink,#DBDEE1)]">
+                <td className="px-3 py-2.5 text-n-ink">
                   <ViewerCount value={session.peakViewers} />
                 </td>
               </tr>
@@ -205,7 +193,7 @@ export function RecentStreamsWidget({ profile }: Props) {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-3 flex shrink-0 items-center justify-between">
-          <span className="text-xs text-[var(--view-muted,#949BA4)]">
+          <span className="text-xs text-n-slate">
             Page {data.page} of {totalPages} ({data.total} streams)
           </span>
           <div className="flex gap-2">
@@ -213,7 +201,7 @@ export function RecentStreamsWidget({ profile }: Props) {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
-              className="rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1 text-xs text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-surface,#383A40)] disabled:opacity-40"
+              className="rounded-md border border-n-line px-3 py-1 text-xs text-n-ink transition-colors hover:bg-n-surface disabled:opacity-40"
             >
               Prev
             </button>
@@ -221,7 +209,7 @@ export function RecentStreamsWidget({ profile }: Props) {
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1 text-xs text-[var(--view-ink,#DBDEE1)] transition-colors hover:bg-[var(--view-surface,#383A40)] disabled:opacity-40"
+              className="rounded-md border border-n-line px-3 py-1 text-xs text-n-ink transition-colors hover:bg-n-surface disabled:opacity-40"
             >
               Next
             </button>

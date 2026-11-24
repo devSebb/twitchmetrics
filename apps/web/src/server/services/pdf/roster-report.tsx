@@ -1,4 +1,5 @@
 import path from "node:path";
+import { NOTICED } from "@/lib/constants/noticed";
 import {
   Document,
   Image,
@@ -21,14 +22,14 @@ import { PDF_DISPLAY_FONT_FAMILY, PDF_FONT_FAMILY } from "./fonts";
  * accent — never as a background fill.
  */
 const COLORS = {
-  paper: "#FFFFFF",
-  ink: "#1E1F22",
-  inkMuted: "#6B7280",
-  inkSoft: "#9CA3AF",
-  hairline: "#E5E7EB",
-  cardBg: "#FAFAFA",
-  positive: "#16A34A",
-  negative: "#DC2626",
+  paper: NOTICED.canvas,
+  ink: NOTICED.ink,
+  inkMuted: NOTICED.slate,
+  inkSoft: NOTICED.slate,
+  hairline: NOTICED.line,
+  cardBg: NOTICED.canvas,
+  positive: NOTICED.success,
+  negative: NOTICED.error,
 } as const;
 
 const PLATFORM_LABEL: Record<Platform, string> = {
@@ -117,6 +118,7 @@ const styles = StyleSheet.create({
   coverAvatar: {
     width: 72,
     height: 72,
+    flexShrink: 0,
     borderRadius: 36,
     objectFit: "cover",
     backgroundColor: COLORS.hairline,
@@ -124,6 +126,7 @@ const styles = StyleSheet.create({
   coverAvatarFallback: {
     width: 72,
     height: 72,
+    flexShrink: 0,
     borderRadius: 36,
     backgroundColor: COLORS.hairline,
     alignItems: "center",
@@ -169,11 +172,10 @@ const styles = StyleSheet.create({
   },
   kpiCard: {
     flex: 1,
-    borderWidth: 1,
+    borderTopWidth: 1,
     borderStyle: "solid",
     borderColor: COLORS.hairline,
-    borderRadius: 6,
-    padding: 12,
+    paddingTop: 12,
     backgroundColor: COLORS.cardBg,
   },
   kpiLabel: {
@@ -330,7 +332,7 @@ const styles = StyleSheet.create({
   footerBrand: {
     fontSize: 8,
     fontWeight: 500,
-    color: "#2B2D31",
+    color: NOTICED.ink,
     textDecoration: "none",
   },
   footerStripe: {
@@ -392,7 +394,7 @@ function Footer({
       />
       <View style={styles.footer} fixed>
         <Link src={siteUrl} style={styles.footerBrand}>
-          Powered by TwitchMetrics
+          Noticed · powered by Hatchet
         </Link>
         <Text
           render={({ pageNumber, totalPages }) =>
@@ -562,8 +564,8 @@ export function RosterReport(props: RosterReportProps) {
     <Document
       title={`${managerLabel} — Roster`}
       author={managerLabel}
-      creator="TwitchMetrics"
-      producer="TwitchMetrics"
+      creator="Noticed"
+      producer="Noticed"
     >
       {/* Single flowing page — @react-pdf paginates automatically when the
           content overflows. Rows declare wrap={false} so the grid never splits
@@ -581,7 +583,7 @@ export function RosterReport(props: RosterReportProps) {
             styleFallback={styles.coverAvatarFallback}
             styleFallbackText={styles.coverAvatarFallbackText}
           />
-          <View>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.coverEyebrow}>Talent Roster</Text>
             <Text style={styles.coverHeadline}>{managerLabel}</Text>
             <Text style={styles.coverSubhead}>

@@ -101,7 +101,7 @@ export const CREATOR_WIDGET_INFO: Partial<Record<string, MetricInfo>> = {
   brand_partners: {
     title: "Brand Partners",
     body: "Brands the creator has worked with.",
-    source: "Added by the creator. Not verified by TwitchMetrics.",
+    source: "Added by the creator. Not verified by Noticed.",
   },
 };
 

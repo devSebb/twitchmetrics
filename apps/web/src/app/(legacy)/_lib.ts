@@ -12,12 +12,12 @@ export function legacyRedirect(requestUrl: string, destination: string) {
 function errorPage(title: string, message: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | TwitchMetrics</title></head>
-<body style="font-family:system-ui,sans-serif;background:#1E1F22;color:#DBDEE1;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | Noticed</title></head>
+<body style="font-family:system-ui,sans-serif;background:#FFFFFF;color:#151F2C;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
 <main style="text-align:center;padding:2rem;max-width:28rem">
-<h1 style="color:#F2F3F5">${title}</h1>
+<h1 style="color:#151F2C">${title}</h1>
 <p>${message}</p>
-<p><a href="/creators" style="color:#E32C19">Browse top creators</a> · <a href="/search" style="color:#E32C19">Search</a></p>
+<p><a href="/creators" style="color:#C4262C">Browse top creators</a> · <a href="/search" style="color:#C4262C">Search</a></p>
 </main>
 </body>
 </html>`;
@@ -46,7 +46,7 @@ export function legacyNotFound(subject: string) {
 /** 410 for legacy page types that have no equivalent on the new platform. */
 export function legacyGone(subject: string) {
   return new NextResponse(
-    errorPage("Page Retired", `${subject} is no longer part of TwitchMetrics.`),
+    errorPage("Page Retired", `${subject} is no longer part of Noticed.`),
     {
       status: 410,
       headers: {

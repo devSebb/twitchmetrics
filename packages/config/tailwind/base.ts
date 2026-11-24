@@ -2,7 +2,7 @@ import type { Config } from "tailwindcss";
 
 /**
  * Shared Tailwind config wired to THEME tokens from theme.ts.
- * Color values sourced from Discord dark gray palette + brand red #E32C19.
+ * Colour aliases resolve the shared Noticed CSS variables.
  */
 const config: Config = {
   darkMode: "class",
@@ -10,40 +10,43 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Scoped Noticed surfaces resolve these values from the shared web tokens.
+        // Shared web tokens.
         n: {
-          canvas: "var(--noticed-canvas)",
-          ink: "var(--noticed-ink)",
-          red: "var(--noticed-red)",
-          navy: "var(--noticed-navy)",
-          slate: "var(--noticed-slate)",
-          surface: "var(--noticed-surface)",
-          line: "var(--noticed-line)",
-          control: "var(--noticed-control)",
-          success: "var(--noticed-success)",
-          warning: "var(--noticed-warning)",
-          error: "var(--noticed-error)",
+          canvas: "rgb(var(--noticed-canvas-rgb) / <alpha-value>)",
+          ink: "rgb(var(--noticed-ink-rgb) / <alpha-value>)",
+          red: {
+            DEFAULT: "rgb(var(--noticed-red-rgb) / <alpha-value>)",
+            hover: "rgb(var(--noticed-red-hover-rgb) / <alpha-value>)",
+          },
+          navy: "rgb(var(--noticed-navy-rgb) / <alpha-value>)",
+          slate: "rgb(var(--noticed-slate-rgb) / <alpha-value>)",
+          surface: "rgb(var(--noticed-surface-rgb) / <alpha-value>)",
+          line: "rgb(var(--noticed-line-rgb) / <alpha-value>)",
+          control: "rgb(var(--noticed-control-rgb) / <alpha-value>)",
+          success: "rgb(var(--noticed-success-rgb) / <alpha-value>)",
+          warning: "rgb(var(--noticed-warning-rgb) / <alpha-value>)",
+          error: "rgb(var(--noticed-error-rgb) / <alpha-value>)",
         },
-        background: "#2B2D31",
+        background: "rgb(var(--noticed-canvas-rgb) / <alpha-value>)",
         surface: {
-          DEFAULT: "#313338",
-          hover: "#383A40",
-          elevated: "#1E1F22",
+          DEFAULT: "rgb(var(--noticed-canvas-rgb) / <alpha-value>)",
+          hover: "rgb(var(--noticed-surface-rgb) / <alpha-value>)",
+          elevated: "rgb(var(--noticed-surface-rgb) / <alpha-value>)",
         },
         border: {
-          DEFAULT: "#3F4147",
-          hover: "#4E5058",
+          DEFAULT: "rgb(var(--noticed-line-rgb) / <alpha-value>)",
+          hover: "rgb(var(--noticed-control-rgb) / <alpha-value>)",
         },
         primary: {
-          DEFAULT: "#E32C19",
-          hover: "#C72615",
+          DEFAULT: "rgb(var(--noticed-red-rgb) / <alpha-value>)",
+          hover: "rgb(var(--noticed-red-hover-rgb) / <alpha-value>)",
         },
-        "text-primary": "#DBDEE1",
-        "text-header": "#F2F3F5",
-        "text-muted": "#949BA4",
-        success: "#22c55e",
-        warning: "#f59e0b",
-        error: "#ef4444",
+        "text-primary": "rgb(var(--noticed-ink-rgb) / <alpha-value>)",
+        "text-header": "rgb(var(--noticed-ink-rgb) / <alpha-value>)",
+        "text-muted": "rgb(var(--noticed-slate-rgb) / <alpha-value>)",
+        success: "rgb(var(--noticed-success-rgb) / <alpha-value>)",
+        warning: "rgb(var(--noticed-warning-rgb) / <alpha-value>)",
+        error: "rgb(var(--noticed-error-rgb) / <alpha-value>)",
         twitch: "#9146ff",
         youtube: "#ff0000",
         instagram: "#e4405f",
@@ -52,8 +55,8 @@ const config: Config = {
         kick: "#53fc18",
       },
       fontFamily: {
-        display: ["var(--font-gotham-black)", "system-ui", "sans-serif"],
-        body: ["var(--font-gotham)", "system-ui", "sans-serif"],
+        display: ["Golos Text", "system-ui", "sans-serif"],
+        body: ["Golos Text", "system-ui", "sans-serif"],
         mono: [
           "ui-monospace",
           "SFMono-Regular",

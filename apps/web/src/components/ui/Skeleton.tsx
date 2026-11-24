@@ -9,7 +9,7 @@ type SkeletonProps = {
 export function Skeleton({ className, width, height }: SkeletonProps) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-[#383A40]", className)}
+      className={cn("animate-pulse rounded-md bg-n-surface", className)}
       style={{
         width: typeof width === "number" ? `${width}px` : width,
         height: typeof height === "number" ? `${height}px` : height,

@@ -193,10 +193,10 @@ function AudienceSummary({
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
       {visible.map((gender) => (
         <div key={gender.key} className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold leading-none text-[var(--view-ink,#F2F3F5)]">
+          <span className="text-2xl font-bold leading-none text-n-ink">
             {formatPercent(gender.value)}
           </span>
-          <span className="text-xs font-semibold text-[var(--view-muted,#949BA4)]">
+          <span className="text-xs font-semibold text-n-slate">
             {gender.name}
           </span>
         </div>
@@ -215,14 +215,12 @@ function AgeBars({
       {ageRanges.map((age) => (
         <div key={age.range}>
           <div className="mb-1 flex items-center justify-between text-xs font-semibold">
-            <span className="text-[var(--view-ink,#F2F3F5)]">{age.range}</span>
-            <span className="text-[var(--view-ink,#F2F3F5)]">
-              {formatPercent(age.percentage)}
-            </span>
+            <span className="text-n-ink">{age.range}</span>
+            <span className="text-n-ink">{formatPercent(age.percentage)}</span>
           </div>
-          <div className="h-3 overflow-hidden rounded-full bg-[var(--view-line,#3F4147)]">
+          <div className="h-3 overflow-hidden rounded-full bg-n-line">
             <div
-              className="h-full rounded-full bg-[var(--view-red,#E32C19)]"
+              className="h-full rounded-full bg-n-red"
               style={{ width: `${Math.min(age.percentage * 100, 100)}%` }}
             />
           </div>
@@ -248,11 +246,11 @@ function CountryRows({
           >
             <div className="flex min-w-0 items-center gap-2">
               <CountryFlag code={country.country} />
-              <span className="truncate text-lg font-semibold text-[var(--view-ink,#F2F3F5)]">
+              <span className="truncate text-lg font-semibold text-n-ink">
                 {label}
               </span>
             </div>
-            <span className="shrink-0 text-lg font-bold text-[var(--view-ink,#F2F3F5)]">
+            <span className="shrink-0 text-lg font-bold text-n-ink">
               {formatPercent(country.percentage)}
             </span>
           </div>
@@ -364,8 +362,8 @@ function SocialAudienceContent({
                   aria-pressed={r.platform === row.platform}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                     r.platform === row.platform
-                      ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
-                      : "text-[var(--view-muted,#949BA4)] hover:bg-[var(--view-surface,#383A40)] hover:text-[var(--view-ink,#DBDEE1)]"
+                      ? "bg-n-surface text-n-ink"
+                      : "text-n-slate hover:bg-n-surface hover:text-n-ink"
                   }`}
                 >
                   <span
@@ -396,16 +394,14 @@ function SocialAudienceContent({
       <div className="grid gap-8 md:grid-cols-2">
         {ageRanges && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[var(--view-muted,#949BA4)]">
-              Age range
-            </p>
+            <p className="mb-1 text-xs font-semibold text-n-slate">Age range</p>
             <AgeBars ageRanges={ageRanges} />
           </div>
         )}
 
         {countries && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[var(--view-muted,#949BA4)]">
+            <p className="mb-1 text-xs font-semibold text-n-slate">
               Top countries
             </p>
             <div className="mt-4">
@@ -416,13 +412,13 @@ function SocialAudienceContent({
       </div>
 
       {row.freshness === "stale" ? (
-        <p className="text-right text-[10px] text-amber-400">
+        <p className="text-right text-[10px] text-n-warning">
           Estimated {platformName} audience · via DemographicsPro ·{" "}
           {asOf ? `report from ${asOf}` : "report date unknown"} — may be
           outdated
         </p>
       ) : (
-        <p className="text-right text-[10px] text-[var(--view-muted,#949BA4)]">
+        <p className="text-right text-[10px] text-n-slate">
           Estimated {platformName} audience · via DemographicsPro
           {asOf ? ` · updated ${asOf}` : ""}
         </p>
@@ -595,7 +591,7 @@ function DemographicsDataContent({
   if (isLoading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--view-muted,#949BA4)] border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-n-slate border-t-transparent" />
       </div>
     );
   }
@@ -631,16 +627,14 @@ function DemographicsDataContent({
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.9fr)]">
         {ageData && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[var(--view-muted,#949BA4)]">
-              Age range
-            </p>
+            <p className="mb-1 text-xs font-semibold text-n-slate">Age range</p>
             <AgeBars ageRanges={ageData} />
           </div>
         )}
 
         {countryData && (
           <div>
-            <p className="mb-1 text-xs font-semibold text-[var(--view-muted,#949BA4)]">
+            <p className="mb-1 text-xs font-semibold text-n-slate">
               Top countries
             </p>
             <div className="mt-4">
@@ -651,7 +645,7 @@ function DemographicsDataContent({
       </div>
 
       {sourcePlatform && (
-        <p className="text-right text-[10px] text-[var(--view-muted,#949BA4)]">
+        <p className="text-right text-[10px] text-n-slate">
           via {sourcePlatform.charAt(0).toUpperCase() + sourcePlatform.slice(1)}{" "}
           Analytics
         </p>

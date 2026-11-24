@@ -29,7 +29,7 @@ export function FeaturedClipsWidget({ profile }: Props) {
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="aspect-video animate-pulse rounded-lg bg-[var(--view-surface,#383A40)]"
+            className="aspect-video animate-pulse rounded-lg bg-n-surface"
           />
         ))}
       </div>
@@ -48,10 +48,10 @@ export function FeaturedClipsWidget({ profile }: Props) {
           href={clip.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="group overflow-hidden rounded-lg border border-[var(--view-line,#3F4147)] transition-colors hover:border-[var(--view-control,#4E5058)]"
+          className="group overflow-hidden rounded-lg border border-n-line transition-colors hover:border-n-control"
         >
           {/* Thumbnail */}
-          <div className="relative aspect-video bg-[var(--view-canvas,#2B2D31)]">
+          <div className="relative aspect-video bg-n-canvas">
             <Image
               src={clip.thumbnailUrl}
               alt={clip.title}
@@ -69,10 +69,10 @@ export function FeaturedClipsWidget({ profile }: Props) {
 
           {/* Info */}
           <div className="p-4">
-            <p className="line-clamp-2 text-sm font-semibold text-[var(--view-ink,#DBDEE1)]">
+            <p className="line-clamp-2 text-sm font-semibold text-n-ink">
               {clip.title}
             </p>
-            <p className="mt-2 text-xs text-[var(--view-muted,#949BA4)]">
+            <p className="mt-2 text-xs text-n-slate">
               {formatRelativeTime(clip.createdAt)}
             </p>
           </div>

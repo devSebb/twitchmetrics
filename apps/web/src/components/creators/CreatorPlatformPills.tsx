@@ -48,8 +48,8 @@ export function CreatorPlatformPills() {
             className={cn(
               "flex min-w-[100px] shrink-0 items-center justify-center gap-2 rounded-full border px-4 py-3 text-sm font-medium transition-colors sm:text-base",
               isActive
-                ? "border-[var(--view-red,#E32C19)] bg-[var(--view-red,#E32C19)] text-white"
-                : "border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#313338)] text-[var(--view-ink,#DBDEE1)] hover:border-[var(--view-control,#4E5058)] hover:bg-[var(--view-surface,#383A40)]",
+                ? "border-n-red bg-n-red text-white"
+                : "border-n-line bg-n-canvas text-n-ink hover:border-n-control hover:bg-n-surface",
             )}
           >
             {pill.value ? (

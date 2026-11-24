@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import {
   GameController,
   ChartLineUp,
@@ -9,11 +7,13 @@ import {
   GearSix,
   Lightning,
   ShieldCheck,
-  Sparkle,
   CheckCircle,
-  ArrowRight,
 } from "@phosphor-icons/react/dist/ssr";
-import { Card } from "@/components/ui/Card";
+import {
+  Container,
+  SectionHeading,
+  ActionLink,
+} from "@/components/ui/Editorial";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
 import { REPORT_METRIC_LABELS as METRIC } from "@/lib/constants/metric-labels";
 import { ReportLeadForm } from "@/components/reports";
@@ -45,11 +45,11 @@ export const metadata: Metadata = {
 const FULFILLMENT_BADGES = {
   instant: {
     label: "Instant CSV · $250",
-    className: "border-[#22c55e]/30 bg-[#22c55e]/10 text-[#22c55e]",
+    className: "border-n-success/30 bg-n-success/10 text-n-success",
   },
   quote: {
     label: "Custom quote · 24h",
-    className: "border-[#3F4147] bg-[#383A40] text-[#DBDEE1]",
+    className: "border-n-line bg-n-surface text-n-ink",
   },
 } as const;
 
@@ -117,7 +117,7 @@ const STEPS = [
   {
     icon: ShieldCheck,
     title: "Trust the numbers",
-    body: "Instant reports are computed from TwitchMetrics' own 30-minute snapshot pipeline with per-row coverage flags; custom reports are built on Stream Hatchet data.",
+    body: "Instant reports are computed from Noticed's snapshot history with per-row coverage flags; custom reports are built on Stream Hatchet data.",
   },
 ] as const;
 
@@ -130,178 +130,125 @@ const TRUST_POINTS = [
 
 export default function ReportsPage() {
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6">
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <div className="mb-16">
-        <p className="inline-flex items-center gap-2 rounded-full border border-[#3F4147] bg-[#313338]/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#DBDEE1]">
-          <Sparkle size={14} weight="fill" className="text-[#E32C19]" />
-          Reports
-        </p>
-        <h1 className="font-display mt-6 text-4xl font-bold leading-[1.05] tracking-tight text-[#F2F3F5] sm:text-5xl">
-          Industry-grade streaming reports,{" "}
-          <span className="text-[#E32C19]">on demand.</span>
-        </h1>
-        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#DBDEE1]">
-          Pick games or channels, the metrics you need, and a timeframe.
-          Standard Twitch reports download instantly as CSV — cross-platform and
-          custom asks are quoted within 24 hours.
-        </p>
-        <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#949BA4]">
-          <span>Custom reports powered by Stream Hatchet</span>
-          <span className="text-[#3F4147]">·</span>
-          <span>
-            Instant reports{" "}
-            <span className="font-semibold text-[#F2F3F5]">$250</span>
-          </span>
-        </p>
-      </div>
-
-      {/* ── What you can report on ───────────────────────────────────────── */}
-      <section className="mb-16">
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E32C19]">
-            What you can report on
+    <div className="n-form">
+      <header className="border-b border-n-line bg-n-surface">
+        <Container className="py-16 sm:py-24">
+          <p className="n-eyebrow text-n-slate">
+            Reports / Streaming intelligence
           </p>
-          <h2 className="font-display mt-2 text-2xl font-bold tracking-tight text-[#F2F3F5] sm:text-3xl">
-            Built for the questions brands and agencies ask
-          </h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+          <h1 className="mt-6 max-w-4xl text-[clamp(3rem,7vw,6rem)] font-extrabold leading-[.98] tracking-[-.055em]">
+            Your questions.
+            <br />
+            Backed by data<span className="text-n-red">.</span>
+          </h1>
+          <p className="mt-8 max-w-2xl text-lg leading-relaxed text-n-slate">
+            Pick games or channels, the metrics you need and a timeframe.
+            Standard Twitch reports download as CSV. Cross-platform and custom
+            requests receive a quote within 24 hours.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-6">
+            <ActionLink href="#build-report">Build your report ↓</ActionLink>
+            <p className="text-sm text-n-slate">
+              Instant reports <strong className="text-n-ink">$250</strong> ·
+              Custom reports by Stream Hatchet
+            </p>
+          </div>
+        </Container>
+      </header>
+      <Container className="py-16 sm:py-20">
+        <SectionHeading number="01" title="The right view for your question." />
+        <div className="grid gap-x-12 gap-y-10 md:grid-cols-2">
           {REPORT_TYPES.map(
             ({ icon: Icon, tag, fulfillment, title, description, metrics }) => (
-              <Card key={title} className="flex flex-col gap-4 p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#E32C19]/10 text-[#E32C19]">
-                    <Icon size={22} weight="duotone" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-[#383A40] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#949BA4]">
-                      {tag}
-                    </span>
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${FULFILLMENT_BADGES[fulfillment].className}`}
-                    >
-                      {FULFILLMENT_BADGES[fulfillment].label}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-[#F2F3F5]">
-                    {title}
-                  </h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-[#949BA4]">
-                    {description}
+              <article key={title} className="border-t border-n-line pt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="n-eyebrow flex items-center gap-2 text-n-slate">
+                    <Icon size={20} aria-hidden />
+                    {tag}
                   </p>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${FULFILLMENT_BADGES[fulfillment].className}`}
+                  >
+                    {FULFILLMENT_BADGES[fulfillment].label}
+                  </span>
                 </div>
-                <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
-                  {metrics.map((m) => (
-                    <span
-                      key={m}
-                      className="rounded-md border border-[#3F4147] bg-[#2B2D31] px-2 py-1 text-[11px] font-medium text-[#DBDEE1]"
+                <h3 className="mt-6 text-3xl font-bold tracking-tight">
+                  {title}
+                </h3>
+                <p className="mt-4 leading-relaxed text-n-slate">
+                  {description}
+                </p>
+                <ul
+                  className="mt-6 flex flex-wrap gap-2"
+                  aria-label="Included metrics"
+                >
+                  {metrics.map((metric) => (
+                    <li
+                      key={metric}
+                      className="rounded border border-n-line px-2.5 py-1.5 text-xs text-n-slate"
                     >
-                      {m}
-                    </span>
+                      {metric}
+                    </li>
                   ))}
-                </div>
-              </Card>
+                </ul>
+              </article>
             ),
           )}
         </div>
-      </section>
-
-      {/* ── How it works ─────────────────────────────────────────────────── */}
-      <section className="mb-16">
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E32C19]">
-            How it works
-          </p>
-          <h2 className="font-display mt-2 text-2xl font-bold tracking-tight text-[#F2F3F5] sm:text-3xl">
-            From question to report in three steps
-          </h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <div
-              key={title}
-              className="rounded-lg border border-[#3F4147] bg-[#313338] p-5"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#E32C19] text-xs font-bold text-white">
-                  {i + 1}
-                </span>
-                <Icon size={20} weight="duotone" className="text-[#E32C19]" />
-              </div>
-              <h3 className="mt-3 text-sm font-semibold text-[#F2F3F5]">
-                {title}
-              </h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#949BA4]">
-                {body}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Trust band + build-your-report CTA ───────────────────────────── */}
-      <section className="grid gap-6 lg:grid-cols-2">
-        {/* Stream Hatchet credibility band */}
-        <Card className="flex flex-col p-6">
-          <Image
-            src="/brand/streamhatchet.png"
-            alt="Stream Hatchet"
-            width={200}
-            height={56}
-            className="h-9 w-auto object-contain object-left"
-          />
-          <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#E32C19]">
-            Verified data
-          </p>
-          <h3 className="font-display mt-2 text-xl font-bold text-[#F2F3F5]">
-            Backed by Stream Hatchet
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-[#949BA4]">
-            Custom and cross-platform reports are built on Stream Hatchet&apos;s
-            dataset — the same source trusted by gaming publishers and global
-            brands. Instant Twitch reports come from TwitchMetrics&apos; own
-            snapshot pipeline, with the methodology printed in every file.
-          </p>
-          <ul className="mt-4 space-y-2 text-sm text-[#DBDEE1]">
-            {TRUST_POINTS.map((point) => (
-              <li key={point} className="flex items-start gap-2">
-                <CheckCircle
-                  size={18}
-                  weight="fill"
-                  className="mt-0.5 shrink-0 text-[#22c55e]"
-                />
-                {point}
+      </Container>
+      <section className="border-y border-n-line bg-n-surface">
+        <Container className="py-16 sm:py-20">
+          <SectionHeading number="02" title="From question to report." />
+          <ol className="grid gap-10 md:grid-cols-3">
+            {STEPS.map(({ icon: Icon, title, body }, index) => (
+              <li key={title} className="border-t border-n-line pt-6">
+                <div className="flex items-center justify-between text-n-red">
+                  <span className="text-4xl font-extrabold">0{index + 1}</span>
+                  <Icon size={24} aria-hidden />
+                </div>
+                <h3 className="mt-5 text-2xl font-bold">{title}</h3>
+                <p className="mt-4 leading-relaxed text-n-slate">{body}</p>
               </li>
             ))}
-          </ul>
-          <Link
-            href="https://streamhatchet.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#383A40] px-6 py-3 text-sm font-semibold text-[#DBDEE1] transition-colors hover:bg-[#4E5058]"
-          >
-            Learn more on Stream Hatchet
-            <ArrowRight size={16} weight="bold" />
-          </Link>
-        </Card>
-
-        {/* Lead form — gateway to the configurator (data flow unchanged) */}
-        <Card className="flex flex-col p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E32C19]">
-            Start here
-          </p>
-          <h3 className="font-display mt-2 text-xl font-bold text-[#F2F3F5]">
-            Build your report
-          </h3>
-          <p className="mb-6 mt-2 text-sm leading-relaxed text-[#949BA4]">
-            Tell us who you are, then configure exactly what you need on the
-            next step — instant download or a custom quote.
-          </p>
-          <ReportLeadForm />
-        </Card>
+          </ol>
+        </Container>
+      </section>
+      <section id="build-report">
+        <Container className="grid gap-12 py-16 sm:py-20 lg:grid-cols-2">
+          <div>
+            <p className="n-eyebrow text-n-red">03 / Start with the question</p>
+            <h2 className="mt-5 text-4xl font-extrabold tracking-tight">
+              Build your report.
+            </h2>
+            <p className="mt-5 max-w-lg leading-relaxed text-n-slate">
+              Tell us who you are, then configure your report on the next step.
+              Instant reports use Noticed snapshot history with methodology in
+              every file; custom reports use Stream Hatchet data.
+            </p>
+            <ul className="my-7 space-y-3">
+              {TRUST_POINTS.map((point) => (
+                <li
+                  key={point}
+                  className="flex items-start gap-3 text-sm text-n-slate"
+                >
+                  <CheckCircle
+                    size={18}
+                    className="shrink-0 text-n-success"
+                    aria-hidden
+                  />
+                  {point}
+                </li>
+              ))}
+            </ul>
+            <ActionLink variant="secondary" href="https://streamhatchet.com">
+              About Stream Hatchet ↗
+            </ActionLink>
+          </div>
+          <div className="border-t border-n-line pt-7">
+            <h3 className="mb-6 text-2xl font-bold">Your details</h3>
+            <ReportLeadForm />
+          </div>
+        </Container>
       </section>
     </div>
   );

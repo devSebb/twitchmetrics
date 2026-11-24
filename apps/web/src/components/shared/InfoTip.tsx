@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAppearance } from "@/components/ui/Appearance";
 import { createPortal } from "react-dom";
 import { Question } from "@phosphor-icons/react";
 import type { MetricInfo } from "@/lib/constants/metric-info";
@@ -35,11 +34,12 @@ type Position = { top: number; left: number; placement: "above" | "below" };
 export function InfoTip({
   info,
   className,
+  inverted = false,
 }: {
   info: MetricInfo;
   className?: string;
+  inverted?: boolean;
 }) {
-  const appearance = useAppearance();
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -141,7 +141,7 @@ export function InfoTip({
           event.stopPropagation();
           schedule(!open, 0);
         }}
-        className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[var(--view-muted,#6D6F78)] transition-colors hover:text-[var(--view-ink,#DBDEE1)] focus-visible:text-[var(--view-ink,#DBDEE1)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--view-red,#5865F2)] ${className ?? ""}`}
+        className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full transition-colors ${inverted ? "text-white/75 hover:text-white focus-visible:text-white" : "text-n-slate hover:text-n-ink focus-visible:text-n-ink"} focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-n-red ${className ?? ""}`}
       >
         <Question size={13} weight="bold" aria-hidden />
       </button>
@@ -160,21 +160,19 @@ export function InfoTip({
               // Measured first, shown once placed: no flash at the corner.
               visibility: position ? "visible" : "hidden",
             }}
-            className={`${appearance === "noticed" ? "noticed" : ""} fixed z-[100] rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#111214)] p-3 text-left shadow-xl shadow-black/20`}
+            className={`noticed fixed z-[100] rounded-lg border border-n-line bg-n-canvas p-3 text-left shadow-xl shadow-black/20`}
           >
-            <p className="text-xs font-semibold text-[var(--view-ink,#F2F3F5)]">
-              {info.title}
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--view-muted,#B5BAC1)]">
+            <p className="text-xs font-semibold text-n-ink">{info.title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-n-slate">
               {info.body}
             </p>
-            <dl className="mt-2.5 space-y-1.5 border-t border-[var(--view-canvas,#2B2D31)] pt-2.5">
+            <dl className="mt-2.5 space-y-1.5 border-t border-n-canvas pt-2.5">
               {details.map((row) => (
                 <div key={row.label} className="flex gap-2">
-                  <dt className="w-12 flex-shrink-0 pt-px text-[10px] font-medium uppercase tracking-wide text-[var(--view-muted,#949BA4)]">
+                  <dt className="w-12 flex-shrink-0 pt-px text-[10px] font-medium uppercase tracking-wide text-n-slate">
                     {row.label}
                   </dt>
-                  <dd className="text-[11px] leading-snug text-[var(--view-ink,#DBDEE1)]">
+                  <dd className="text-[11px] leading-snug text-n-ink">
                     {row.value}
                   </dd>
                 </div>

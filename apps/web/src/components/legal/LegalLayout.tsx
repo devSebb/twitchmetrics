@@ -42,28 +42,31 @@ export function LegalLayout({ document, slug }: Props) {
   const altPath = `${ALT_LANGUAGE_PATH_PREFIX[document.language]}/${slug}`;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
-      <div className="rounded-lg border border-[#3F4147] bg-[#313338] p-6 sm:p-10">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-[#3F4147] pb-6">
+    <div className="mx-auto max-w-[960px] px-5 py-12 sm:px-8 sm:py-20">
+      <div className="">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-n-line pb-6">
           <div>
-            <h1 className="text-2xl font-bold text-[#F2F3F5] sm:text-3xl">
+            <h1 className="text-[clamp(2.25rem,5vw,4rem)] font-extrabold tracking-tight text-n-ink">
               {document.title}
             </h1>
-            <p className="mt-2 text-xs text-[#949BA4]">
+            <p className="mt-2 text-xs text-n-slate">
               {UPDATED_LABEL[document.language]}{" "}
               {formatLastUpdated(document.lastUpdated, document.language)}
             </p>
           </div>
-          <Link
-            href={altPath}
-            className="rounded-md border border-[#3F4147] px-3 py-1.5 text-xs font-medium text-[#DBDEE1] transition-colors hover:bg-[#383A40]"
-          >
+          <Link href={altPath} className="n-button n-button-secondary">
             {ALT_LANGUAGE_LABEL[document.language]}
           </Link>
         </div>
 
+        <p className="mb-8 border-l-2 border-n-red pl-4 text-sm leading-relaxed text-n-slate">
+          {document.language === "es"
+            ? "Noticed es el nuevo nombre del producto. Los documentos publicados a continuación conservan las referencias a TwitchMetrics y sus fechas originales."
+            : "Noticed is the new product name. The published policies below retain their TwitchMetrics references and original update dates."}
+        </p>
         <article
           className="legal-prose"
+          lang={document.language}
           dangerouslySetInnerHTML={{ __html: document.html }}
         />
       </div>

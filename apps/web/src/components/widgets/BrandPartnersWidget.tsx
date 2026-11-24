@@ -50,7 +50,7 @@ function BrandLogo({
 
   if (logoSrc) {
     return (
-      <div className="relative h-10 w-10 overflow-hidden rounded-lg bg-[var(--view-canvas,#2B2D31)]">
+      <div className="relative h-10 w-10 overflow-hidden rounded-lg bg-n-canvas">
         <Image
           src={logoSrc}
           alt={partnership.brandName}
@@ -222,12 +222,12 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-3 rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-canvas,#2B2D31)] p-3"
+      className="space-y-3 rounded-lg border border-n-line bg-n-canvas p-3"
     >
       <div>
         <label
           htmlFor={`${formId}-brandName`}
-          className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]"
+          className="mb-1 block text-xs text-n-slate"
         >
           Brand Name *
         </label>
@@ -238,17 +238,17 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
           onChange={(e) => setBrandName(e.target.value)}
           maxLength={100}
           required
-          className="w-full rounded-md border border-[var(--view-line,#3F4147)] bg-[var(--view-surface,#383A40)] px-3 py-1.5 text-sm text-[var(--view-ink,#DBDEE1)] outline-none focus:border-[var(--view-control,#4E5058)]"
+          className="w-full rounded-md border border-n-line bg-n-surface px-3 py-1.5 text-sm text-n-ink outline-none focus:border-n-control"
           placeholder="e.g. NordVPN"
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]">
+        <label className="mb-1 block text-xs text-n-slate">
           Logo (optional)
         </label>
-        <div className="rounded-lg border border-[var(--view-line,#3F4147)] bg-[var(--view-surface,#383A40)] p-3">
+        <div className="rounded-lg border border-n-line bg-n-surface p-3">
           <div className="flex items-center gap-3">
-            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--view-canvas,#2B2D31)]">
+            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-n-canvas">
               {logoPreviewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -265,13 +265,13 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
                   className="object-cover"
                 />
               ) : (
-                <span className="text-sm font-bold text-[var(--view-muted,#949BA4)]">
+                <span className="text-sm font-bold text-n-slate">
                   {brandName.trim().charAt(0).toUpperCase() || "?"}
                 </span>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <label className="relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1.5 text-xs font-medium text-[var(--view-ink,#DBDEE1)] transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-4 hover:bg-[var(--view-control,#4E5058)]">
+              <label className="relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border border-n-line px-3 py-1.5 text-xs font-medium text-n-ink transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-4 hover:bg-n-control">
                 <UploadSimple size={14} weight="bold" />
                 Choose logo
                 <input
@@ -285,7 +285,7 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
                   }}
                 />
               </label>
-              <p className="mt-1 truncate text-xs text-[var(--view-muted,#949BA4)]">
+              <p className="mt-1 truncate text-xs text-n-slate">
                 {logoFile ? logoFile.name : "JPG, PNG, WebP - max 2 MB"}
               </p>
             </div>
@@ -293,14 +293,14 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
               <button
                 type="button"
                 onClick={clearLogo}
-                className="text-xs text-[var(--view-muted,#949BA4)] underline hover:text-[var(--view-ink,#DBDEE1)]"
+                className="text-xs text-n-slate underline hover:text-n-ink"
               >
                 Remove
               </button>
             )}
           </div>
           {logoError && (
-            <p className="mt-2 rounded-md border border-[var(--view-error,#ef4444)] bg-[var(--view-error-fill,rgba(239,68,68,0.1))] px-2 py-1.5 text-xs text-[var(--view-error,#ef4444)]">
+            <p className="mt-2 rounded-md border border-n-error bg-n-error/5 px-2 py-1.5 text-xs text-n-error">
               {logoError}
             </p>
           )}
@@ -309,7 +309,7 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
       <div>
         <label
           htmlFor={`${formId}-campaignName`}
-          className="mb-1 block text-xs text-[var(--view-muted,#949BA4)]"
+          className="mb-1 block text-xs text-n-slate"
         >
           Campaign Name (optional)
         </label>
@@ -319,12 +319,12 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
           value={campaignName}
           onChange={(e) => setCampaignName(e.target.value)}
           maxLength={200}
-          className="w-full rounded-md border border-[var(--view-line,#3F4147)] bg-[var(--view-surface,#383A40)] px-3 py-1.5 text-sm text-[var(--view-ink,#DBDEE1)] outline-none focus:border-[var(--view-control,#4E5058)]"
+          className="w-full rounded-md border border-n-line bg-n-surface px-3 py-1.5 text-sm text-n-ink outline-none focus:border-n-control"
           placeholder="e.g. Summer 2026"
         />
       </div>
       {(addMutation.error || updateMutation.error) && (
-        <p role="alert" className="text-sm text-[var(--view-error,#ef4444)]">
+        <p role="alert" className="text-sm text-n-error">
           {addMutation.error?.message ?? updateMutation.error?.message}
         </p>
       )}
@@ -332,7 +332,7 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
         <button
           type="submit"
           disabled={isPending || isUploadingLogo || !brandName.trim()}
-          className="rounded-md bg-[var(--view-red,#E32C19)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--view-red-hover,#C72615)] disabled:opacity-50"
+          className="rounded-md bg-n-red px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-n-red-hover disabled:opacity-50"
         >
           {isPending || isUploadingLogo
             ? isEditing
@@ -345,7 +345,7 @@ function PartnerForm({ onClose, profileSlug, partnership }: PartnerFormProps) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md border border-[var(--view-line,#3F4147)] px-3 py-1.5 text-xs text-[var(--view-muted,#949BA4)] transition-colors hover:bg-[var(--view-surface,#383A40)]"
+          className="rounded-md border border-n-line px-3 py-1.5 text-xs text-n-slate transition-colors hover:bg-n-surface"
         >
           Cancel
         </button>
@@ -419,18 +419,18 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
                 <button
                   type="button"
                   onClick={() => openEditForm(p)}
-                  className="flex max-w-full flex-col items-center gap-1 rounded-lg p-1 transition-colors hover:bg-[var(--view-surface,#383A40)]"
+                  className="flex max-w-full flex-col items-center gap-1 rounded-lg p-1 transition-colors hover:bg-n-surface"
                   aria-label={`Edit ${p.brandName}`}
                 >
                   <BrandLogo partnership={p} />
-                  <span className="max-w-full truncate text-xs text-[var(--view-muted,#949BA4)]">
+                  <span className="max-w-full truncate text-xs text-n-slate">
                     {p.brandName}
                   </span>
                 </button>
               ) : (
                 <>
                   <BrandLogo partnership={p} />
-                  <span className="max-w-full truncate text-xs text-[var(--view-muted,#949BA4)]">
+                  <span className="max-w-full truncate text-xs text-n-slate">
                     {p.brandName}
                   </span>
                 </>
@@ -446,7 +446,7 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
                   }}
                   aria-label={`Remove ${p.brandName}`}
                   disabled={removeMutation.isPending}
-                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--view-line,#3F4147)] px-3 text-xs text-[var(--view-error,#ef4444)]"
+                  className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md border border-n-line px-3 text-xs text-n-error"
                   title="Remove"
                 >
                   Remove
@@ -456,16 +456,13 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
           ))}
         </div>
       ) : (
-        <p className="text-center text-xs text-[var(--view-muted,#949BA4)]">
+        <p className="text-center text-xs text-n-slate">
           No brand partnerships yet.
         </p>
       )}
 
       {isOwner && removeMutation.error && (
-        <p
-          role="alert"
-          className="mt-4 text-sm text-[var(--view-error,#ef4444)]"
-        >
+        <p role="alert" className="mt-4 text-sm text-n-error">
           {removeMutation.error.message}
         </p>
       )}
@@ -484,7 +481,7 @@ export function BrandPartnersWidget({ profile, isOwner }: Props) {
               <button
                 type="button"
                 onClick={openCreateForm}
-                className="w-full rounded-md border border-dashed border-[var(--view-line,#3F4147)] py-2 text-xs text-[var(--view-muted,#949BA4)] transition-colors hover:border-[var(--view-control,#4E5058)] hover:text-[var(--view-ink,#DBDEE1)]"
+                className="w-full rounded-md border border-dashed border-n-line py-2 text-xs text-n-slate transition-colors hover:border-n-control hover:text-n-ink"
               >
                 + Add Brand Partner
               </button>

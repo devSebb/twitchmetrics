@@ -212,7 +212,7 @@ export function GameHeader({ game }: GameHeaderProps) {
                 </dl>
               )}
             <div className="mt-6">
-              <SyncStatus lastSyncedAt={game.lastUpdatedAt} />
+              <SyncStatus inverted lastSyncedAt={game.lastUpdatedAt} />
             </div>
             <div className="mt-8 border-t border-white/25 pt-5 text-sm">
               <p className="text-white/70">Looking for enterprise data?</p>

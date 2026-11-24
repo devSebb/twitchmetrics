@@ -13,10 +13,10 @@ type BadgeProps = {
 };
 
 const STATUS_STYLES: Record<StatusType, string> = {
-  unclaimed: "bg-[#383A40] text-[#949BA4]",
-  pending_claim: "bg-yellow-900/30 text-[#f59e0b] border border-yellow-700/40",
-  claimed: "bg-green-900/30 text-[#22c55e] border border-green-700/40",
-  premium: "bg-amber-900/30 text-amber-400 border border-amber-700/40",
+  unclaimed: "bg-n-surface text-n-slate",
+  pending_claim: "bg-n-warning/10 text-n-warning border border-n-warning/30",
+  claimed: "bg-n-success/10 text-n-success border border-n-success/30",
+  premium: "bg-n-warning/10 text-n-warning border border-n-warning/30",
 };
 
 export function Badge({
@@ -57,7 +57,7 @@ export function Badge({
       <span
         className={cn(
           base,
-          "border border-[#3F4147] bg-transparent text-[#949BA4]",
+          "border border-n-line bg-transparent text-n-slate",
           className,
         )}
       >
@@ -67,7 +67,7 @@ export function Badge({
   }
 
   return (
-    <span className={cn(base, "bg-[#383A40] text-[#DBDEE1]", className)}>
+    <span className={cn(base, "bg-n-surface text-n-ink", className)}>
       {children}
     </span>
   );

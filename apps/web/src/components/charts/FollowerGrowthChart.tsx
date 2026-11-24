@@ -156,8 +156,8 @@ export function FollowerGrowthChart({
               onClick={() => onPeriodChange(p)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                 period === p
-                  ? "bg-[var(--view-surface,#383A40)] text-[var(--view-ink,#F2F3F5)]"
-                  : "text-[var(--view-muted,#949BA4)] hover:bg-[var(--view-surface,#383A40)] hover:text-[var(--view-ink,#DBDEE1)]"
+                  ? "bg-n-surface text-n-ink"
+                  : "text-n-slate hover:bg-n-surface hover:text-n-ink"
               }`}
             >
               {p === "all" ? "All" : p.toUpperCase()}

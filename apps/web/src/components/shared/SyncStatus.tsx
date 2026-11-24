@@ -4,12 +4,17 @@ import { getMetricFreshness } from "@/lib/metric-freshness";
 
 type SyncStatusProps = {
   lastSyncedAt: string | Date | null;
+  inverted?: boolean;
 };
 
-export function SyncStatus({ lastSyncedAt }: SyncStatusProps) {
+export function SyncStatus({
+  lastSyncedAt,
+  inverted = false,
+}: SyncStatusProps) {
+  const mutedClass = inverted ? "text-white/75" : "text-n-slate";
   if (!lastSyncedAt) {
     return (
-      <span className="text-xs text-[var(--view-muted,#8B8E94)]">
+      <span className={`text-xs ${mutedClass}`}>
         Latest snapshot unavailable
       </span>
     );
@@ -20,7 +25,7 @@ export function SyncStatus({ lastSyncedAt }: SyncStatusProps) {
   const freshness = getMetricFreshness(date);
   if (!freshness) {
     return (
-      <span className="text-xs text-[var(--view-muted,#8B8E94)]">
+      <span className={`text-xs ${mutedClass}`}>
         Latest snapshot unavailable
       </span>
     );
@@ -28,10 +33,14 @@ export function SyncStatus({ lastSyncedAt }: SyncStatusProps) {
 
   const colorClass =
     freshness.state === "outdated"
-      ? "text-red-400"
+      ? inverted
+        ? "text-red-300"
+        : "text-n-error"
       : freshness.state === "possibly_outdated"
-        ? "text-yellow-400"
-        : "text-[var(--view-muted,#8B8E94)]";
+        ? inverted
+          ? "text-amber-200"
+          : "text-n-warning"
+        : mutedClass;
   const qualifier =
     freshness.state === "outdated"
       ? " · Outdated"

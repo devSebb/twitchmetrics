@@ -9,11 +9,11 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
  */
 export const EMAIL_FROM = {
   /** System / transactional mail (password reset, magic link). */
-  noreply: "TwitchMetrics <noreply@twitchmetrics.net>",
+  noreply: "Noticed <noreply@twitchmetrics.net>",
   /** Customer-facing, friendly mail (confirmations, digest). */
-  hello: "TwitchMetrics <hello@twitchmetrics.net>",
+  hello: "Noticed <hello@twitchmetrics.net>",
   /** Internal notifications delivered to the team. */
-  notifications: "TwitchMetrics Reports <notifications@twitchmetrics.net>",
+  notifications: "Noticed Reports <notifications@twitchmetrics.net>",
 } as const;
 
 export type SendEmailParams = {

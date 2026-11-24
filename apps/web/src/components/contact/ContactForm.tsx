@@ -6,10 +6,9 @@ import { CONTACT_TOPICS, type ContactTopic } from "@/lib/constants/contact";
 
 type FormState = "idle" | "submitting" | "success" | "error";
 
-const INPUT_CLASS =
-  "w-full rounded-lg border border-[#3F4147] bg-[#1E1F22] px-4 py-2.5 text-sm text-[#DBDEE1] placeholder-[#949BA4] outline-none transition-colors focus:border-[#E32C19]/50";
+const INPUT_CLASS = "n-input";
 
-const LABEL_CLASS = "mb-1 block text-sm font-medium text-[#DBDEE1]";
+const LABEL_CLASS = "mb-1 block text-sm font-medium text-n-ink";
 
 export function ContactForm() {
   const [state, setState] = useState<FormState>("idle");
@@ -50,10 +49,13 @@ export function ContactForm() {
 
   if (state === "success") {
     return (
-      <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <CheckCircle size={40} weight="fill" className="text-[#22c55e]" />
-        <h3 className="text-lg font-semibold text-[#F2F3F5]">Message sent</h3>
-        <p className="max-w-sm text-sm leading-relaxed text-[#949BA4]">
+      <div
+        role="status"
+        className="flex flex-col items-center gap-3 py-10 text-center"
+      >
+        <CheckCircle size={40} weight="fill" className="text-n-success" />
+        <h3 className="text-lg font-semibold text-n-ink">Message sent</h3>
+        <p className="max-w-sm text-sm leading-relaxed text-n-slate">
           Thanks for reaching out, {name.split(" ")[0] || "there"}. Our team
           reads every message and will get back to you at {email} within one
           business day.
@@ -99,8 +101,7 @@ export function ContactForm() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="contact-company" className={LABEL_CLASS}>
-            Company{" "}
-            <span className="font-normal text-[#949BA4]">(optional)</span>
+            Company <span className="font-normal text-n-slate">(optional)</span>
           </label>
           <input
             id="contact-company"
@@ -147,7 +148,7 @@ export function ContactForm() {
       </div>
 
       {state === "error" && error && (
-        <p role="alert" className="text-sm text-[#ef4444]">
+        <p role="alert" className="text-sm text-n-error">
           {error}
         </p>
       )}
@@ -155,7 +156,7 @@ export function ContactForm() {
       <button
         type="submit"
         disabled={state === "submitting"}
-        className="w-full rounded-lg bg-[#E32C19] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#C72615] disabled:opacity-50"
+        className="w-full rounded-lg bg-n-red px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-n-red-hover disabled:opacity-50"
       >
         {state === "submitting" ? "Sending…" : "Send message"}
       </button>
