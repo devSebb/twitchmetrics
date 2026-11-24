@@ -1,7 +1,10 @@
-import Image from "next/image";
-import type { Platform } from "@twitchmetrics/database";
+import Link from "next/link";
+import type { Platform, Vertical } from "@twitchmetrics/database";
+import { Container } from "@/components/ui/Editorial";
 import { formatNumber } from "@/lib/utils/format";
 import { GAME_KPI_LABELS } from "@/lib/constants/metric-labels";
+import { VERTICAL_LABELS } from "@/lib/constants/categories";
+import { PLATFORM_CONFIG } from "@/lib/constants/platforms";
 import { InfoTip, PlatformIcon, SyncStatus } from "@/components/shared";
 import { GAME_INFO, type MetricInfo } from "@/lib/constants/metric-info";
 import { GameCoverImage } from "@/components/games/GameCoverImage";
@@ -9,19 +12,15 @@ import { GameCoverImage } from "@/components/games/GameCoverImage";
 type PlatformMetricRow = {
   platform: Platform;
   value: number;
-  /** Set when the figure needs a note: a daily average, a late start. */
   caption?: string | null;
 };
-
-type PlatformMetricGroup = {
-  rows: PlatformMetricRow[];
-  total: number;
-};
+type PlatformMetricGroup = { rows: PlatformMetricRow[]; total: number };
 
 type GameHeaderProps = {
   game: {
     name: string;
     slug: string;
+    vertical: Vertical;
     coverImageUrl: string | null;
     developer: string | null;
     publisher: string | null;
@@ -36,7 +35,6 @@ type GameHeaderProps = {
       latestViewers: PlatformMetricGroup;
       latestChannels: PlatformMetricGroup;
     };
-    /** Per-platform 7d averages and 24h peaks; null without any reading. */
     windowMetrics: {
       avgViewers: PlatformMetricGroup;
       peakViewers: PlatformMetricGroup;
@@ -45,198 +43,191 @@ type GameHeaderProps = {
   };
 };
 
-function KpiCard({
+function Metric({
   label,
   info,
   value,
   platformRows,
   totalLabel = "Total",
-  className,
+  highlight = false,
 }: {
   label: string;
   info: MetricInfo;
   value: number;
   platformRows?: PlatformMetricRow[] | undefined;
-  /** The peak's total is the highest combined moment, not the rows' sum. */
   totalLabel?: string;
-  className?: string;
+  highlight?: boolean;
 }) {
   const rows = platformRows?.filter((row) => row.value > 0) ?? [];
-
   return (
-    <div
-      className={`relative flex min-h-[86px] flex-col justify-between gap-2 rounded-xl border border-[#3F4147] bg-[#313338] px-4 py-3 ${className ?? ""}`}
-    >
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
-          {label}
-          <InfoTip info={info} />
-        </span>
-        {rows.length > 0 ? (
-          <div className="space-y-1">
+    <div className="min-w-0 border-t border-n-line pt-5">
+      <h3 className="flex items-start gap-2 text-sm font-medium text-n-slate">
+        {label}
+        <InfoTip info={info} />
+      </h3>
+      <p
+        className={`mt-4 text-4xl font-extrabold tracking-[-.05em] ${highlight ? "text-n-red" : "text-n-ink"}`}
+      >
+        {formatNumber(value)}
+      </p>
+      {rows.length > 0 && (
+        <>
+          <p className="mt-1 text-xs text-n-slate">
+            {totalLabel === "Combined"
+              ? "Highest combined moment"
+              : "Across tracked platforms"}
+          </p>
+          <dl className="mt-5 space-y-3">
             {rows.map((row) => (
-              <div
-                key={row.platform}
-                className="flex items-center justify-between gap-2"
-              >
-                <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="text-lg font-bold leading-tight text-[#F2F3F5]">
-                    {formatNumber(row.value)}
-                  </span>
-                  {row.caption ? (
-                    <span className="truncate text-[10px] leading-tight text-[#949BA4]">
-                      {row.caption}
-                    </span>
-                  ) : null}
-                </span>
-                <PlatformIcon platform={row.platform} size="xs" rounded="lg" />
+              <div key={row.platform}>
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+                  <dt className="flex items-center gap-1.5 text-n-slate">
+                    <PlatformIcon platform={row.platform} size="xs" />
+                    {PLATFORM_CONFIG[row.platform].name}
+                  </dt>
+                  <dd className="font-semibold">{formatNumber(row.value)}</dd>
+                </div>
+                {row.caption && (
+                  <p className="mt-1 text-xs leading-relaxed text-n-slate">
+                    {row.caption}
+                  </p>
+                )}
               </div>
             ))}
-          </div>
-        ) : (
-          <span className="text-xl font-bold text-[#F2F3F5]">
-            {formatNumber(value)}
-          </span>
-        )}
-      </div>
-      {rows.length > 1 && (
-        <div className="flex items-center justify-between border-t border-[#3F4147] pt-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-[#949BA4]">
-            {totalLabel}
-          </span>
-          <span className="text-sm font-bold text-[#DBDEE1]">
-            {formatNumber(value)}
-          </span>
-        </div>
-      )}
-      {rows.length === 0 && (
-        <div className="absolute right-4 top-3">
-          <PlatformIcon platform="twitch" size="xs" rounded="lg" />
-        </div>
+          </dl>
+        </>
       )}
     </div>
   );
 }
 
-function ProCtaCard({ className }: { className?: string }) {
+export function GameMetricStrip({ game }: GameHeaderProps) {
   return (
-    <a
-      href="https://streamhatchet.com"
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`flex flex-col justify-center rounded-xl px-4 py-3 transition-colors hover:bg-white/5 ${className ?? ""}`}
-    >
-      <span className="text-xs font-medium uppercase tracking-wide text-[#949BA4]">
-        Want Pro-level Data?
-      </span>
-      <span className="mt-1.5 text-base font-semibold text-[#DBDEE1]">
-        Find out more →
-      </span>
-      <Image
-        src="/brand/streamhatchet.png"
-        alt="Stream Hatchet"
-        width={144}
-        height={52}
-        className="mt-3 h-auto w-36"
+    <div className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <Metric
+        label={GAME_KPI_LABELS.liveViewers}
+        info={GAME_INFO.liveViewers}
+        value={
+          game.platformMetrics.latestViewers.total > 0
+            ? game.platformMetrics.latestViewers.total
+            : game.currentViewers
+        }
+        platformRows={game.platformMetrics.latestViewers.rows}
+        highlight
       />
-    </a>
+      <Metric
+        label={GAME_KPI_LABELS.liveChannels}
+        info={GAME_INFO.liveChannels}
+        value={
+          game.platformMetrics.latestChannels.total > 0
+            ? game.platformMetrics.latestChannels.total
+            : game.currentChannels
+        }
+        platformRows={game.platformMetrics.latestChannels.rows}
+      />
+      <Metric
+        label={GAME_KPI_LABELS.avgViewers7d}
+        info={GAME_INFO.avgViewers7d}
+        value={game.windowMetrics?.avgViewers.total ?? game.avgViewers7d}
+        platformRows={game.windowMetrics?.avgViewers.rows}
+      />
+      <Metric
+        label={GAME_KPI_LABELS.peakViewers24h}
+        info={GAME_INFO.peakViewers24h}
+        value={game.windowMetrics?.peakViewers.total ?? game.peakViewers24h}
+        platformRows={game.windowMetrics?.peakViewers.rows}
+        totalLabel="Combined"
+      />
+      <Metric
+        label={GAME_KPI_LABELS.avgLiveChannels}
+        info={GAME_INFO.avgChannels7d}
+        value={game.windowMetrics?.avgChannels.total ?? game.avgLiveChannels}
+        platformRows={game.windowMetrics?.avgChannels.rows}
+      />
+    </div>
   );
 }
 
 export function GameHeader({ game }: GameHeaderProps) {
+  const gaming = game.vertical === "gaming";
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
-      {/* Cover Art (portrait, preserved) */}
-      <div className="relative aspect-[3/4] w-[220px] max-w-full flex-shrink-0 overflow-hidden rounded-lg bg-[#383A40]">
-        <GameCoverImage
-          src={game.coverImageUrl}
-          name={game.name}
-          sizes="220px"
-          className="object-cover"
-          priority
-        />
-      </div>
-
-      {/* Content area — 4 cols × 2 rows; cards stretch to fill cover height */}
-      <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-4 sm:grid-rows-2">
-        {/* Row 1 col 1: title + meta */}
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold text-[#F2F3F5] sm:text-4xl">
-            {game.name}
-          </h1>
-          <div className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            {game.developer && (
-              <>
-                <span className="text-[#949BA4]">Developed by:</span>
-                <span className="font-medium text-[#DBDEE1]">
-                  {game.developer}
-                </span>
-              </>
-            )}
-            {game.releaseDate && (
-              <>
-                <span className="text-[#949BA4]">Release Date:</span>
-                <span className="font-medium text-[#DBDEE1]">
-                  {new Date(game.releaseDate).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </span>
-              </>
-            )}
+    <header className="n-dark bg-n-ink text-white">
+      <Container className="py-12 sm:py-16 lg:py-20">
+        <Link
+          href={gaming ? "/browse" : `/browse?vertical=${game.vertical}`}
+          className="inline-flex min-h-11 items-center text-sm text-white/75 hover:text-white"
+        >
+          ← {VERTICAL_LABELS[game.vertical]} categories
+        </Link>
+        <div className="mt-7 grid items-start gap-8 sm:grid-cols-[160px_minmax(0,1fr)] sm:gap-10 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-16">
+          <div className="relative aspect-[3/4] w-32 overflow-hidden rounded bg-white/10 sm:w-full">
+            <GameCoverImage
+              src={game.coverImageUrl}
+              name={game.name}
+              sizes="(min-width: 1024px) 220px, (min-width: 640px) 160px, 128px"
+              priority
+              className="object-cover"
+              fallbackClassName="from-n-navy to-n-ink text-white/70"
+            />
           </div>
-          <div className="mt-3">
-            <SyncStatus lastSyncedAt={game.lastUpdatedAt} />
+          <div className="min-w-0">
+            <p className="n-eyebrow text-white/70">
+              {gaming ? "Game" : VERTICAL_LABELS[game.vertical]} analytics
+            </p>
+            <h1 className="mt-4 break-words text-[clamp(2.5rem,6vw,5.5rem)] font-extrabold leading-[1.02] tracking-[-.05em]">
+              {game.name}
+              <span className="text-n-red">.</span>
+            </h1>
+            {gaming &&
+              (game.developer || game.publisher || game.releaseDate) && (
+                <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-4 text-sm">
+                  {game.developer && (
+                    <div>
+                      <dt className="text-white/60">Developed by</dt>
+                      <dd className="mt-1">{game.developer}</dd>
+                    </div>
+                  )}
+                  {game.publisher && (
+                    <div>
+                      <dt className="text-white/60">Published by</dt>
+                      <dd className="mt-1">{game.publisher}</dd>
+                    </div>
+                  )}
+                  {game.releaseDate && (
+                    <div>
+                      <dt className="text-white/60">Released</dt>
+                      <dd className="mt-1">
+                        {new Date(game.releaseDate).toLocaleDateString(
+                          "en-GB",
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            timeZone: "UTC",
+                          },
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+            <div className="mt-6">
+              <SyncStatus lastSyncedAt={game.lastUpdatedAt} />
+            </div>
+            <div className="mt-8 border-t border-white/25 pt-5 text-sm">
+              <p className="text-white/70">Looking for enterprise data?</p>
+              <a
+                href="https://streamhatchet.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block py-2 font-semibold underline underline-offset-4"
+              >
+                Explore Hatchet ↗
+              </a>
+            </div>
           </div>
         </div>
-
-        {/* Row 1 cols 2–3 */}
-        <KpiCard
-          label={GAME_KPI_LABELS.avgViewers7d}
-          info={GAME_INFO.avgViewers7d}
-          value={game.windowMetrics?.avgViewers.total ?? game.avgViewers7d}
-          platformRows={game.windowMetrics?.avgViewers.rows}
-        />
-        <KpiCard
-          label={GAME_KPI_LABELS.peakViewers24h}
-          info={GAME_INFO.peakViewers24h}
-          value={game.windowMetrics?.peakViewers.total ?? game.peakViewers24h}
-          platformRows={game.windowMetrics?.peakViewers.rows}
-          totalLabel="Combined"
-        />
-
-        {/* Pro CTA — col 4, spans rows 1–2 */}
-        <ProCtaCard className="sm:col-start-4 sm:row-start-1 sm:row-span-2 sm:h-full" />
-
-        {/* Row 2 cols 1–3 (auto-fill around CTA) */}
-        <KpiCard
-          label={GAME_KPI_LABELS.liveViewers}
-          info={GAME_INFO.liveViewers}
-          value={
-            game.platformMetrics.latestViewers.total > 0
-              ? game.platformMetrics.latestViewers.total
-              : game.currentViewers
-          }
-          platformRows={game.platformMetrics.latestViewers.rows}
-        />
-        <KpiCard
-          label={GAME_KPI_LABELS.liveChannels}
-          info={GAME_INFO.liveChannels}
-          value={
-            game.platformMetrics.latestChannels.total > 0
-              ? game.platformMetrics.latestChannels.total
-              : game.currentChannels
-          }
-          platformRows={game.platformMetrics.latestChannels.rows}
-        />
-        <KpiCard
-          label={GAME_KPI_LABELS.avgLiveChannels}
-          info={GAME_INFO.avgChannels7d}
-          value={game.windowMetrics?.avgChannels.total ?? game.avgLiveChannels}
-          platformRows={game.windowMetrics?.avgChannels.rows}
-        />
-      </div>
-    </div>
+      </Container>
+    </header>
   );
 }

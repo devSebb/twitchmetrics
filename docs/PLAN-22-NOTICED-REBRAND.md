@@ -1,6 +1,6 @@
 # PLAN-22 — Noticed frontend rebrand
 
-**Status:** Implementation authorised by the user on 23 November 2026. Chunks 1 (design foundation and homepage) and 2 (channels and creator views) are implemented. Chunk 2's remaining mobile visual checks are explicitly recorded in `docs/noticed-design-system.md` for final integration. Chunks 3–5 remain.
+**Status:** Implementation authorised by the user on 23 November 2026. Chunks 1 (design foundation and homepage), 2 (channels and creator views) and 3 (categories and games) are implemented. Remaining browser interaction and mobile visual checks are explicitly recorded in `docs/noticed-design-system.md` for final integration. Chunks 4–5 remain.
 **Branch:** `codex/noticed-rebrand`. All five chunks stay on this branch. The user will merge; do not merge to main.
 **Audit date:** 23 November 2026.
 **Objective:** Apply the approved Noticed design system to the complete existing product, preserving its working information, interactions, data and architecture.

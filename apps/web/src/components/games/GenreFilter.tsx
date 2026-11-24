@@ -26,27 +26,33 @@ export function GenreFilter({ genres }: Props) {
   if (genres.length === 0) return null;
 
   return (
-    <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+    <div
+      role="group"
+      aria-label="Game genre"
+      className="flex gap-2 overflow-x-auto pb-2"
+    >
       <button
         onClick={() => handleSelect("")}
+        aria-pressed={!activeGenre}
         className={cn(
-          "flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+          "min-h-11 flex-shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
           !activeGenre
-            ? "bg-[#E32C19] text-white"
-            : "bg-[#383A40] text-[#949BA4] hover:text-[#DBDEE1]",
+            ? "border-n-ink bg-n-ink text-white"
+            : "border-n-line bg-white text-n-slate hover:border-n-ink hover:text-n-ink",
         )}
       >
-        All
+        All genres
       </button>
       {genres.map((genre) => (
         <button
           key={genre}
           onClick={() => handleSelect(genre)}
+          aria-pressed={activeGenre === genre}
           className={cn(
-            "flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+            "min-h-11 flex-shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
             activeGenre === genre
-              ? "bg-[#E32C19] text-white"
-              : "bg-[#383A40] text-[#949BA4] hover:text-[#DBDEE1]",
+              ? "border-n-ink bg-n-ink text-white"
+              : "border-n-line bg-white text-n-slate hover:border-n-ink hover:text-n-ink",
           )}
         >
           {genre}

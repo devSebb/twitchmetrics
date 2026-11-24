@@ -14,8 +14,10 @@ export type EditorialSection = {
 
 export function EditorialSections({
   sections,
+  navigationLabel = "Creator sections",
 }: {
   sections: EditorialSection[];
+  navigationLabel?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [empty, setEmpty] = useState<string[]>([]);
@@ -53,7 +55,7 @@ export function EditorialSections({
     <>
       {visible.length > 0 && (
         <nav
-          aria-label="Creator sections"
+          aria-label={navigationLabel}
           className="sticky top-[88px] z-30 border-b border-n-line bg-white/95 backdrop-blur-sm"
         >
           <Container>

@@ -48,7 +48,11 @@ export function VerticalPills() {
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none sm:gap-3">
+    <div
+      role="group"
+      aria-label="Category type"
+      className="flex flex-wrap gap-2 sm:gap-3"
+    >
       {PILLS.map((pill) => {
         const isActive = active === pill.value;
         const Icon = pill.Icon;
@@ -56,11 +60,12 @@ export function VerticalPills() {
           <button
             key={pill.value}
             onClick={() => handleSelect(pill.value)}
+            aria-pressed={isActive}
             className={cn(
-              "flex min-w-[110px] flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors sm:text-base",
+              "flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-colors",
               isActive
-                ? "border-[#E32C19] bg-[#E32C19] text-white"
-                : "border-[#3F4147] bg-[#313338] text-[#DBDEE1] hover:border-[#4E5058] hover:bg-[#383A40]",
+                ? "border-n-ink bg-n-ink text-white"
+                : "border-n-line bg-white text-n-slate hover:border-n-ink hover:text-n-ink",
             )}
           >
             <Icon size={20} weight="duotone" />
