@@ -29,23 +29,25 @@ export function GrowthValue({ creator }: { creator: LandingCreator }) {
   );
 }
 
+function uniquePlatforms(creator: LandingCreator) {
+  return sortByPlatformOrder(creator.platformAccounts).filter(
+    (account, index, accounts) =>
+      accounts.findIndex((item) => item.platform === account.platform) ===
+      index,
+  );
+}
+
 export function LandingPlatforms({ creator }: { creator: LandingCreator }) {
   return (
     <span className="mt-2 flex flex-wrap gap-1">
-      {sortByPlatformOrder(creator.platformAccounts)
-        .filter(
-          (account, index, accounts) =>
-            accounts.findIndex((item) => item.platform === account.platform) ===
-            index,
-        )
-        .map((account) => (
-          <span
-            key={account.platform}
-            className="border border-n-line px-1.5 py-0.5 text-[11px] leading-4 text-n-slate"
-          >
-            {PLATFORM_CONFIG[account.platform].name}
-          </span>
-        ))}
+      {uniquePlatforms(creator).map((account) => (
+        <span
+          key={account.platform}
+          className="border border-n-line px-1.5 py-0.5 text-[11px] leading-4 text-n-slate"
+        >
+          {PLATFORM_CONFIG[account.platform].name}
+        </span>
+      ))}
     </span>
   );
 }
@@ -56,6 +58,39 @@ export function CreatorSummary({
   creator: LandingCreator;
   growth?: boolean;
 }) {
+  // Ranking rows sit beside the category list on the landing page, so they
+  // share its exact two-line anatomy: image, name + one meta line, value + unit.
+  if (!growth) {
+    const platforms = uniquePlatforms(creator)
+      .map((account) => PLATFORM_CONFIG[account.platform].name)
+      .join(" · ");
+    return (
+      <Link
+        href={`/creator/${creator.slug}`}
+        className="group flex items-center gap-4 border-b border-n-line py-4 transition-colors hover:bg-n-surface"
+      >
+        <CreatorPortrait
+          src={creator.avatarUrl}
+          name={creator.displayName}
+          className="h-12 w-12"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-base font-bold group-hover:underline">
+            {creator.displayName}
+          </span>
+          <span className="mt-1 block truncate text-xs text-n-slate">
+            {platforms || PLATFORM_CONFIG[creator.primaryPlatform].name}
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span className="block text-base font-semibold tabular-nums">
+            {formatNumber(Number(creator.totalFollowers))}
+          </span>
+          <span className="text-xs text-n-slate">followers</span>
+        </span>
+      </Link>
+    );
+  }
   return (
     <Link
       href={`/creator/${creator.slug}`}
@@ -71,26 +106,15 @@ export function CreatorSummary({
           {creator.displayName}
         </span>
         <span className="mt-1 block text-xs text-n-slate">
-          {PLATFORM_CONFIG[creator.primaryPlatform].name}
-          {growth ? " · follower change, 7 days" : " · total followers"}
+          {PLATFORM_CONFIG[creator.primaryPlatform].name} · follower change, 7
+          days
         </span>
-        {!growth && creator.growthRollup && (
-          <span className="mt-1 block text-xs">
-            <GrowthValue creator={creator} /> · 7 days
-          </span>
-        )}
       </span>
       <span className="max-w-[38%] shrink-0 text-right text-base font-semibold tabular-nums">
-        {growth ? (
-          <GrowthValue creator={creator} />
-        ) : (
-          formatNumber(Number(creator.totalFollowers))
-        )}
-        {growth && (
-          <span className="mt-1 block text-xs font-normal text-n-slate">
-            {formatNumber(Number(creator.totalFollowers))} total
-          </span>
-        )}
+        <GrowthValue creator={creator} />
+        <span className="mt-1 block text-xs font-normal text-n-slate">
+          {formatNumber(Number(creator.totalFollowers))} total
+        </span>
       </span>
       <span className="w-full">
         <LandingPlatforms creator={creator} />
