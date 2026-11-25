@@ -259,6 +259,7 @@ model CreatorProfile {
   streamSessions    StreamSessionFact[]
   audienceDemographics AudienceDemographics[]
   dailyRollups         CreatorDailyRollup[]
+  rankingEntries       RankingEntry[]
 
   identityLinksAsCanonical IdentityLink[] @relation("IdentityLinkCanonical")
   identityLinksAsOther     IdentityLink[] @relation("IdentityLinkOther")
@@ -633,6 +634,7 @@ model Game {
   broadcastLanguages GameBroadcastLanguage[]
   topChannels        GameTopChannel[]
   clips              GameClip[]
+  rankingEntries     RankingEntry[]
 
   @@index([currentViewers(sort: Desc)])
   @@index([name])
@@ -997,6 +999,57 @@ model CreatorDailyRollup {
 
   @@unique([creatorProfileId, date])
   @@index([date])
+}
+
+/// One row per place in one published ranking (/rankings), written by
+/// workers/build-rankings.ts after the daily rollups.
+///
+/// A ranking is (kind, scope, metric, gameSlug) over the `windowDays` ending
+/// on `windowEnd`. Ranking creators over a window at request time means
+/// grouping millions of daily rollup rows (~19 s for 30 days), and nothing
+/// else stores last period's places, so both are computed once a day here.
+model RankingEntry {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// "creator" (creatorProfileId set) or "category" (gameId set).
+  kind   String
+  /// "all-platforms" or one platform: twitch, youtube, kick, instagram, tiktok, x.
+  scope  String
+  /// most-watched, average-viewers, peak-viewers, fastest-growing,
+  /// most-followed; categories also have most-streamed.
+  metric String
+  /// Set on a creator ranking within one game; "" otherwise.
+  gameSlug String @default("")
+
+  windowEnd  DateTime @db.Date
+  windowDays Int
+
+  rank             Int
+  creatorProfileId String? @db.Uuid
+  gameId           String? @db.Uuid
+
+  /// The ranked figure, in the metric's own unit (minutes watched, viewers,
+  /// followers, followers gained, airtime minutes).
+  value         Float
+  /// Place and figure in the window before this one. Null rank = not in that
+  /// ranking's stored depth (shown as "New") or no comparison exists.
+  previousRank  Int?
+  previousValue Float?
+  /// Whether a previous ranking existed to compare against at all.
+  hasPrevious   Boolean @default(false)
+
+  /// The other columns of the row, same keys on every ranking (see
+  /// RankingStats in apps/web/src/lib/rankings.ts).
+  stats Json @default("{}")
+
+  computedAt DateTime @default(now())
+
+  creatorProfile CreatorProfile? @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  game           Game?           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([kind, scope, metric, gameSlug, windowDays, windowEnd, rank])
+  @@index([creatorProfileId])
+  @@index([gameId])
 }
 
 model GameDailyRollup {

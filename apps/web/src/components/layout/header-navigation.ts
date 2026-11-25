@@ -1,4 +1,5 @@
 export const PRIMARY_NAV_LINKS = [
+  { label: "Rankings", href: "/rankings" },
   { label: "Channels", href: "/creators" },
   { label: "Categories", href: "/browse" },
   { label: "Reports", href: "/reports" },

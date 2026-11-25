@@ -28,6 +28,8 @@ type GameTopChannelsProps = {
   channels: TopChannel[];
   /** Null when the ranking couldn't be loaded. */
   mostWatched: GameMostWatched | null;
+  /** The game's 30-day creator ranking (/rankings/game/<slug>), if it has one. */
+  rankingHref?: string | null;
 };
 
 export function ChannelAvatar({
@@ -144,6 +146,7 @@ function latestUpdate(channels: TopChannel[]): string | null {
 export function GameTopChannels({
   channels,
   mostWatched,
+  rankingHref,
 }: GameTopChannelsProps) {
   // Callers pass emerging already sorted by viewers now (desc).
   const emerging = channels.filter(
@@ -216,6 +219,16 @@ export function GameTopChannels({
         </div>
         {mostWatchedChannels.length > 0 && mostWatchedRange && (
           <p className="mt-5 text-xs text-n-slate">{mostWatchedRange}</p>
+        )}
+        {rankingHref && (
+          <p className="mt-4">
+            <Link
+              href={rankingHref}
+              className="text-sm font-bold text-n-ink underline"
+            >
+              See the 30-day top 50
+            </Link>
+          </p>
         )}
       </div>
     </div>

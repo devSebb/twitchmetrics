@@ -211,19 +211,20 @@ export async function resolveLegacyGameName(
 }
 
 /**
- * Legacy /channels/<list> ranking pages → current /creators views.
+ * Legacy /channels/<list> ranking pages → the matching Twitch ranking
+ * (the old site was Twitch-only). "popularity" was its follower-based list.
  * The last three are older-era aliases kept as cheap insurance for
  * long-lived backlinks.
  */
 export const LEGACY_CHANNEL_LISTS: Record<string, string> = {
-  viewership: "/creators?sort=viewership",
-  follower: "/creators",
-  growth: "/creators?sort=trending",
-  peak: "/creators?sort=peak",
-  popularity: "/creators",
-  most_watched: "/creators?sort=viewership",
-  most_followed: "/creators",
-  fastest_growing: "/creators?sort=trending",
+  viewership: "/rankings/twitch/most-watched",
+  follower: "/rankings/twitch/most-followed",
+  growth: "/rankings/twitch/fastest-growing",
+  peak: "/rankings/twitch/peak-viewers",
+  popularity: "/rankings/twitch/most-followed",
+  most_watched: "/rankings/twitch/most-watched",
+  most_followed: "/rankings/twitch/most-followed",
+  fastest_growing: "/rankings/twitch/fastest-growing",
 };
 
 /** Standard cache policy for legacy 301s: CDN absorbs repeat crawler hits. */
