@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/dispatch/sh-daily",
       "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch/yt-subscribers",
+      "schedule": "30 11 * * *"
     }
   ]
 }

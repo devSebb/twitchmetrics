@@ -13,6 +13,7 @@ import {
   utcDayKey,
 } from "./game-minutes";
 import { mergeIntervals, totalMinutes } from "./creator";
+import { longRunningDayViewers } from "./sightings";
 
 /**
  * The daily rollup grouping, as one pure function.
@@ -249,12 +250,26 @@ export function buildRollups(
     const overlap = dayOverlap(rawFact, date);
     if (overlap.minutes <= 0) continue;
 
+    // A stream merged from several export windows carries its all-time
+    // peak and lifetime average; the day gets its own (./sightings).
+    const dayViewers = longRunningDayViewers(rawFact, date);
+    const airtimeMinutes = Math.round(
+      rawFact.airtimeMinutes * overlap.fraction,
+    );
+
     const fact: RollupFact = {
       ...rawFact,
-      airtimeMinutes: Math.round(rawFact.airtimeMinutes * overlap.fraction),
-      minutesWatched: BigInt(
-        Math.round(Number(rawFact.minutesWatched) * overlap.fraction),
-      ),
+      airtimeMinutes,
+      minutesWatched: dayViewers
+        ? BigInt(Math.round(dayViewers.averageViewers * airtimeMinutes))
+        : BigInt(Math.round(Number(rawFact.minutesWatched) * overlap.fraction)),
+      ...(dayViewers
+        ? {
+            averageViewers: dayViewers.averageViewers,
+            peakViewers: dayViewers.peakViewers,
+            peakViewersAt: dayViewers.peakViewersAt,
+          }
+        : {}),
       sessionViews:
         rawFact.sessionViews === null
           ? null

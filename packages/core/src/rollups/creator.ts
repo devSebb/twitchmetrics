@@ -1,4 +1,5 @@
 import type { RollupFact } from "./types";
+import { longRunningDayViewers } from "./sightings";
 
 /**
  * Per-creator daily rollups: wall-clock time, not summed per-platform time.
@@ -75,8 +76,11 @@ function bestPlatformPeak(
   let best: { viewers: number; platform: string | null } | null = null;
   for (const fact of facts) {
     if (!clipToDay(fact, date)) continue;
-    if (!best || fact.peakViewers > best.viewers) {
-      best = { viewers: fact.peakViewers, platform: fact.internalPlatform };
+    // A long-running stream's own peak may belong to another day.
+    const viewers =
+      longRunningDayViewers(fact, date)?.peakViewers ?? fact.peakViewers;
+    if (!best || viewers > best.viewers) {
+      best = { viewers, platform: fact.internalPlatform };
     }
   }
   return best ?? { viewers: null, platform: null };
@@ -135,9 +139,12 @@ export function buildCreatorRollups(
       );
       const overlapMinutes = interval[1] - interval[0];
       const fraction = spanMs > 0 ? (overlapMinutes * 60_000) / spanMs : 1;
-      minutesWatched += BigInt(
-        Math.round(Number(fact.minutesWatched) * Math.min(1, fraction)),
-      );
+      const dayViewers = longRunningDayViewers(fact, date);
+      minutesWatched += dayViewers
+        ? BigInt(Math.round(dayViewers.averageViewers * overlapMinutes))
+        : BigInt(
+            Math.round(Number(fact.minutesWatched) * Math.min(1, fraction)),
+          );
     }
 
     if (clipped.length === 0) continue;

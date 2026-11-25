@@ -6,7 +6,8 @@
     ".": "./index.ts",
     "./tiers": "./src/tiers.ts",
     "./creator-aggregates": "./src/creator-aggregates.ts",
-    "./rollups": "./src/rollups/index.ts"
+    "./rollups": "./src/rollups/index.ts",
+    "./subscriber-sweep": "./src/subscriber-sweep.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

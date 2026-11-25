@@ -866,6 +866,13 @@ model StreamSessionFact {
   /// workers/streamhatchet-game-minutes.ts, and only for days where the file
   /// says more than "the stream's one game, the whole time".
   gameMinutesByDay Json?
+  /// What each daily export said about a stream that outlives one export
+  /// window, keyed by export day: { "2026-11-23": [averageViewers,
+  /// peakViewers, peakAtEpochSeconds] }. The merged row keeps one all-time
+  /// peak and one lifetime average; the rollups need the day's own
+  /// (packages/core/src/rollups/sightings.ts). NULL until a second sighting
+  /// is merged in.
+  sightingsByDay   Json?
 
   airtimeMinutes       Int
   minutesWatched       BigInt

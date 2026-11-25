@@ -1,0 +1,62 @@
+# YouTube subscriber sweep (workers/youtube-subscriber-sweep.ts).
+#
+# WHY THIS EXISTS. Most YouTube subscriber counts come from Stream Hatchet's
+# social export, which rarely re-checks a channel; a profile could say
+# "Updated 2d ago" over a count from three months back (Maher Roblox 656K
+# against YouTube's 962K, QA 2026-11-24). This asks the YouTube Data API for
+# every listed channel once a day: 50 channels per call, 1 quota unit a call,
+# ~5,800 of the 10,000 daily units, about half an hour.
+#
+# A run that stops early (time budget, quota) is not a failure: accounts are
+# taken least-recently-checked first, so the next run carries on from there.
+#
+# Manual runs: Actions tab -> this workflow -> Run workflow. dry_run only
+# counts what is due and samples 500 accounts; it writes nothing.
+#
+# Required repository secrets: DATABASE_URL, DIRECT_URL, YOUTUBE_API_KEY.
+
+name: YouTube subscriber sweep
+
+on:
+  # No `schedule`: GitHub starts this repo's scheduled runs 6-8 h late.
+  # Vercel Cron dispatches it on time (apps/web/vercel.json ->
+  # /api/cron/dispatch/yt-subscribers, slot in
+  # apps/web/src/server/services/github-dispatch.ts): 11:30 UTC.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only count what is due and sample 500 accounts (no writes)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: youtube-subscriber-sweep
+  cancel-in-progress: false
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  DIRECT_URL: ${{ secrets.DIRECT_URL }}
+  YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+  # Not `&& ''`: an empty string is falsy here and would always pick --write.
+  MODE_FLAGS: ${{ inputs.dry_run && '--sample 500' || '--write' }}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @twitchmetrics/database db:generate
+      - name: Sweep YouTube subscriber counts
+        run: |
+          npx tsx --tsconfig apps/web/tsconfig.json workers/youtube-subscriber-sweep.ts \
+            --time-budget-min 60 $MODE_FLAGS

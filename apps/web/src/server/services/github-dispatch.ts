@@ -20,7 +20,8 @@ export type DispatchSlot = {
   workflow:
     | "scheduled-jobs.yml"
     | "creator-snapshots.yml"
-    | "sh-daily-sessions.yml";
+    | "sh-daily-sessions.yml"
+    | "youtube-subscriber-sweep.yml";
   inputs: Record<string, string>;
 };
 
@@ -84,6 +85,14 @@ export const DISPATCH_SLOTS = {
     cron: "30 5 * * *",
     workflow: "sh-daily-sessions.yml",
     inputs: { days: "4" },
+  },
+  // Fresh YouTube subscriber counts from the YouTube API for every listed
+  // channel (~5,800 of the 10,000 daily quota units). After the tier jobs,
+  // which share the quota and matter more.
+  "yt-subscribers": {
+    cron: "30 11 * * *",
+    workflow: "youtube-subscriber-sweep.yml",
+    inputs: {},
   },
 } as const satisfies Record<string, DispatchSlot>;
 

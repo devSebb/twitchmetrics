@@ -61,6 +61,7 @@ export const ROLLUP_FACT_SELECT = {
   primaryGameName: true,
   allGameNames: true,
   gameMinutesByDay: true,
+  sightingsByDay: true,
   airtimeMinutes: true,
   minutesWatched: true,
   sessionViews: true,
