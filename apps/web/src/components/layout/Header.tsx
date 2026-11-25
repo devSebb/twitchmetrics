@@ -35,8 +35,8 @@ export function Header() {
           <SolutionsDropdown />
         </nav>
         <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
-          <div className="hidden w-44 md:block xl:w-56">
-            <SearchBar mode="compact" appearance="noticed" />
+          <div className="hidden w-64 md:block lg:w-48 xl:w-80">
+            <SearchBar mode="compact" appearance="noticed" wideResults />
           </div>
           <HeaderAuth />
         </div>

@@ -3,12 +3,15 @@ import {
   LEGACY_CHANNEL_LISTS,
   resolveLegacyGameName,
 } from "@/server/services/legacy-redirects";
+import { gameRankingPath } from "@/lib/rankings";
+import { hasGameRanking } from "@/server/services/rankings";
 import { legacyNotFound, legacyRedirect } from "../../_lib";
 
 /**
- * Legacy ranking pages: /channels/<list>[?game=Name]. Game-filtered variants
- * go to the per-game creator ranking (/creators?sort=viewership&game=<slug>);
- * plain lists go to /creators views.
+ * Legacy ranking pages: /channels/<list>[?game=Name]. Plain lists go to the
+ * matching Twitch ranking. Game-filtered variants go to that game's ranking
+ * (/rankings/game/<slug>) when one is published, and to the game-filtered
+ * channel list otherwise (only the most watched games have a ranking).
  */
 export async function GET(
   request: Request,
@@ -22,9 +25,12 @@ export async function GET(
   if (game) {
     const slug = await resolveLegacyGameName(db, game);
     if (slug) {
+      const ranked = await hasGameRanking(slug).catch(() => false);
       return legacyRedirect(
         request.url,
-        `/creators?sort=viewership&game=${encodeURIComponent(slug)}`,
+        ranked
+          ? gameRankingPath(slug)
+          : `/creators?sort=viewership&game=${encodeURIComponent(slug)}`,
       );
     }
   }

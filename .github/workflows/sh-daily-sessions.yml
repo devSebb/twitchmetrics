@@ -28,6 +28,8 @@
 #   3. YouTube per-game daily averages (GamePlatformViewerSnapshot), which read
 #      the yt rollups from step 1–2 — YouTube has no live games feed;
 #   4. CreatorDailyRollup for the window, every platform merged;
+#   4b. the published rankings (/rankings, RankingEntry), which read the
+#      creator, channel and game rollups of the last 60 days;
 #   5. a read-only health check over what is actually in the database. It does
 #      not trust any run's own status, so a hung job still turns this red.
 #
@@ -129,6 +131,12 @@ jobs:
         run: |
           npx tsx workers/streamhatchet-ingest.ts --creator-rollups-only \
             --platform twitch --days "$DAYS" --write
+
+      # After every rollup: each ranking is the last 30 complete days against
+      # the 30 before. Replaces the day's rows in one transaction, so a failed
+      # run leaves yesterday's rankings on the site.
+      - name: Build rankings
+        run: npx tsx workers/build-rankings.ts --write
 
       - name: Health check
         if: ${{ always() }}

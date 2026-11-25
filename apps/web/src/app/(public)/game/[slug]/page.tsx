@@ -18,6 +18,8 @@ import {
   selectDisplayTopChannels,
 } from "@/server/services/game-top-channels";
 import { getGameMostWatched } from "@/server/services/game-most-watched";
+import { hasGameRanking } from "@/server/services/rankings";
+import { gameRankingPath } from "@/lib/rankings";
 import { getGameRecentStreams } from "@/server/services/game-recent-streams";
 import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-stats";
 import { SITE_URL, SITE_NAME, TWITTER_HANDLE } from "@/lib/constants/seo";
@@ -152,7 +154,7 @@ export default async function GamePage({ params }: PageProps) {
     : null;
   // One card's data each: a failure empties the card, not the page.
   const lastCompleteDay = getLastCompleteStatsDay();
-  const [platformMetrics, series, mostWatched, recentStreams] =
+  const [platformMetrics, series, mostWatched, recentStreams, hasRanking] =
     await Promise.all([
       getGamePlatformMetrics({ gameId: game.id }),
       // The 7 days ending at the newest snapshot, every platform.
@@ -169,6 +171,8 @@ export default async function GamePage({ params }: PageProps) {
       lastCompleteDay
         .then((lastDay) => getGameRecentStreams(db, game, lastDay))
         .catch(() => null),
+      // Only the most watched games have a 30-day creator ranking to link to.
+      hasGameRanking(game.slug).catch(() => false),
     ]);
   const summary =
     series && series.slots.length > 0 ? summarizeGameSeries(series) : null;
@@ -291,6 +295,7 @@ export default async function GamePage({ params }: PageProps) {
           key="discover"
           channels={selectDisplayTopChannels(game.topChannels)}
           mostWatched={mostWatched}
+          rankingHref={hasRanking ? gameRankingPath(game.slug) : null}
         />
       ),
     },

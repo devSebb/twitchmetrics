@@ -22,6 +22,23 @@ const nextConfig: NextConfig = {
         destination: "/browse",
         permanent: true,
       },
+      // The old Kick lists, each to its ranking; any other list name falls
+      // through to the Kick channel directory.
+      {
+        source: "/kick_channels/viewership",
+        destination: "/rankings/kick/most-watched",
+        permanent: true,
+      },
+      {
+        source: "/kick_channels/peak",
+        destination: "/rankings/kick/peak-viewers",
+        permanent: true,
+      },
+      {
+        source: "/kick_channels/popularity",
+        destination: "/rankings/kick/most-followed",
+        permanent: true,
+      },
       {
         source: "/kick_channels/:list",
         destination: "/creators?platform=kick",

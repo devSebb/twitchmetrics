@@ -7,6 +7,7 @@ const sections = [
   {
     title: "Explore",
     links: [
+      ["Rankings", "/rankings"],
       ["Channels", "/creators"],
       ["Categories", "/browse"],
       ["Reports", "/reports"],

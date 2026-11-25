@@ -47,13 +47,13 @@ export function SolutionsDropdown() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "flex items-center gap-1 text-sm font-medium transition-colors",
+          "flex items-center gap-1 whitespace-nowrap py-2 text-sm font-medium transition-colors",
           open
             ? "text-[var(--noticed-ink)]"
             : "text-[var(--noticed-slate)] hover:text-[var(--noticed-ink)]",
         )}
       >
-        Solutions
+        Who You Are
         <svg
           width="10"
           height="10"
@@ -79,19 +79,19 @@ export function SolutionsDropdown() {
         <div className="absolute left-1/2 top-full z-50 -translate-x-1/2 pt-2">
           <div
             id="solutions-navigation"
-            className="w-64 overflow-hidden rounded-lg border border-[var(--noticed-line)] bg-[var(--noticed-surface)] shadow-lg"
+            className="w-72 border border-t-2 border-n-line border-t-n-ink bg-n-canvas"
           >
             {SOLUTION_LINKS.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="block px-4 py-3 transition-colors hover:bg-[var(--noticed-surface)]"
+                className="group block border-b border-n-line px-5 py-4 transition-colors last:border-b-0 hover:bg-n-surface focus-visible:!outline-offset-[-2px]"
               >
-                <p className="text-sm font-semibold text-[var(--noticed-ink)]">
+                <p className="text-sm font-bold text-n-ink group-hover:underline">
                   {item.label}
                 </p>
-                <p className="mt-0.5 text-xs text-[var(--noticed-slate)]">
+                <p className="mt-1 text-xs leading-relaxed text-n-slate">
                   {item.description}
                 </p>
               </Link>

@@ -38,6 +38,8 @@ type SearchBarProps = {
   autoFocus?: boolean;
   searchType?: SearchType;
   appearance?: "noticed";
+  /** Let the suggestion panel grow wider than a narrow field (header use). */
+  wideResults?: boolean;
 };
 
 export function SearchBar({
@@ -46,6 +48,7 @@ export function SearchBar({
   autoFocus = false,
   searchType = "all",
   appearance: _appearance,
+  wideResults = false,
 }: SearchBarProps) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultQuery);
@@ -170,7 +173,7 @@ export function SearchBar({
         )}
         <div
           className={cn(
-            "flex min-w-0 flex-wrap items-center gap-2 rounded-lg border transition-colors focus-within:ring-2 focus-within:ring-n-red",
+            "flex min-w-0 flex-wrap items-center gap-2 rounded-lg border transition-colors focus-within:border-n-red focus-within:ring-1 focus-within:ring-n-red",
             surface,
             mode === "hero" ? "p-2 sm:flex-nowrap" : "h-11 px-3",
           )}
@@ -228,7 +231,9 @@ export function SearchBar({
                   : "Search creators & categories…"
               }
               className={cn(
-                "min-w-0 w-full bg-transparent py-2 outline-none [&::-webkit-search-cancel-button]:hidden",
+                // The wrapper draws the focus ring; suppress the global outline so
+                // the field doesn't get a second box inside it.
+                "min-w-0 w-full bg-transparent py-2 !outline-none [&::-webkit-search-cancel-button]:hidden",
                 "text-n-ink placeholder:text-n-slate",
                 mode === "compact" ? "text-sm" : "text-base",
               )}
@@ -244,7 +249,7 @@ export function SearchBar({
                   inputRef.current?.focus();
                 }}
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center text-xl",
+                  "-mr-2 flex h-9 w-8 shrink-0 items-center justify-center rounded text-xl hover:text-n-ink focus-visible:!outline-offset-0",
                   muted,
                 )}
               >
@@ -265,7 +270,10 @@ export function SearchBar({
       {showDropdown && (
         <div
           className={cn(
-            "absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(60vh,480px)] overflow-y-auto rounded-lg border shadow-xl",
+            "absolute top-full z-50 mt-2 max-h-[min(60vh,480px)] overflow-y-auto rounded-lg border shadow-xl",
+            wideResults
+              ? "right-0 w-[min(24rem,calc(100vw-2.5rem))] min-w-full"
+              : "left-0 right-0",
             surface,
           )}
         >

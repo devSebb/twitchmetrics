@@ -36,7 +36,9 @@ export function CreatorPlatformPills() {
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 sm:gap-3">
+    // The padding (cancelled by the negative margin) leaves room for the focus
+    // ring, which the scroll container would otherwise clip.
+    <div className="-m-2 flex gap-2 overflow-x-auto p-2 sm:gap-3">
       {PILLS.map((pill) => {
         const isActive = active === pill.value;
         return (

@@ -17,6 +17,13 @@ export function TrendingSection({
   topGames: LandingGame[];
   trendingCreators: LandingCreator[];
 }) {
+  // The two rankings sit side by side, so show the same number of rows in each.
+  const rows =
+    topChannels.length && topGames.length
+      ? Math.min(topChannels.length, topGames.length)
+      : Math.max(topChannels.length, topGames.length);
+  topChannels = topChannels.slice(0, rows);
+  topGames = topGames.slice(0, rows);
   return (
     <>
       <section className="py-16 sm:py-24" aria-labelledby="discovery-title">
@@ -61,10 +68,18 @@ export function TrendingSection({
           </div>
           <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
             <div>
-              <h3 className="mb-3 text-xl font-bold tracking-tight">
-                Popular creators
-              </h3>
-              <p className="mb-5 text-sm text-n-slate">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <h3 className="text-xl font-bold tracking-tight">
+                  Popular creators
+                </h3>
+                <Link
+                  href="/creators"
+                  className="text-sm font-semibold underline underline-offset-4"
+                >
+                  All creators
+                </Link>
+              </div>
+              <p className="mb-5 mt-3 text-sm text-n-slate">
                 By total followers across tracked accounts
               </p>
               {topChannels.length ? (
@@ -98,13 +113,13 @@ export function TrendingSection({
                   <Link
                     key={game.slug}
                     href={`/game/${game.slug}`}
-                    className="group flex items-center gap-4 border-b border-n-line py-4 hover:bg-n-surface"
+                    className="group flex items-center gap-4 border-b border-n-line py-4 transition-colors hover:bg-n-surface"
                   >
-                    <span className="relative h-12 w-10 shrink-0 overflow-hidden rounded bg-n-surface">
+                    <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-n-surface">
                       <GameCoverImage
                         src={game.coverImageUrl}
                         name={game.name}
-                        sizes="40px"
+                        sizes="48px"
                         className="object-cover"
                         fallbackClassName="!bg-none !bg-n-surface !text-n-slate [&>span]:hidden"
                       />
@@ -113,12 +128,12 @@ export function TrendingSection({
                       <span className="block truncate text-base font-bold group-hover:underline">
                         {game.name}
                       </span>
-                      <span className="mt-1 block text-xs text-n-slate">
+                      <span className="mt-1 block truncate text-xs text-n-slate">
                         {formatNumber(game.currentChannels)} live channels
                       </span>
                     </span>
-                    <span className="text-right">
-                      <span className="block text-base font-semibold">
+                    <span className="shrink-0 text-right">
+                      <span className="block text-base font-semibold tabular-nums">
                         {formatNumber(game.currentViewers)}
                       </span>
                       <span className="text-xs text-n-slate">viewers</span>

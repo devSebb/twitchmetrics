@@ -205,7 +205,7 @@ export function MobileNavigation({ user }: MobileNavigationProps) {
                   id="mobile-solutions-title"
                   className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--noticed-slate)]"
                 >
-                  Solutions
+                  Who You Are
                 </h3>
                 <div className="space-y-1">
                   {SOLUTION_LINKS.map((link) => (
