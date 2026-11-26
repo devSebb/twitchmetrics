@@ -2,6 +2,12 @@ const EXACT_ALLOWED_HOSTS = new Set([
   "static-cdn.jtvnw.net",
   "yt3.googleusercontent.com",
   "i.ytimg.com",
+  // Kick serves channel pictures from files.kick.com (65K listed creators).
+  "files.kick.com",
+  // Stream Hatchet's own picture host (Instagram and TikTok creators from the
+  // social-profiles export) and X's. Neither expires.
+  "d1hrk5gt3yn7pi.cloudfront.net",
+  "pbs.twimg.com",
   "images.igdb.com",
   "avatars.githubusercontent.com",
 ]);

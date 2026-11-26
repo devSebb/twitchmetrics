@@ -237,7 +237,11 @@ export async function loadTierProfileIds(
       // quotas or Inngest step caps. API-poll only API-born profiles plus
       // anything claimed or OAuth-connected.
       OR: [
-        { catalogSource: { not: "streamhatchet" } },
+        // "streamhatchet_social" profiles hold link-only accounts (no
+        // streaming channel, nothing an API tier run can poll).
+        {
+          catalogSource: { notIn: ["streamhatchet", "streamhatchet_social"] },
+        },
         { catalogSource: null },
         { state: { in: ["claimed", "premium"] } },
         { userId: { not: null } },

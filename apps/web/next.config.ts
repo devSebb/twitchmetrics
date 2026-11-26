@@ -108,6 +108,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.googleusercontent.com" },
       { protocol: "https", hostname: "*.ggpht.com" },
       { protocol: "https", hostname: "i.ytimg.com" },
+      // Kick CDN
+      { protocol: "https", hostname: "files.kick.com" },
+      // Stream Hatchet picture host (social creators) and X
+      { protocol: "https", hostname: "d1hrk5gt3yn7pi.cloudfront.net" },
+      { protocol: "https", hostname: "pbs.twimg.com" },
       // Instagram CDN
       { protocol: "https", hostname: "*.cdninstagram.com" },
       { protocol: "https", hostname: "*.fbcdn.net" },
