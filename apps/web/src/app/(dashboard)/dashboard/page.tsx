@@ -152,6 +152,10 @@ export default async function DashboardPage() {
     primaryPlatform: profile.primaryPlatform,
     totalFollowers: String(profile.totalFollowers),
     lastSnapshotAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
+    primaryGameName: profile.primaryGameName ?? null,
+    lastStreamAt: profile.lastStreamAt
+      ? profile.lastStreamAt.toISOString()
+      : null,
     platformAccounts: profile.platformAccounts.map((account) => ({
       platform: account.platform,
       platformUsername: account.platformUsername,

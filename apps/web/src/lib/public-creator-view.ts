@@ -100,6 +100,10 @@ export async function getPublicCreatorView(creator: PublicCreator) {
     primaryPlatform: creator.primaryPlatform,
     totalFollowers: String(creator.totalFollowers),
     lastSnapshotAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
+    primaryGameName: creator.primaryGameName ?? null,
+    lastStreamAt: creator.lastStreamAt
+      ? creator.lastStreamAt.toISOString()
+      : null,
     platformAccounts: creator.platformAccounts.map((a) => ({
       platform: a.platform,
       platformUsername: a.platformUsername,

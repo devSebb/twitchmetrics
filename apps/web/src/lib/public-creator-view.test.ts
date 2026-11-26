@@ -88,6 +88,16 @@ beforeEach(() => {
 });
 
 describe("public creator presentation used by profile, kit and owner kit preview", () => {
+  it("passes the primary game and last stream date to the header", async () => {
+    const view = await getPublicCreatorView(
+      fixture({
+        primaryGameName: "Fortnite",
+        lastStreamAt: new Date("2026-11-21T08:00:00Z"),
+      }),
+    );
+    expect(view.headerData.primaryGameName).toBe("Fortnite");
+    expect(view.headerData.lastStreamAt).toBe("2026-11-21T08:00:00.000Z");
+  });
   it("does not request or serialise first-party demographics when sharing is off, even for a claimed connected creator", async () => {
     const view = await getPublicCreatorView(fixture());
     expect(queries.analytics).not.toHaveBeenCalled();
@@ -124,6 +134,8 @@ describe("public creator presentation used by profile, kit and owner kit preview
       fixture({ customAvatarUrl: "https://static-cdn.jtvnw.net/custom.png" }),
     );
     expect(view.headerData.platformAccounts[0]?.followerCount).toBe("125");
+    expect(view.headerData.primaryGameName).toBeNull();
+    expect(view.headerData.lastStreamAt).toBeNull();
     expect(view.profile.totalFollowers).toBe("125");
     expect(view.profile.widgetConfig).toEqual(["stats_row", "demographics"]);
     expect(view.headerData.avatarUrl).toBe(

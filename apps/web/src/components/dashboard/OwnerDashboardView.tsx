@@ -1,49 +1,17 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import type { Platform, ProfileState } from "@twitchmetrics/database";
 import Link from "next/link";
 import { EditorialCreatorHeader } from "@/components/creator/EditorialCreatorHeader";
 import { Container } from "@/components/ui/Editorial";
 import { Button } from "@/components/ui";
 import { computeProfileCompletion } from "@/lib/profile-completion";
 import type { ProfileDataAvailability } from "@/lib/profile-layout";
+import type { CreatorHeroData } from "@/lib/creator-hero";
 import type { StatsContext } from "@/lib/stats-period";
 import { DashboardGrid, type SerializedProfile } from "./DashboardGrid";
 
-type PlatformAccountData = {
-  platform: Platform;
-  platformUsername: string;
-  platformUrl: string | null;
-  followerCount: string | null;
-  totalViews: string | null;
-  postCount: number | null;
-};
-
-type GrowthRollupData = {
-  platform: Platform;
-  delta7d: string;
-  pct7d: number;
-  trendDirection: string;
-};
-
-export type DashboardHeaderData = {
-  id: string;
-  displayName: string;
-  slug: string;
-  avatarUrl: string | null;
-  bannerUrl: string | null;
-  bio: string | null;
-  country: string | null;
-  language: string | null;
-  age: number | null;
-  state: ProfileState;
-  primaryPlatform: Platform;
-  totalFollowers: string;
-  lastSnapshotAt: string | null;
-  platformAccounts: PlatformAccountData[];
-  growthRollups: GrowthRollupData[];
-};
+export type DashboardHeaderData = CreatorHeroData;
 
 type OwnerDashboardViewProps = {
   headerData: DashboardHeaderData;

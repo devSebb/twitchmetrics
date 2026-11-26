@@ -9,6 +9,7 @@ import { getPlatformProfileUrl } from "@/lib/platform-profile-url";
 import { sortByPlatformOrder } from "@/lib/constants/platforms";
 import { InfoTip, PlatformIcon, SyncStatus } from "@/components/shared";
 import { CREATOR_HEADER_INFO } from "@/lib/constants/metric-info";
+import type { CreatorHeroData } from "@/lib/creator-hero";
 
 type PlatformAccountData = {
   platform: Platform;
@@ -27,23 +28,7 @@ type GrowthRollupData = {
 };
 
 export type CreatorHeaderProps = {
-  creator: {
-    id: string;
-    displayName: string;
-    slug: string;
-    avatarUrl: string | null;
-    bannerUrl: string | null;
-    bio: string | null;
-    country: string | null;
-    language: string | null;
-    age: number | null;
-    state: ProfileState;
-    primaryPlatform: Platform;
-    totalFollowers: string;
-    lastSnapshotAt: string | null;
-    platformAccounts: PlatformAccountData[];
-    growthRollups: GrowthRollupData[];
-  };
+  creator: CreatorHeroData;
   /** Owner-only action buttons (e.g. Customize, Share URL) rendered in the top-right corner. */
   ownerActions?: React.ReactNode;
   /** Hide the public-trust status badge (used on the owner's own dashboard, where it's tautological). */
