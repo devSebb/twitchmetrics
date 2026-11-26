@@ -25,6 +25,8 @@ export const GRID_COLUMNS = 12;
  * client-side (see server/services/profile-widget-availability.ts).
  */
 export type ProfileDataAvailability = {
+  /** False for a creator with no streaming channel and no stream on record. */
+  stats_row: boolean;
   popular_games: boolean;
   recent_streams: boolean;
   viewer_count: boolean;

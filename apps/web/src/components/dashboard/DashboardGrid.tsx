@@ -174,6 +174,8 @@ function hasContent(widgetId: WidgetId, ctx: ContentContext): boolean {
       return ctx.profile.platformAccounts.some(
         (account) => (serializedPlatformFollowerCount(account) ?? 0n) > 0n,
       );
+    case "stats_row":
+      return ctx.isOwner || (ctx.dataAvailability?.stats_row ?? true);
     case "popular_games":
     case "recent_streams":
     case "viewer_count":

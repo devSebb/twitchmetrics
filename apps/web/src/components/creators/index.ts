@@ -4,3 +4,4 @@ export { CreatorSortControls } from "./CreatorSortControls";
 export { CreatorViewToggle } from "./CreatorViewToggle";
 export { CreatorGrid } from "./CreatorGrid";
 export { CreatorList } from "./CreatorList";
+export { CreatorNavigationProvider } from "./CreatorNavigation";

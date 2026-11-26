@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useCreatorNavigation } from "./CreatorNavigation";
 import {
   type Platform,
   PLATFORM_CONFIG,
@@ -125,16 +126,16 @@ function SortableHeader({
   sortValue: "followers" | "trending";
   info: MetricInfo;
 }) {
-  const router = useRouter();
+  const { navigate, choice } = useCreatorNavigation();
   const searchParams = useSearchParams();
-  const current = searchParams.get("sort") ?? "followers";
+  const current = choice.sort ?? searchParams.get("sort") ?? "followers";
   const isActive = current === sortValue;
 
   function handleSelect() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("sort", sortValue);
     params.delete("page");
-    router.push(`/creators?${params.toString()}`);
+    navigate(`/creators?${params.toString()}`, { sort: sortValue });
   }
 
   return (

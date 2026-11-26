@@ -1,5 +1,6 @@
 import { Prisma, type Platform } from "@twitchmetrics/database";
 import { db } from "@/server/db";
+import { getLastCompleteStatsDay } from "@/server/services/creator-streaming-stats";
 import { DISCOVERABLE_CREATOR_SQL } from "@/server/services/creator-visibility";
 import { streamHatchetNamesForGame } from "@/server/services/streamhatchet/game-names";
 
@@ -19,9 +20,14 @@ import { streamHatchetNamesForGame } from "@/server/services/streamhatchet/game-
  * per-branch limit >= skip + take (we add slack for unlisted/merged rows
  * dropped by the discoverability join).
  *
- * Scores over the window (last 7 ingested days):
- *   viewership -> MAX(daily averageViewers)  (candidates by minutesWatched)
+ * Scores over the window (the same 30 complete days the list columns and
+ * /rankings cover; it was 7 days under a month-stamped title until the Stream
+ * Hatchet review of 2026-11-25):
+ *   viewership -> minutes watched / airtime  (candidates by minutesWatched),
+ *                 for creators with at least 10 hours on air in the window
  *   peak       -> MAX(daily peakViewers)     (candidates by peakViewers)
+ * A day on which a creator falls below the per-day candidate cut is not
+ * counted; the cut is deep enough that this does not move the first pages.
  * Game-filtered rankings use ChannelGameDailyRollup, one branch per spelling
  * SH used for the game (streamHatchetNamesForGame), i.e. "creators who
  * streamed this game recently".
@@ -48,18 +54,10 @@ export function hasViewershipData(platform: Platform | undefined | null) {
   return !platform || Boolean(SH_PLATFORM[platform]);
 }
 
-const RANKING_WINDOW_DAYS = 7;
+export const CREATOR_RANKING_WINDOW_DAYS = 30;
 const CANDIDATE_SLACK = 200;
-
-async function latestRollupDate(): Promise<Date | null> {
-  // Backward index-only scan on (source, platform, date, platformUserId).
-  const rows = await db.$queryRaw<Array<{ d: Date | null }>>(Prisma.sql`
-    SELECT MAX(date) AS d
-    FROM "ChannelDailyRollup"
-    WHERE source = 'streamhatchet' AND platform = 'twitch'
-  `);
-  return rows[0]?.d ?? null;
-}
+/** As /rankings: a creator needs this much airtime to rank by average viewers. */
+const AVG_MIN_AIRTIME_MINUTES = 600;
 
 export async function getViewershipRankedIds(opts: {
   sort: ViewershipSort;
@@ -75,11 +73,10 @@ export async function getViewershipRankedIds(opts: {
     : ALL_SH_PLATFORMS;
   if (shPlatforms.length === 0) return [];
 
-  const latest = await latestRollupDate();
-  if (!latest) return [];
+  const latest = await getLastCompleteStatsDay();
 
   const dates: string[] = [];
-  for (let i = 0; i < RANKING_WINDOW_DAYS; i += 1) {
+  for (let i = 0; i < CREATOR_RANKING_WINDOW_DAYS; i += 1) {
     const day = new Date(latest);
     day.setUTCDate(day.getUTCDate() - i);
     dates.push(day.toISOString().slice(0, 10));
@@ -115,7 +112,7 @@ export async function getViewershipRankedIds(opts: {
           fetchByPeak
             ? Prisma.sql`(
               SELECT "creatorProfileId", "minutesWatched" AS mw,
-                     "averageViewers" AS av, "peakViewers" AS pk
+                     "airtimeMinutes" AS air, "peakViewers" AS pk
               FROM ${table}
               WHERE platform = ${shPlatform}
                 AND date = ${date}::date
@@ -126,7 +123,7 @@ export async function getViewershipRankedIds(opts: {
             )`
             : Prisma.sql`(
               SELECT "creatorProfileId", "minutesWatched" AS mw,
-                     "averageViewers" AS av, "peakViewers" AS pk
+                     "airtimeMinutes" AS air, "peakViewers" AS pk
               FROM ${table}
               WHERE platform = ${shPlatform}
                 AND date = ${date}::date
@@ -142,22 +139,48 @@ export async function getViewershipRankedIds(opts: {
   if (branches.length === 0) return [];
 
   const scoreExpr =
-    opts.sort === "peak" ? Prisma.sql`MAX(c.pk)` : Prisma.sql`MAX(c.av)`;
+    opts.sort === "peak"
+      ? Prisma.sql`MAX(c.pk)`
+      : Prisma.sql`CASE WHEN SUM(c.air) >= ${AVG_MIN_AIRTIME_MINUTES}
+                        THEN SUM(c.mw)::float8 / SUM(c.air) END`;
+
+  // All platforms, no game: score the candidates from CreatorDailyRollup, the
+  // table the list columns read. It counts a simulcast's airtime once and
+  // holds every day of the window, so the order agrees with the Avg Viewers
+  // and Peak Viewers shown beside each name.
+  const ranked =
+    !opts.platform && !gameNames
+      ? Prisma.sql`
+      SELECT r."creatorProfileId" AS id,
+             ${
+               opts.sort === "peak"
+                 ? Prisma.sql`MAX(r."peakViewers")::float8`
+                 : Prisma.sql`CASE WHEN SUM(r."uniqueAirtimeMinutes") >= ${AVG_MIN_AIRTIME_MINUTES}
+                        THEN SUM(r."minutesWatched")::float8 / SUM(r."uniqueAirtimeMinutes") END`
+             } AS score,
+             SUM(r."minutesWatched") AS mw
+      FROM "CreatorDailyRollup" r
+      WHERE r."creatorProfileId" IN (
+              SELECT DISTINCT c."creatorProfileId" FROM candidates c
+            )
+        AND r.date BETWEEN ${dates[dates.length - 1]}::date AND ${dates[0]}::date
+      GROUP BY r."creatorProfileId"`
+      : Prisma.sql`
+      SELECT c."creatorProfileId" AS id, ${scoreExpr} AS score, SUM(c.mw) AS mw
+      FROM candidates c
+      GROUP BY c."creatorProfileId"`;
 
   const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     WITH candidates AS (
       ${Prisma.join(branches, " UNION ALL ")}
     ),
-    ranked AS (
-      SELECT c."creatorProfileId" AS id, ${scoreExpr} AS score, MAX(c.mw) AS mw
-      FROM candidates c
-      GROUP BY c."creatorProfileId"
-    )
+    ranked AS (${ranked})
     SELECT cp.id
     FROM ranked r
     JOIN "CreatorProfile" cp ON cp.id = r.id
     WHERE ${DISCOVERABLE_CREATOR_SQL}
-    ORDER BY r.score DESC NULLS LAST, r.mw DESC NULLS LAST
+      AND r.score IS NOT NULL
+    ORDER BY r.score DESC, r.mw DESC NULLS LAST
     LIMIT ${opts.take} OFFSET ${opts.skip}
   `);
 

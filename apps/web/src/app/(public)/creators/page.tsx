@@ -18,6 +18,7 @@ import {
 } from "@/server/services/creator-ranking";
 import {
   CreatorGameFilter,
+  CreatorNavigationProvider,
   CreatorPlatformPills,
   CreatorSortControls,
   CreatorViewToggle,
@@ -85,9 +86,12 @@ function monthStamp(): string {
 }
 
 /**
- * Month-stamped ranking titles matching the legacy twitchmetrics.net pattern
- * ("The Most Watched Twitch Streamers, August 2026") — the stamp regenerates
- * monthly as a freshness signal. Trending/recent keep the generic title.
+ * Ranking titles. Followers are the latest counts, so that title keeps the
+ * month stamp of the legacy twitchmetrics.net pattern ("The Most Followed
+ * Twitch Streamers, August 2026"). Viewership and peak cover the last 30
+ * complete days and say so: under a month stamp they read as a calendar-month
+ * ranking, which they are not (Stream Hatchet review, 2026-11-25).
+ * Trending/recent keep the generic title.
  */
 function rankingTitle(
   sort: SortOption,
@@ -95,6 +99,15 @@ function rankingTitle(
   game: GameFilter | null,
 ): string {
   if (sort === "trending" || sort === "recent") return "Top Creators";
+  // Instagram, TikTok and X have no viewership; the list falls back to
+  // followers there, and so does the title.
+  if (
+    platform &&
+    !STREAMING_PLATFORMS.has(platform) &&
+    (sort === "viewership" || sort === "peak")
+  ) {
+    sort = "followers";
+  }
   const subject = game
     ? `${game.name} Streamers`
     : platform
@@ -103,8 +116,8 @@ function rankingTitle(
         ? "Creators"
         : "Streamers";
   const stamp = monthStamp();
-  if (sort === "viewership") return `The Most Watched ${subject}, ${stamp}`;
-  if (sort === "peak") return `Top ${subject} by Peak Viewers, ${stamp}`;
+  if (sort === "viewership") return `The Most Watched ${subject}, Last 30 Days`;
+  if (sort === "peak") return `Top ${subject} by Peak Viewers, Last 30 Days`;
   return `The Most Followed ${subject}, ${stamp}`;
 }
 
@@ -262,32 +275,34 @@ export default async function CreatorsPage({ searchParams }: PageProps) {
             </span>
           </div>
 
-          <Suspense>
-            <div className="mb-6">
-              <CreatorPlatformPills />
-            </div>
-          </Suspense>
+          <CreatorNavigationProvider>
+            <Suspense>
+              <div className="mb-6">
+                <CreatorPlatformPills />
+              </div>
+            </Suspense>
 
-          <Suspense>
-            <div className="mb-8 flex flex-wrap items-center gap-4 border-y border-n-line py-5">
-              <CreatorViewToggle />
-              <CreatorGameFilter games={topGames} activeGame={game} />
-              <CreatorSortControls />
-            </div>
-          </Suspense>
+            <Suspense>
+              <div className="mb-8 flex flex-wrap items-center gap-4 border-y border-n-line py-5">
+                <CreatorViewToggle />
+                <CreatorGameFilter games={topGames} activeGame={game} />
+                <CreatorSortControls />
+              </div>
+            </Suspense>
 
-          <Suspense>
-            <CreatorGrid
-              initialData={initialCreators}
-              initialMeta={initialMeta}
-              initialFilters={{
-                platform: platform ?? "",
-                sort,
-                game: game?.slug ?? "",
-                page,
-              }}
-            />
-          </Suspense>
+            <Suspense>
+              <CreatorGrid
+                initialData={initialCreators}
+                initialMeta={initialMeta}
+                initialFilters={{
+                  platform: platform ?? "",
+                  sort,
+                  game: game?.slug ?? "",
+                  page,
+                }}
+              />
+            </Suspense>
+          </CreatorNavigationProvider>
         </Container>
       </div>
     </AppearanceProvider>

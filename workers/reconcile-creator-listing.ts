@@ -1,6 +1,17 @@
 /**
- * Incrementally promotes Stream Hatchet creator profiles that now satisfy the
- * public catalog admission rule (at least two active days in the last 30).
+ * Incrementally promotes creator profiles that now satisfy the public catalog
+ * admission rule: at least two active days in the last 30 in Stream Hatchet's
+ * data, or at least 1,000,000 total followers.
+ *
+ * It covers profiles born from the Stream Hatchet catalog and those our own
+ * Twitch discovery created. Discovery used to list a channel the moment it
+ * was seen live, so "Recently added" filled with channels that had no history
+ * at all, many of them spam (Stream Hatchet review, 2026-11-25); they now
+ * wait here for Stream Hatchet to confirm them.
+ *
+ * The follower rule lists a large creator who streams rarely: MrBeast (800M)
+ * and Katy Perry (367M) were hidden by the activity rule alone.
+ *
  * Listing is monotonic: this worker never demotes an established creator.
  *
  * Dry-run is the default. Useful options:
@@ -31,6 +42,9 @@ function integerArg(
   if (!Number.isInteger(value)) return fallback;
   return Math.min(options.maximum, Math.max(options.minimum, value));
 }
+
+/** Total followers that list a profile whatever its streaming activity. */
+const LISTED_BY_FOLLOWERS = 1_000_000n;
 
 const write = args.includes("--write");
 const batchSize = integerArg("--batch-size", 1_000, {
@@ -75,14 +89,14 @@ async function main() {
     const take = limit === 0 ? batchSize : Math.min(batchSize, limit - scanned);
     const profiles = await prisma.creatorProfile.findMany({
       where: {
-        catalogSource: "streamhatchet",
+        catalogSource: { in: ["streamhatchet", "twitch_api"] },
         listed: false,
         mergedIntoId: null,
       },
       orderBy: { id: "asc" },
       take,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: { id: true },
+      select: { id: true, totalFollowers: true },
     });
     if (profiles.length === 0) break;
 
@@ -105,9 +119,13 @@ async function main() {
       activeDates.set(row.creatorProfileId, dates);
     }
 
-    const qualifiedIds = ids.filter(
-      (id) => (activeDates.get(id)?.size ?? 0) >= 2,
-    );
+    const qualifiedIds = profiles
+      .filter(
+        (profile) =>
+          (activeDates.get(profile.id)?.size ?? 0) >= 2 ||
+          profile.totalFollowers >= LISTED_BY_FOLLOWERS,
+      )
+      .map((profile) => profile.id);
     if (write && qualifiedIds.length > 0) {
       const result = await prisma.creatorProfile.updateMany({
         where: {

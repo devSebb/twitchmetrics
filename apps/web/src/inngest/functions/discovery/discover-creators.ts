@@ -165,10 +165,14 @@ export const discoverCreators = inngest.createFunction(
                   primaryPlatform: "twitch",
                   state: "unclaimed",
                   snapshotTier: tierFromViewers(stream.viewerCount),
-                  totalFollowers: BigInt(stream.viewerCount * 10), // proxy until snapshot cron fills real value
+                  // No follower count until a snapshot reads the real one:
+                  // viewers x 10 was shown on the site as if it were real.
+                  totalFollowers: 0n,
                   searchText: `${displayName} ${login}`.toLowerCase(),
                   catalogSource: "twitch_api",
-                  listed: true,
+                  // Listed by workers/reconcile-creator-listing.ts once
+                  // Stream Hatchet has two active days for the channel.
+                  listed: false,
                   platformAccounts: {
                     create: {
                       platform: "twitch",

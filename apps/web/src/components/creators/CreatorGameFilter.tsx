@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useCreatorNavigation } from "./CreatorNavigation";
 
 type GameOption = { slug: string; name: string };
 
@@ -17,9 +18,9 @@ export function CreatorGameFilter({
   games: GameOption[];
   activeGame: GameOption | null;
 }) {
-  const router = useRouter();
+  const { navigate, choice } = useCreatorNavigation();
   const searchParams = useSearchParams();
-  const active = activeGame?.slug ?? "";
+  const active = choice.game ?? activeGame?.slug ?? "";
 
   const options =
     activeGame && !games.some((game) => game.slug === activeGame.slug)
@@ -35,7 +36,7 @@ export function CreatorGameFilter({
     }
     params.delete("page");
     const next = params.toString();
-    router.push(next ? `/creators?${next}` : "/creators");
+    navigate(next ? `/creators?${next}` : "/creators", { game: value });
   }
 
   return (

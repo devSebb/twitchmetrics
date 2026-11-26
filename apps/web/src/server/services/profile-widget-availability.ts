@@ -29,13 +29,19 @@ export async function getProfileDataAvailability(
 ): Promise<ProfileDataAvailability> {
   const orTrue = (check: Promise<boolean>) => check.catch(() => true);
 
-  const [popular_games, recent_streams, viewer_count, follower_growth] =
-    await Promise.all([
-      orTrue(hasPopularGames(prisma, profile.id)),
-      orTrue(hasRecentStreams(prisma, profile)),
-      orTrue(hasViewerHistory(prisma, profile)),
-      orTrue(hasFollowerGrowth(prisma, profile)),
-    ]);
+  const [
+    stats_row,
+    popular_games,
+    recent_streams,
+    viewer_count,
+    follower_growth,
+  ] = await Promise.all([
+    orTrue(hasStreaming(prisma, profile)),
+    orTrue(hasPopularGames(prisma, profile.id)),
+    orTrue(hasRecentStreams(prisma, profile)),
+    orTrue(hasViewerHistory(prisma, profile)),
+    orTrue(hasFollowerGrowth(prisma, profile)),
+  ]);
 
   // Clips are Twitch-only (stored, else a live Twitch fetch). Without a
   // Twitch account the widget is always empty; with one it stays
@@ -46,12 +52,44 @@ export async function getProfileDataAvailability(
   );
 
   return {
+    stats_row,
     popular_games,
     recent_streams,
     viewer_count,
     follower_growth,
     featured_clips,
   };
+}
+
+const STREAMING_PLATFORMS: Platform[] = ["twitch", "youtube", "kick"];
+
+// The Stats Row is streaming performance. A creator who came in from Stream
+// Hatchet's social profiles (Ariana Grande: Instagram, X, TikTok and a linked
+// YouTube channel that never goes live) has none, and the row only said "No
+// streams in this period". A tracked streaming channel keeps the row, as does
+// any stream on record for a linked one.
+async function hasStreaming(
+  prisma: PrismaClient,
+  profile: {
+    id: string;
+    platformAccounts: { platform: Platform; discoverySource?: string | null }[];
+  },
+): Promise<boolean> {
+  const tracked = profile.platformAccounts.some(
+    (account) =>
+      STREAMING_PLATFORMS.includes(account.platform) &&
+      !account.discoverySource,
+  );
+  if (tracked) return true;
+  const where = streamHatchetIdentityWhere(
+    await getStreamHatchetAccounts(prisma, profile.id),
+  );
+  if (where.length === 0) return false;
+  const session = await prisma.streamSessionFact.findFirst({
+    where: { OR: where },
+    select: { id: true },
+  });
+  return session !== null;
 }
 
 async function hasPopularGames(

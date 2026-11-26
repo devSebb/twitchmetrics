@@ -1,10 +1,11 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { SquaresFour } from "@phosphor-icons/react/dist/ssr";
 import type { Platform } from "@twitchmetrics/database";
 import { cn } from "@/lib/utils";
 import { PlatformIcon } from "@/components/shared";
+import { useCreatorNavigation } from "./CreatorNavigation";
 
 type PillValue = "" | Platform;
 
@@ -19,9 +20,10 @@ const PILLS: { label: string; value: PillValue }[] = [
 ];
 
 export function CreatorPlatformPills() {
-  const router = useRouter();
+  const { navigate, choice } = useCreatorNavigation();
   const searchParams = useSearchParams();
-  const active = searchParams.get("platform") ?? "";
+  // The clicked pill is selected at once, before the new list arrives.
+  const active = choice.platform ?? searchParams.get("platform") ?? "";
 
   function handleSelect(value: PillValue) {
     const params = new URLSearchParams(searchParams.toString());
@@ -32,7 +34,7 @@ export function CreatorPlatformPills() {
     }
     params.delete("page");
     const next = params.toString();
-    router.push(next ? `/creators?${next}` : "/creators");
+    navigate(next ? `/creators?${next}` : "/creators", { platform: value });
   }
 
   return (

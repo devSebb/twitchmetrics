@@ -1,7 +1,8 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useCreatorNavigation } from "./CreatorNavigation";
 
 type SortValue = "followers" | "viewership" | "peak" | "trending" | "recent";
 
@@ -15,11 +16,13 @@ const SORTS: { label: string; value: SortValue }[] = [
 
 const TIMEFRAME: Record<SortValue, string> = {
   followers: "Latest snapshots",
-  viewership: "Avg viewers, last 7 days",
-  peak: "Peak viewers, last 7 days",
+  viewership: "Avg viewers, last 30 days",
+  peak: "Peak viewers, last 30 days",
   trending: "Last 7 days",
   recent: "Recently added",
 };
+
+const SOCIAL_PLATFORMS = new Set(["instagram", "tiktok", "x"]);
 
 function isSortValue(value: string | null): value is SortValue {
   return (
@@ -32,23 +35,33 @@ function isSortValue(value: string | null): value is SortValue {
 }
 
 export function CreatorSortControls() {
-  const router = useRouter();
+  const { navigate, choice } = useCreatorNavigation();
   const searchParams = useSearchParams();
-  const param = searchParams.get("sort");
-  const currentSort: SortValue = isSortValue(param) ? param : "followers";
+  const param = choice.sort ?? searchParams.get("sort");
+  // Instagram, TikTok and X have no viewership to sort by: the two buttons
+  // are not offered there and an old link falls back to followers.
+  const platform = choice.platform ?? searchParams.get("platform") ?? "";
+  const isSocial = SOCIAL_PLATFORMS.has(platform);
+  const sorts = isSocial
+    ? SORTS.filter((s) => s.value !== "viewership" && s.value !== "peak")
+    : SORTS;
+  const requested: SortValue = isSortValue(param) ? param : "followers";
+  const currentSort: SortValue = sorts.some((s) => s.value === requested)
+    ? requested
+    : "followers";
   const status = TIMEFRAME[currentSort];
 
   function handleSelect(value: SortValue) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("sort", value);
     params.delete("page");
-    router.push(`/creators?${params.toString()}`);
+    navigate(`/creators?${params.toString()}`, { sort: value });
   }
 
   return (
     <div className="flex min-w-0 basis-full flex-wrap items-center justify-between gap-3 lg:flex-1">
       <div className="flex max-w-full flex-wrap gap-1 rounded-md bg-n-canvas p-0.5">
-        {SORTS.map((s) => {
+        {sorts.map((s) => {
           const isActive = currentSort === s.value;
           return (
             <button

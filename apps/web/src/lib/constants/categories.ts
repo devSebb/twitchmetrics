@@ -40,7 +40,6 @@ export const NON_GAME_CATEGORIES: Record<string, Vertical> = {
   "Writing & Reading": "creative",
   "Tabletop RPGs": "creative",
   "Dungeons & Dragons": "creative",
-  "Magic: The Gathering": "creative",
   Sports: "sports",
   Chess: "sports",
   Poker: "sports",

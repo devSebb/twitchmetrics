@@ -892,6 +892,23 @@ type SocialAccountCreate = {
   lastSyncedAt: Date;
 };
 
+const SUSPECT_LINK_MIN_REACH = 1_000_000;
+const SUSPECT_LINK_RATIO = 100;
+
+/** True when two handles share four consecutive letters or digits. */
+function handlesOverlap(a: string | null, b: string | null): boolean {
+  const norm = (value: string | null) =>
+    (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return false;
+  if (x.length < 4 || y.length < 4) return x === y;
+  for (let i = 0; i + 4 <= x.length; i++) {
+    if (y.includes(x.slice(i, i + 4))) return true;
+  }
+  return false;
+}
+
 function reachToBigInt(reach: number | null): bigint | null {
   if (reach == null || !Number.isFinite(reach)) return null;
   return BigInt(Math.max(0, Math.trunc(reach)));
@@ -930,6 +947,9 @@ async function attachSocialLinks(
   const targets: AttachTarget[] = [];
   const otherChannels: OtherChannelAssignments = new Map();
   const sharedContactProfiles = new Set<string>();
+  const rejectedLinks: string[] = [
+    "contact_id,creator_profile_id,own_channels,own_largest,platform,rejected_handle,rejected_followers",
+  ];
   for (const group of groups) {
     assignContactChannels(
       otherChannels,
@@ -971,11 +991,55 @@ async function attachSocialLinks(
         });
       }
     }
+    // Stream Hatchet sometimes groups a stranger's account with a creator:
+    // its contact for the small YouTube channel "Adobe Basics" also holds
+    // @instagram (686M), which put Adobe Basics on top of the Instagram tab
+    // (team review, 2026-11-25). A link is suspect when it is at least
+    // SUSPECT_LINK_MIN_REACH, over SUSPECT_LINK_RATIO times the creator's own
+    // largest channel, and its handle shares nothing with the creator's own
+    // handles. One suspect link drops every link of the contact that fails
+    // the name test, so the stranger's smaller accounts do not stay behind.
+    const own = group.members.filter((m) => m.in_catalog);
+    const ownMax = Math.max(1, ...own.map((m) => m.reach ?? 0));
+    const resembles = (link: SocialLink) =>
+      own.some((m) => handlesOverlap(link.username, m.username));
+    const links = [...bestByPlatform.values()];
+    const suspect = links.some(
+      (link) =>
+        (link.reach ?? 0) >= SUSPECT_LINK_MIN_REACH &&
+        (link.reach ?? 0) > SUSPECT_LINK_RATIO * ownMax &&
+        !resembles(link),
+    );
+    const kept = suspect ? links.filter(resembles) : links;
+    if (suspect) {
+      for (const link of links) {
+        if (kept.includes(link)) continue;
+        rejectedLinks.push(
+          [
+            group.contact_id,
+            canonicalId,
+            own.map((m) => m.username ?? "").join(" / "),
+            ownMax,
+            link.platform,
+            link.username ?? "",
+            link.reach ?? "",
+          ]
+            .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+            .join(","),
+        );
+      }
+    }
     targets.push({
       canonicalId,
-      links: [...bestByPlatform.values()],
+      links: kept,
     });
   }
+  const rejectedPath = `${config.workDir}/rejected-links.csv`;
+  writeFileSync(rejectedPath, rejectedLinks.join("\n"));
+  log("info", "Links rejected as another person's account", {
+    links: rejectedLinks.length - 1,
+    file: rejectedPath,
+  });
   const linkTargetIds = new Set(targets.map((t) => t.canonicalId));
   let otherChannelsOnlyProfiles = 0;
   for (const canonicalId of sharedContactProfiles) {

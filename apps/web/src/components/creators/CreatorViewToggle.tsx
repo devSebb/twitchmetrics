@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useCreatorNavigation } from "./CreatorNavigation";
 import { SquaresFour, List } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +17,9 @@ function isViewValue(value: string | null): value is ViewValue {
 }
 
 export function CreatorViewToggle() {
-  const router = useRouter();
+  const { navigate, choice } = useCreatorNavigation();
   const searchParams = useSearchParams();
-  const param = searchParams.get("view");
+  const param = choice.view ?? searchParams.get("view");
   const current: ViewValue = isViewValue(param) ? param : "grid";
 
   function handleSelect(value: ViewValue) {
@@ -31,7 +32,7 @@ export function CreatorViewToggle() {
     }
     params.delete("page");
     const next = params.toString();
-    router.push(next ? `/creators?${next}` : "/creators");
+    navigate(next ? `/creators?${next}` : "/creators", { view: value });
   }
 
   return (
