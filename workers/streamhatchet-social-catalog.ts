@@ -379,9 +379,14 @@ function shape(row: PlanRow): Shaped | null {
   const social = row.members.filter((m) => QUALIFYING.includes(m.platform));
   const primary = social[0];
   if (!primary) return null;
+  // A name with no letter or digit ("👑" for @kingjames) is not a name.
+  const named = (value: string | null | undefined) => {
+    const text = clean(value, 120);
+    return text && /[\p{L}\p{N}]/u.test(text) ? text : null;
+  };
   const displayName =
-    clean(row.contact_name, 120) ??
-    clean(primary.display_name, 120) ??
+    named(row.contact_name) ??
+    named(primary.display_name) ??
     clean(primary.username, 120);
   if (!displayName) return null;
   const avatarUrl =
