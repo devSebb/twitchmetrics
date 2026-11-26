@@ -77,6 +77,15 @@ export type GameSeries = {
    * viewers are its average for the day and not a reading (fillOutageDays).
    */
   estimated?: Partial<Record<SeriesPlatform, SlotRun[]>>;
+  /**
+   * Per platform, the highest minute inside each slot, where the slot comes
+   * from Stream Hatchet's per-minute game file (applyGameFile); null where it
+   * is a reading. A slot's value is its 30-minute mean, which is right for
+   * the averages and too low for a peak.
+   */
+  peaks?: Partial<Record<SeriesPlatform, Values>>;
+  /** The highest minute of those platforms together, per slot. */
+  peakTotals?: Values;
 };
 
 export type SlotRun = [first: number, last: number];
@@ -287,6 +296,75 @@ export function fillOutageDays(
     : series;
 }
 
+/** One 30-minute slot of one platform from the per-minute game file. */
+export type GameFileSlot = {
+  /** Mean of the slot's 30 minutes; a minute without data counts as 0. */
+  viewers: number;
+  channels: number;
+  /** Highest minute of the slot. */
+  peak: number;
+};
+
+export type GameFileSlots = {
+  /** platform -> slot start (ms) -> values. Only days the file covers. */
+  platforms: Partial<Record<SeriesPlatform, ReadonlyMap<number, GameFileSlot>>>;
+  /** slot start (ms) -> highest minute of the file's platforms together. */
+  peakTotals: ReadonlyMap<number, number>;
+};
+
+/**
+ * Replaces the slots Stream Hatchet's per-minute game file covers with the
+ * file's values. The file is the day as Stream Hatchet BI shows it: every
+ * channel, every minute. Our own readings are one sample per 30 minutes, so
+ * they miss a peak between two samples and a day's average drifts by a few
+ * percent. Slots the file does not cover (today, a game too small to have a
+ * series, a platform not switched yet) keep their readings.
+ */
+export function applyGameFile(
+  series: GameSeries,
+  file: GameFileSlots,
+): GameSeries {
+  const slotStarts = series.slots.map((slot) => Date.parse(slot));
+  const viewers = { ...series.viewers };
+  const channels = { ...series.channels };
+  const peaks: NonNullable<GameSeries["peaks"]> = {};
+  let covered = false;
+
+  for (const platform of SERIES_PLATFORMS) {
+    const slots = file.platforms[platform];
+    if (!slots || slots.size === 0) continue;
+    const viewerValues =
+      viewers[platform]?.slice() ??
+      new Array<number | null>(slotStarts.length).fill(null);
+    const channelValues =
+      channels[platform]?.slice() ??
+      new Array<number | null>(slotStarts.length).fill(null);
+    const peakValues = new Array<number | null>(slotStarts.length).fill(null);
+    let any = false;
+    slotStarts.forEach((start, index) => {
+      const value = slots.get(start);
+      if (!value) return;
+      viewerValues[index] = Math.round(value.viewers);
+      channelValues[index] = Math.round(value.channels);
+      peakValues[index] = value.peak;
+      any = true;
+    });
+    if (!any) continue;
+    covered = true;
+    viewers[platform] = viewerValues;
+    channels[platform] = channelValues;
+    peaks[platform] = peakValues;
+  }
+  if (!covered) return series;
+  return {
+    ...series,
+    viewers,
+    channels,
+    peaks,
+    peakTotals: slotStarts.map((start) => file.peakTotals.get(start) ?? null),
+  };
+}
+
 export type SlotReading = {
   platform: SeriesPlatform;
   source: string;
@@ -447,13 +525,32 @@ export function summarizeGameSeries(series: GameSeries): GameSeriesSummary {
     return { rows, total: rows.reduce((sum, row) => sum + row.value, 0) };
   };
 
+  // Where a slot comes from the per-minute file, its peak is the highest
+  // minute, not the slot's mean.
   const peakRows: PlatformFigure[] = [];
+  const peakColumns: GameSeries["viewers"] = {};
   for (const platform of SERIES_PLATFORMS) {
     const values = readings[platform];
     if (!values) continue;
-    peakRows.push({ platform, value: highest(values, dayStart), since: null });
+    const filePeaks = series.peaks?.[platform];
+    const column = filePeaks
+      ? values.map((value, index) => filePeaks[index] ?? value)
+      : values;
+    peakColumns[platform] = column;
+    peakRows.push({ platform, value: highest(column, dayStart), since: null });
   }
-  const totals = columnTotals(readings, slotCount);
+  // All platforms together: the file's platforms at their highest minute
+  // together, plus the slot's reading of every other platform.
+  const totals = columnTotals(readings, slotCount).map((total, index) => {
+    const fileTotal = series.peakTotals?.[index];
+    if (fileTotal == null) return total;
+    let others = 0;
+    for (const platform of SERIES_PLATFORMS) {
+      if (series.peaks?.[platform]?.[index] != null) continue;
+      others += readings[platform]?.[index] ?? 0;
+    }
+    return fileTotal + others;
+  });
 
   return {
     avgViewers: averages(series.viewers),

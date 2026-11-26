@@ -30,6 +30,8 @@
 #   4. CreatorDailyRollup for the window, every platform merged;
 #   4b. the published rankings (/rankings, RankingEntry), which read the
 #      creator, channel and game rollups of the last 60 days;
+#   4c. Stream Hatchet's own daily aggregates (profile_game and the games'
+#      per-minute file), into the Sh* tables the game pages read;
 #   5. a read-only health check over what is actually in the database. It does
 #      not trust any run's own status, so a hung job still turns this red.
 #
@@ -137,6 +139,22 @@ jobs:
       # run leaves yesterday's rankings on the site.
       - name: Build rankings
         run: npx tsx workers/build-rankings.ts --write
+
+      # Stream Hatchet's own daily aggregates (channel x game per day, game per
+      # minute), into the Sh* tables: what BI itself shows. Their files land at
+      # ~00:30 and ~03:10 UTC. Last, so a failure here leaves the session
+      # pipeline above complete; a day already imported is skipped.
+      - name: Install DuckDB CLI
+        run: |
+          # Pinned and retried, as in sh-follower-freshness.yml.
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+            https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip
+          sudo unzip -o /tmp/duckdb.zip -d /usr/local/bin
+          duckdb --version
+      - name: Stream Hatchet profile files (last N days)
+        run: |
+          npx tsx workers/streamhatchet-profile-game.ts \
+            --days "$DAYS" --profile "" --write
 
       - name: Health check
         if: ${{ always() }}

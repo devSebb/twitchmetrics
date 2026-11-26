@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyGameFile,
+  type GameFileSlot,
   buildGameSeries,
   columnTotals,
   dailyAverageKey,
@@ -405,5 +407,57 @@ describe("slotTotals", () => {
       totalViewers: 80,
       totalChannels: 3,
     });
+  });
+});
+
+describe("applyGameFile", () => {
+  // Three slots; the file covers the first two for Twitch only.
+  const series = {
+    slots: [0, 1, 2].map((index) => slot(index).toISOString()),
+    viewers: { twitch: [100, 100, 100], youtube: [10, 10, 10] },
+    channels: { twitch: [5, 5, 5], youtube: [1, 1, 1] },
+  };
+  const fileSlot = (viewers: number, peak: number): GameFileSlot => ({
+    viewers,
+    channels: 8,
+    peak,
+  });
+  const file = {
+    platforms: {
+      twitch: new Map([
+        [slot(0).getTime(), fileSlot(120.4, 300)],
+        [slot(1).getTime(), fileSlot(80, 90)],
+      ]),
+    },
+    peakTotals: new Map([
+      [slot(0).getTime(), 300],
+      [slot(1).getTime(), 90],
+    ]),
+  };
+
+  it("takes the file's slots and keeps readings where it has none", () => {
+    const applied = applyGameFile(series, file);
+    expect(applied.viewers.twitch).toEqual([120, 80, 100]);
+    expect(applied.channels.twitch).toEqual([8, 8, 5]);
+    expect(applied.viewers.youtube).toEqual([10, 10, 10]);
+    expect(applied.peaks?.twitch).toEqual([300, 90, null]);
+    expect(applied.peakTotals).toEqual([300, 90, null]);
+  });
+
+  it("returns the series untouched when the file covers nothing", () => {
+    const none = { platforms: {}, peakTotals: new Map<number, number>() };
+    expect(applyGameFile(series, none)).toBe(series);
+  });
+
+  it("averages from the slot means, peaks from the highest minute", () => {
+    const summary = summarizeGameSeries(applyGameFile(series, file));
+    const twitch = summary.avgViewers.rows.find((r) => r.platform === "twitch");
+    expect(twitch?.value).toBe(100);
+    const peak = summary.peakViewers24h.rows.find(
+      (r) => r.platform === "twitch",
+    );
+    expect(peak?.value).toBe(300);
+    // The file's highest minute plus YouTube's reading for that slot.
+    expect(summary.peakViewers).toBe(310);
   });
 });
