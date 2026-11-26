@@ -96,6 +96,7 @@ import {
   otherChannelsFollowers,
   type OtherChannelAssignments,
 } from "../apps/web/src/server/services/streamhatchet/other-channels";
+import { findStrangers } from "../apps/web/src/server/services/streamhatchet/contact-strangers";
 
 const args = process.argv.slice(2);
 const BUCKET = "streamhatchet-social-profiles-data";
@@ -147,6 +148,11 @@ type Config = {
   // creators. Needs a fresh (6-platform) extract — do NOT pass --skip-extract
   // against a parquet that was extracted before social platforms were included.
   socialLinks: boolean;
+  // With --social-links: also delete links attached on an earlier run that
+  // the wrong-grouping test now rejects. Off by default, because the test
+  // also rejects some genuine accounts under another handle; review
+  // rejected-links.csv (attached_before = yes) first.
+  removeRejectedLinks: boolean;
   // Recurring freshness mode: refresh twitch/youtube/kick followerCounts from
   // the export's reach for accounts the API tier crons never touch.
   refreshFollowers: boolean;
@@ -183,6 +189,7 @@ function parseConfig(): Config {
     bioMaxLen: parsePositiveInt(argValue("--bio-max-len"), 500),
     skipExtract: args.includes("--skip-extract"),
     socialLinks: args.includes("--social-links"),
+    removeRejectedLinks: args.includes("--remove-rejected-links"),
     refreshFollowers: args.includes("--refresh-followers"),
     demographics: args.includes("--demographics"),
   };
@@ -332,12 +339,20 @@ async function exportOurAccounts(config: Config): Promise<number> {
   const pageSize = 50_000;
   let cursor: string | null = null;
   let total = 0;
-  const lines: string[] = ["platform,user_id,creator_profile_id"];
+  // link_only: an account this job attached itself (--social-links), which
+  // the wrong-grouping test must not take for the creator's own channel.
+  // via_merge: an account sitting on a merged-away profile, shown here under
+  // the profile it was merged into.
+  const lines: string[] = [
+    "platform,user_id,creator_profile_id,link_only,via_merge",
+  ];
   for (;;) {
     const rows: {
       id: string;
       platform: Platform;
       platformUserId: string;
+      discoverySource: string | null;
+      isOAuthConnected: boolean;
       creatorProfile: {
         id: string;
         mergedIntoId: string | null;
@@ -348,6 +363,8 @@ async function exportOurAccounts(config: Config): Promise<number> {
         id: true,
         platform: true,
         platformUserId: true,
+        discoverySource: true,
+        isOAuthConnected: true,
         creatorProfile: {
           select: {
             id: true,
@@ -366,7 +383,9 @@ async function exportOurAccounts(config: Config): Promise<number> {
         ? `"${r.platformUserId.replace(/"/g, '""')}"`
         : r.platformUserId;
       lines.push(
-        `${r.platform},${uid},${canonicalProfileId(r.creatorProfile)}`,
+        `${r.platform},${uid},${canonicalProfileId(r.creatorProfile)},${
+          r.discoverySource === DISCOVERY_SOURCE && !r.isOAuthConnected ? 1 : 0
+        },${r.creatorProfile.mergedIntoId ? 1 : 0}`,
       );
     }
     total += rows.length;
@@ -421,6 +440,10 @@ type PlanMember = {
   username: string | null;
   raw_url: string | null;
   in_catalog: boolean;
+  /** Ours, but only as a link attached by --social-links. */
+  link_only: boolean;
+  /** Ours through a merged-away profile, not on the creator's own. */
+  via_merge: boolean;
   creator_profile_id: string | null;
   reach: number | null;
 };
@@ -439,7 +462,8 @@ async function buildPlan(config: Config): Promise<PlanGroup[]> {
   const path = `${config.workDir}/plan.json`;
   const sql = `
     CREATE TEMP TABLE acc AS
-      SELECT platform, CAST(user_id AS VARCHAR) AS user_id, creator_profile_id
+      SELECT platform, CAST(user_id AS VARCHAR) AS user_id, creator_profile_id,
+             (link_only = '1') AS link_only, (via_merge = '1') AS via_merge
       FROM read_csv('${config.workDir}/accounts.csv', header=true, all_varchar=true);
     CREATE TEMP TABLE sp AS
       SELECT * FROM read_parquet('${config.workDir}/sp.parquet');
@@ -453,7 +477,8 @@ async function buildPlan(config: Config): Promise<PlanGroup[]> {
     -- every sibling profile of those contacts, tagged with our profile id when known
     CREATE TEMP TABLE members AS
       SELECT sp.contact_id, sp.platform, sp.user_id, sp.username, sp.raw_url, sp.reach,
-             acc.creator_profile_id
+             acc.creator_profile_id, COALESCE(acc.link_only, false) AS link_only,
+             COALESCE(acc.via_merge, false) AS via_merge
       FROM sp JOIN coi USING (contact_id)
       LEFT JOIN acc ON acc.platform = sp.platform AND acc.user_id = sp.user_id;
 
@@ -470,6 +495,8 @@ async function buildPlan(config: Config): Promise<PlanGroup[]> {
             username := username,
             raw_url := raw_url,
             in_catalog := (creator_profile_id IS NOT NULL),
+            link_only := link_only,
+            via_merge := via_merge,
             creator_profile_id := creator_profile_id,
             reach := reach
           )) AS members
@@ -892,21 +919,58 @@ type SocialAccountCreate = {
   lastSyncedAt: Date;
 };
 
-const SUSPECT_LINK_MIN_REACH = 1_000_000;
-const SUSPECT_LINK_RATIO = 100;
-
-/** True when two handles share four consecutive letters or digits. */
-function handlesOverlap(a: string | null, b: string | null): boolean {
-  const norm = (value: string | null) =>
-    (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  const x = norm(a);
-  const y = norm(b);
-  if (!x || !y) return false;
-  if (x.length < 4 || y.length < 4) return x === y;
-  for (let i = 0; i + 4 <= x.length; i++) {
-    if (y.includes(x.slice(i, i + 4))) return true;
+/**
+ * With --remove-rejected-links: takes off links this job attached on an
+ * earlier run and now rejects as another person's, with the follower history it wrote for them. Only
+ * link-only rows of this job; a tracked or OAuth account is never touched.
+ * Totals of the profiles concerned are recomputed.
+ */
+async function removeStaleLinks(
+  links: {
+    creatorProfileId: string;
+    platform: Platform;
+    platformUserId: string;
+  }[],
+  config: Config,
+): Promise<void> {
+  if (!config.write || !config.removeRejectedLinks || links.length === 0)
+    return;
+  let removed = 0;
+  const profileIds = new Set<string>();
+  for (const link of links) {
+    const where = {
+      creatorProfileId: link.creatorProfileId,
+      platform: link.platform,
+      platformUserId: link.platformUserId,
+      discoverySource: DISCOVERY_SOURCE,
+      isOAuthConnected: false,
+    };
+    const res = await withRetry<{ count: number }>(() =>
+      prisma.platformAccount.deleteMany({ where }),
+    );
+    if (res.count === 0) continue;
+    removed += res.count;
+    profileIds.add(link.creatorProfileId);
+    await withRetry(() =>
+      prisma.metricSnapshot.deleteMany({
+        where: {
+          creatorProfileId: link.creatorProfileId,
+          platform: link.platform,
+          extendedMetrics: {
+            path: ["SOURCE"],
+            equals: SOCIAL_LINKS_SNAPSHOT_SOURCE,
+          },
+        },
+      }),
+    );
   }
-  return false;
+  const ids = [...profileIds];
+  for (let i = 0; i < ids.length; i += READ_CHUNK) {
+    await withRetry(() =>
+      recomputeCreatorAggregatesMany(ids.slice(i, i + READ_CHUNK)),
+    );
+  }
+  log("info", "Links attached before and now rejected: removed", { removed });
 }
 
 function reachToBigInt(reach: number | null): bigint | null {
@@ -948,12 +1012,32 @@ async function attachSocialLinks(
   const otherChannels: OtherChannelAssignments = new Map();
   const sharedContactProfiles = new Set<string>();
   const rejectedLinks: string[] = [
-    "contact_id,creator_profile_id,own_channels,own_largest,platform,rejected_handle,rejected_followers",
+    "contact_id,creator_profile_id,own_channels,own_largest,rule,platform,rejected_handle,rejected_followers,attached_before",
   ];
+  const staleLinks: {
+    creatorProfileId: string;
+    platform: Platform;
+    platformUserId: string;
+  }[] = [];
   for (const group of groups) {
+    // Stream Hatchet sometimes groups a stranger's accounts with a creator
+    // (contact-strangers.ts). They are left out of the links and of the
+    // other-channels total alike.
+    const { strangers, reason, ownMax } = findStrangers(
+      group.members.map((m) => ({
+        platform: m.platform,
+        username: m.username,
+        reach: m.reach,
+        tracked: m.in_catalog && !m.link_only && !m.via_merge,
+        member: m,
+      })),
+      group.name,
+    );
+    const strangerMembers = new Set(strangers.map((s) => s.member));
+    const members = group.members.filter((m) => !strangerMembers.has(m));
     assignContactChannels(
       otherChannels,
-      group.members.map((m) => ({
+      members.map((m) => ({
         platform: m.platform,
         userId: m.user_id,
         reach: m.reach,
@@ -963,11 +1047,42 @@ async function attachSocialLinks(
     );
     const canonicalIds = [
       ...new Set(
-        group.members
+        members
           .filter((m) => m.in_catalog && m.creator_profile_id)
           .map((m) => m.creator_profile_id as string),
       ),
     ];
+    if (reason) {
+      const ownHandles = group.members
+        .filter((m) => m.in_catalog && !m.link_only && !m.via_merge)
+        .map((m) => m.username ?? "")
+        .join(" / ");
+      for (const m of strangerMembers) {
+        rejectedLinks.push(
+          [
+            group.contact_id,
+            canonicalIds.join(" / "),
+            ownHandles,
+            ownMax,
+            reason,
+            m.platform,
+            m.username ?? "",
+            m.reach ?? "",
+            m.link_only ? "yes" : "",
+          ]
+            .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+            .join(","),
+        );
+        // A link attached before this test existed comes off the profile.
+        if (m.link_only && m.creator_profile_id && m.user_id) {
+          staleLinks.push({
+            creatorProfileId: m.creator_profile_id,
+            platform: m.platform as Platform,
+            platformUserId: m.user_id,
+          });
+        }
+      }
+    }
     // Post-merge, a contact maps to exactly one canonical. If not (a merge was
     // skipped), don't guess which creator owns the socials: no links, only
     // the other-channels pass below.
@@ -978,7 +1093,7 @@ async function attachSocialLinks(
     const canonicalId = canonicalIds[0]!;
 
     const bestByPlatform = new Map<string, SocialLink>();
-    for (const m of group.members) {
+    for (const m of members) {
       if (!socialSet.has(m.platform) || !m.user_id) continue;
       const prev = bestByPlatform.get(m.platform);
       if (!prev || (m.reach ?? 0) > (prev.reach ?? 0)) {
@@ -991,55 +1106,19 @@ async function attachSocialLinks(
         });
       }
     }
-    // Stream Hatchet sometimes groups a stranger's account with a creator:
-    // its contact for the small YouTube channel "Adobe Basics" also holds
-    // @instagram (686M), which put Adobe Basics on top of the Instagram tab
-    // (team review, 2026-11-25). A link is suspect when it is at least
-    // SUSPECT_LINK_MIN_REACH, over SUSPECT_LINK_RATIO times the creator's own
-    // largest channel, and its handle shares nothing with the creator's own
-    // handles. One suspect link drops every link of the contact that fails
-    // the name test, so the stranger's smaller accounts do not stay behind.
-    const own = group.members.filter((m) => m.in_catalog);
-    const ownMax = Math.max(1, ...own.map((m) => m.reach ?? 0));
-    const resembles = (link: SocialLink) =>
-      own.some((m) => handlesOverlap(link.username, m.username));
-    const links = [...bestByPlatform.values()];
-    const suspect = links.some(
-      (link) =>
-        (link.reach ?? 0) >= SUSPECT_LINK_MIN_REACH &&
-        (link.reach ?? 0) > SUSPECT_LINK_RATIO * ownMax &&
-        !resembles(link),
-    );
-    const kept = suspect ? links.filter(resembles) : links;
-    if (suspect) {
-      for (const link of links) {
-        if (kept.includes(link)) continue;
-        rejectedLinks.push(
-          [
-            group.contact_id,
-            canonicalId,
-            own.map((m) => m.username ?? "").join(" / "),
-            ownMax,
-            link.platform,
-            link.username ?? "",
-            link.reach ?? "",
-          ]
-            .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-            .join(","),
-        );
-      }
-    }
     targets.push({
       canonicalId,
-      links: kept,
+      links: [...bestByPlatform.values()],
     });
   }
   const rejectedPath = `${config.workDir}/rejected-links.csv`;
   writeFileSync(rejectedPath, rejectedLinks.join("\n"));
-  log("info", "Links rejected as another person's account", {
-    links: rejectedLinks.length - 1,
+  log("info", "Accounts rejected as another person's", {
+    accounts: rejectedLinks.length - 1,
+    attachedBefore: staleLinks.length,
     file: rejectedPath,
   });
+  await removeStaleLinks(staleLinks, config);
   const linkTargetIds = new Set(targets.map((t) => t.canonicalId));
   let otherChannelsOnlyProfiles = 0;
   for (const canonicalId of sharedContactProfiles) {
