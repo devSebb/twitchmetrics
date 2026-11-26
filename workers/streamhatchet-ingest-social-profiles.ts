@@ -153,6 +153,10 @@ type Config = {
   // also rejects some genuine accounts under another handle; review
   // rejected-links.csv (attached_before = yes) first.
   removeRejectedLinks: boolean;
+  // Limit the merge+enrich or --social-links run to these Stream Hatchet
+  // contact ids (comma separated). The merge mode is hard to undo and some
+  // contacts group unrelated creators, so merge a reviewed list, not all.
+  contactIds: Set<number> | null;
   // Recurring freshness mode: refresh twitch/youtube/kick followerCounts from
   // the export's reach for accounts the API tier crons never touch.
   refreshFollowers: boolean;
@@ -190,6 +194,14 @@ function parseConfig(): Config {
     skipExtract: args.includes("--skip-extract"),
     socialLinks: args.includes("--social-links"),
     removeRejectedLinks: args.includes("--remove-rejected-links"),
+    contactIds: argValue("--contact-ids")
+      ? new Set(
+          (argValue("--contact-ids") as string)
+            .split(",")
+            .map((v) => Number.parseInt(v.trim(), 10))
+            .filter((v) => Number.isFinite(v)),
+        )
+      : null,
     refreshFollowers: args.includes("--refresh-followers"),
     demographics: args.includes("--demographics"),
   };
@@ -2249,7 +2261,15 @@ async function main() {
     extractContacts(config, snapshot);
   }
   await exportOurAccounts(config);
-  const plan = await buildPlan(config);
+  let plan = await buildPlan(config);
+  if (config.contactIds) {
+    const wanted = config.contactIds;
+    plan = plan.filter((g) => wanted.has(Number(g.contact_id)));
+    log("info", "Plan limited to --contact-ids", {
+      asked: wanted.size,
+      found: plan.length,
+    });
+  }
 
   if (config.socialLinks) {
     await attachSocialLinks(plan, config, snapshot);
