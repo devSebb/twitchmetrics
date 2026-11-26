@@ -197,17 +197,17 @@ model CreatorProfile {
   state        ProfileState @default(unclaimed)
   snapshotTier SnapshotTier @default(tier3)
 
-  displayName String
-  slug        String  @unique
-  avatarUrl   String? // populated by enrichment from platform CDN
+  displayName     String
+  slug            String  @unique
+  avatarUrl       String? // populated by enrichment from platform CDN
   customAvatarUrl String? // user-uploaded; last-resort fallback for creators with no platforms
-  bannerUrl   String?
-  bio         String?
-  country     String?
-  gender      String?
-  language    String?
-  age         Int?
-  interests   Json    @default("[]")
+  bannerUrl       String?
+  bio             String?
+  country         String?
+  gender          String?
+  language        String?
+  age             Int?
+  interests       Json    @default("[]")
 
   primaryPlatform Platform
 
@@ -219,10 +219,10 @@ model CreatorProfile {
   isActiveLast30d Boolean   @default(false)
   lastEnrichedAt  DateTime?
 
-  totalFollowers BigInt  @default(0)
-  totalViews     BigInt  @default(0)
-  searchText     String? @default("")
-  widgetConfig   Json    @default("[]")
+  totalFollowers            BigInt  @default(0)
+  totalViews                BigInt  @default(0)
+  searchText                String? @default("")
+  widgetConfig              Json    @default("[]")
   publicDemographicsEnabled Boolean @default(false)
 
   // Catalog provenance + browse visibility.
@@ -248,15 +248,15 @@ model CreatorProfile {
   lastLinkDiscoveryAt DateTime?
   claimedAt           DateTime?
 
-  platformAccounts  PlatformAccount[]
-  metricSnapshots   MetricSnapshot[]
-  analytics         CreatorAnalytics[]
-  claimRequests     ClaimRequest[]
-  talentAccess      TalentManagerAccess[]
-  brandPartnerships BrandPartnership[]
-  growthRollups     CreatorGrowthRollup[]
-  clips             CreatorClip[]
-  streamSessions    StreamSessionFact[]
+  platformAccounts     PlatformAccount[]
+  metricSnapshots      MetricSnapshot[]
+  analytics            CreatorAnalytics[]
+  claimRequests        ClaimRequest[]
+  talentAccess         TalentManagerAccess[]
+  brandPartnerships    BrandPartnership[]
+  growthRollups        CreatorGrowthRollup[]
+  clips                CreatorClip[]
+  streamSessions       StreamSessionFact[]
   audienceDemographics AudienceDemographics[]
   dailyRollups         CreatorDailyRollup[]
   rankingEntries       RankingEntry[]
@@ -392,8 +392,8 @@ model AudienceDemographics {
 
   // Follower count of the source social profile at export time — used to pick
   // the primary network for display.
-  reach    BigInt?
-  reportId String?
+  reach       BigInt?
+  reportId    String?
   // DP's own refresh timestamp — the honest "as of" date. Reports refresh
   // opportunistically, so this can be years old; surface it.
   dpUpdatedAt DateTime?
@@ -457,11 +457,6 @@ model PlatformAccount {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  @@unique([platform, platformUserId])
-  @@unique([creatorProfileId, platform])
-  @@index([platform])
-  @@index([platformUsername])
   // ---------------------------------------------------------------------
   // RAW INDEXES THAT PRISMA CANNOT DECLARE — DO NOT LET A GENERATED
   // MIGRATION DROP THESE. `prisma migrate dev` sees them as drift and will
@@ -480,6 +475,11 @@ model PlatformAccount {
   //     (discoverySource) WHERE discoverySource IS NOT NULL
   //     Pre-existing partial index; Prisma cannot express partial indexes.
   // ---------------------------------------------------------------------
+
+  @@unique([platform, platformUserId])
+  @@unique([creatorProfileId, platform])
+  @@index([platform])
+  @@index([platformUsername])
 }
 
 // ============================================================
@@ -856,8 +856,8 @@ model StreamSessionFact {
   peakViewersAt  DateTime?
   sessionTitle   String?   @db.Text
 
-  primaryGameName String?
-  allGameNames    String[] @default([])
+  primaryGameName  String?
+  allGameNames     String[] @default([])
   /// Minutes per game per UTC day, from Stream Hatchet's per-game file
   /// (daily_sessions_games): { "2026-11-08": { "Grand Theft Auto V": 587,
   /// "Just Chatting": 63, "": 4 } }, "" = time with no game. The daily
@@ -1019,12 +1019,12 @@ model RankingEntry {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
   /// "creator" (creatorProfileId set) or "category" (gameId set).
-  kind   String
+  kind     String
   /// "all-platforms" or one platform: twitch, youtube, kick, instagram, tiktok, x.
-  scope  String
+  scope    String
   /// most-watched, average-viewers, peak-viewers, fastest-growing,
   /// most-followed; categories also have most-streamed.
-  metric String
+  metric   String
   /// Set on a creator ranking within one game; "" otherwise.
   gameSlug String @default("")
 
@@ -1114,6 +1114,130 @@ model ChannelGameDailyRollup {
 }
 
 // ============================================================
+// STREAM HATCHET DAILY PROFILE FILES (2026-11)
+//
+// Stream Hatchet's own daily aggregates (channels/*/profile_game/day and
+// games/*/viewership), imported by workers/streamhatchet-profile-game.ts.
+// They live in their own tables, not in the *DailyRollup ones built from the
+// sessions file: several readers of those do not filter on `source`, so rows
+// added there would be counted twice on the site.
+// ============================================================
+
+/// One channel in one game on one UTC day, as Stream Hatchet computed it.
+/// Only channels we hold a profile for are stored (93-98 % of hours watched).
+model ShChannelGameDaily {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  platform         String
+  date             DateTime @db.Date
+  creatorProfileId String?  @db.Uuid
+  platformUserId   String
+  displayName      String?
+
+  /// Empty for a YouTube stream with no game tagged (as in BI).
+  gameName String  @default("")
+  shGameId String?
+
+  airtimeMinutes Int    @default(0)
+  minutesWatched BigInt @default(0)
+  averageViewers Float?
+  peakViewers    Int?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([platform, date, platformUserId, gameName])
+  @@index([creatorProfileId, date])
+  @@index([platform, date, gameName, minutesWatched(sort: Desc)])
+}
+
+/// One channel on one UTC day: its ShChannelGameDaily rows joined minute by
+/// minute, so a minute live in two games counts once.
+model ShChannelDaily {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  platform         String
+  date             DateTime @db.Date
+  creatorProfileId String?  @db.Uuid
+  platformUserId   String
+  username         String?
+  displayName      String?
+  logoUrl          String?
+
+  airtimeMinutes Int       @default(0)
+  minutesWatched BigInt    @default(0)
+  averageViewers Float?
+  peakViewers    Int?
+  peakViewersAt  DateTime?
+
+  /// Twitch followers / YouTube subscribers at the end of the day; null on
+  /// Kick (not in the file, they come from the social-profiles export).
+  followers BigInt?
+
+  primaryGameName String?
+  gameNames       String[] @default([])
+  languages       String[] @default([])
+
+  /// Live stretches as [startMinute, endMinute) pairs from 00:00 UTC, for
+  /// merging a creator's platforms without counting a simulcast twice.
+  intervals Json?
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([platform, date, platformUserId])
+  @@index([creatorProfileId, date])
+  @@index([platform, date, minutesWatched(sort: Desc)])
+  @@index([platform, date, peakViewers(sort: Desc)])
+}
+
+/// One game on one platform on one UTC day, from the per-minute game file:
+/// every channel counts, also the ones we hold no profile for.
+model ShGameDaily {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  platform String
+  date     DateTime @db.Date
+  gameName String   @default("")
+  shGameId String?
+
+  minutesWatched BigInt    @default(0)
+  /// Minutes of the day with at least one data point (1440 for a busy game).
+  minutesLive    Int       @default(0)
+  peakViewers    Int?
+  peakViewersAt  DateTime?
+  /// Channel-minutes: the sum of live channels over the day's minutes.
+  airtimeMinutes BigInt    @default(0)
+  peakChannels   Int?
+  /// Distinct channels that streamed the game that day (channel file).
+  channelCount   Int?
+  genres         String[]  @default([])
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([platform, date, gameName])
+  @@index([platform, date, minutesWatched(sort: Desc)])
+  @@index([platform, gameName, date])
+}
+
+/// A game's day minute by minute, for games averaging 10+ viewers. Kept for
+/// recent days only; older days have ShGameDaily.
+model ShGameMinuteSeries {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  platform String
+  date     DateTime @db.Date
+  gameName String   @default("")
+
+  /// Minute of the day (0-1439, UTC) of the first value.
+  startMinute Int
+  /// One value per minute from startMinute; a minute without data is 0.
+  viewers     Int[]
+  channels    Int[]
+
+  @@unique([platform, date, gameName])
+  @@index([platform, gameName, date])
+}
+
+// ============================================================
 // REPORT TEMPLATES & PURCHASES
 // ============================================================
 
@@ -1185,13 +1309,13 @@ model CreatorGrowthRollup {
 
   platform Platform
 
-  followerCount BigInt @default(0)
+  followerCount BigInt  @default(0)
   // Null delta/pct = "no comparison snapshot within tolerance" (unknown),
   // distinct from a genuine 0 (measured flat). Consumers render unknowns as
   // missing data, never as a flat trend.
   delta1d       BigInt?
   delta7d       BigInt?
-  delta30d     BigInt?
+  delta30d      BigInt?
   pct1d         Float?
   pct7d         Float?
   pct30d        Float?
