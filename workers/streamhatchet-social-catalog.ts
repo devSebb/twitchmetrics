@@ -8,7 +8,8 @@
  * Instagram, TikTok, X, YouTube, Twitch and Kick profiles.
  *
  * This worker creates one CreatorProfile per contact that
- *   - has an Instagram, TikTok or X profile with at least --min-followers,
+ *   - has an Instagram, TikTok, X or YouTube profile with at least
+ *     --min-followers,
  *   - is marked "processed" by Stream Hatchet (the other states are mostly
  *     nameless, pictureless and years stale), and
  *   - owns no account we already hold, on any platform.
@@ -29,8 +30,10 @@
  *
  * Flags:
  *   --min-followers N   default 1000000
+ *   --include-contacts F  file of Stream Hatchet contact ids to bring in
+ *                       whatever their size or status (a named roster)
  *   --snapshot NAME     export folder, default the latest daily one
- *   --skip-extract      reuse the parquet files already in the work dir
+ *   --skip-extract      reuse the social-profiles parquet in the work dir
  *   --limit N           create at most N profiles (largest first)
  *   --work-dir PATH     default /tmp/sh-social-catalog
  *   --aws-profile NAME  default streamhatchet-readonly (env credentials win)
@@ -66,8 +69,13 @@ const TYPE_TO_PLATFORM: Record<string, Platform> = {
   TiktokProfile: "tiktok",
   TwitterProfile: "x",
 };
-/** A contact qualifies on these; the rest only ride along as links. */
-const QUALIFYING: Platform[] = ["instagram", "tiktok", "x"];
+/**
+ * A contact qualifies on these; Twitch and Kick only ride along as links (a
+ * channel that streams is already in the catalog through the session files).
+ * YouTube counts: a video creator who never goes live (Muselk 8.75M, EddieVR
+ * 7.6M) is in no session file either.
+ */
+const QUALIFYING: Platform[] = ["instagram", "tiktok", "x", "youtube"];
 
 const args = process.argv.slice(2);
 function argValue(name: string): string | undefined {
@@ -88,6 +96,7 @@ const config = {
   minFollowers: positiveInt("--min-followers", 1_000_000),
   snapshot: argValue("--snapshot") ?? null,
   skipExtract: args.includes("--skip-extract"),
+  includeFile: argValue("--include-contacts") ?? null,
   limit: argValue("--limit") ? positiveInt("--limit", 1) : null,
   workDir: argValue("--work-dir") ?? "/tmp/sh-social-catalog",
   awsProfile:
@@ -150,6 +159,31 @@ function snapshotDate(snapshot: string): Date {
   return new Date(`${day}T00:00:00.000Z`);
 }
 
+/**
+ * Stream Hatchet contact ids to bring in whatever their size or status (a
+ * named roster, e.g. an agency's talent). One per line: `id` or `id,Name`,
+ * where Name replaces Stream Hatchet's (its record calls Northborders "Mike").
+ * "#" starts a comment.
+ */
+let includedCache: Map<number, string | null> | null = null;
+function includedContacts(): Map<number, string | null> {
+  if (includedCache) return includedCache;
+  includedCache = new Map();
+  if (!config.includeFile) return includedCache;
+  for (const raw of readFileSync(config.includeFile, "utf8").split("\n")) {
+    const line = raw.split("#")[0]!.trim();
+    if (!line) continue;
+    const match = line.match(/^(\d+)\s*(?:,\s*(.+))?$/);
+    if (!match) {
+      throw new Error(`--include-contacts: cannot read line '${line}'.`);
+    }
+    includedCache.set(Number(match[1]), match[2]?.trim() || null);
+  }
+  return includedCache;
+}
+/** SQL list of the included ids; "-1" keeps `IN (...)` valid when empty. */
+const includedSql = () => [...includedContacts().keys()].join(",") || "-1";
+
 const spPath = () => `${config.workDir}/sp.parquet`;
 const contactsPath = () => `${config.workDir}/contacts.parquet`;
 const accountsPath = () => `${config.workDir}/accounts.csv`;
@@ -157,7 +191,7 @@ const planJsonPath = () => `${config.workDir}/social-catalog-plan.json`;
 const planCsvPath = () => `${config.workDir}/social-catalog-plan.csv`;
 
 /** Safe columns only: the export also carries OAuth tokens, never read here. */
-function extract(snapshot: string): void {
+function extractProfiles(snapshot: string): void {
   const base = `s3://${BUCKET}/${EXPORT_PREFIX}/${snapshot}/${TABLE_SUBPATH}`;
   const types = Object.keys(TYPE_TO_PLATFORM)
     .map((t) => `'${t}'`)
@@ -184,6 +218,11 @@ function extract(snapshot: string): void {
         AND user_id IS NOT NULL AND CAST(user_id AS VARCHAR) <> ''
     ) TO '${spPath()}' (FORMAT parquet);`);
   log("Extracted social profiles");
+}
+
+/** Small and tied to --min-followers and --include-contacts: read every run. */
+function extractContacts(snapshot: string): void {
+  const base = `s3://${BUCKET}/${EXPORT_PREFIX}/${snapshot}/${TABLE_SUBPATH}`;
   duckdb(`${S3_SETUP}
     COPY (
       SELECT
@@ -197,7 +236,7 @@ function extract(snapshot: string): void {
         SELECT DISTINCT contact_id FROM read_parquet('${spPath()}')
         WHERE platform IN (${QUALIFYING.map((p) => `'${p}'`).join(",")})
           AND reach >= ${config.minFollowers}
-      )
+      ) OR id IN (${includedSql()})
     ) TO '${contactsPath()}' (FORMAT parquet);`);
   log("Extracted contacts");
 }
@@ -283,11 +322,11 @@ function buildPlan(): PlanRow[] {
     CREATE TEMP TABLE big AS
       SELECT sp.contact_id
       FROM sp JOIN read_parquet('${contactsPath()}') c USING (contact_id)
-      WHERE c.status = 'processed'
-      GROUP BY sp.contact_id
-      HAVING max(sp.reach) FILTER (
-        WHERE sp.platform IN (${qualifying}) AND NOT sp.private_profile
-      ) >= ${config.minFollowers};
+      GROUP BY sp.contact_id, c.status
+      HAVING sp.contact_id IN (${includedSql()})
+          OR (c.status = 'processed' AND max(sp.reach) FILTER (
+               WHERE sp.platform IN (${qualifying}) AND NOT sp.private_profile
+             ) >= ${config.minFollowers});
     CREATE TEMP TABLE held AS
       SELECT sp.contact_id,
              count(DISTINCT o.creator_profile_id) AS profiles,
@@ -376,15 +415,28 @@ type Shaped = {
 };
 
 function shape(row: PlanRow): Shaped | null {
+  // Members come sorted by reach. A named contact may hold Twitch or Kick only.
   const social = row.members.filter((m) => QUALIFYING.includes(m.platform));
-  const primary = social[0];
+  const primary = social[0] ?? row.members[0];
   if (!primary) return null;
+  const roster = includedContacts();
+  // A YouTube channel Stream Hatchet holds without an @handle is one it
+  // stopped refreshing years ago (25 of 8,993 read in the last six months) or
+  // a page YouTube generates itself ("Movies", "Music", "Roblox - Topic").
+  if (
+    primary.platform === "youtube" &&
+    !primary.username?.startsWith("@") &&
+    !roster.has(row.contact_id)
+  ) {
+    return null;
+  }
   // A name with no letter or digit ("👑" for @kingjames) is not a name.
   const named = (value: string | null | undefined) => {
     const text = clean(value, 120);
     return text && /[\p{L}\p{N}]/u.test(text) ? text : null;
   };
   const displayName =
+    named(roster.get(row.contact_id)) ??
     named(row.contact_name) ??
     named(primary.display_name) ??
     clean(primary.username, 120);
@@ -627,23 +679,27 @@ async function main() {
   });
 
   if (config.skipExtract) {
-    if (!existsSync(spPath()) || !existsSync(contactsPath())) {
-      throw new Error(
-        `--skip-extract needs ${spPath()} and ${contactsPath()}. Run once without it.`,
-      );
+    if (!existsSync(spPath())) {
+      throw new Error(`--skip-extract needs ${spPath()}. Run once without it.`);
     }
   } else {
-    extract(snapshot);
+    extractProfiles(snapshot);
   }
+  extractContacts(snapshot);
   await exportOurAccounts();
 
+  const included = includedContacts();
   const plan = buildPlan();
   const existing = plan.filter((row) => row.creator_profile_id);
   const fresh = plan.filter((row) => !row.creator_profile_id);
   const shapedAll = fresh
     .map(shape)
     .filter((s): s is Shaped => s !== null)
-    .sort((a, b) => b.total - a.total);
+    .sort(
+      (a, b) =>
+        Number(included.has(b.row.contact_id)) -
+          Number(included.has(a.row.contact_id)) || b.total - a.total,
+    );
   const shaped = config.limit ? shapedAll.slice(0, config.limit) : shapedAll;
   writePlanCsv(shaped);
 
@@ -653,7 +709,9 @@ async function main() {
   }
   log("Plan", {
     newProfiles: shaped.length,
-    skippedNoName: fresh.length - shapedAll.length,
+    fromIncludeList: shaped.filter((s) => included.has(s.row.contact_id))
+      .length,
+    skippedNoNameOrNoYouTubeHandle: fresh.length - shapedAll.length,
     withPicture: shaped.filter((s) => s.avatarUrl).length,
     byPrimaryPlatform: byPlatform,
     accounts: shaped.reduce((sum, s) => sum + s.row.members.length, 0),
