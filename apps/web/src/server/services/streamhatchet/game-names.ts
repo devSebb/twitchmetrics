@@ -231,11 +231,20 @@ export async function streamHatchetNameVariants(
   const keys = [...new Set(names.map(normalizePopularGameName))];
   // Naming the platforms lets the (source, platform, date, gameName) index
   // serve the read: ~100 ms for a week, against ~300 ms for a table scan.
+  // Both of SH's deliveries: the profile files (ShGameDaily) hold games and
+  // spellings the session rollups do not (2026-11-24: "Keep Digging" on Kick,
+  // "Kings League Fantasy" in another case on YouTube).
   const rows = await db.$queryRaw<{ gameName: string }[]>(Prisma.sql`
     SELECT DISTINCT "gameName"
     FROM "GameDailyRollup"
     WHERE source = 'streamhatchet'
       AND platform = ANY(${["twitch", "kick", "yt", "ytg"]}::text[])
+      AND date >= ${since}::date
+      AND ${normalizedGameNameSql(Prisma.sql`"gameName"`)} = ANY(${keys}::text[])
+    UNION
+    SELECT DISTINCT "gameName"
+    FROM "ShGameDaily"
+    WHERE platform = ANY(${["twitch", "kick", "yt"]}::text[])
       AND date >= ${since}::date
       AND ${normalizedGameNameSql(Prisma.sql`"gameName"`)} = ANY(${keys}::text[])
   `);

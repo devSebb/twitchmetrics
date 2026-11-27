@@ -94,6 +94,28 @@ export function overlapFreeGameAirtime(
   return Math.min(sum, total);
 }
 
+/**
+ * Live minute ranges per `${dayKey} ${channelKey}` from Stream Hatchet's
+ * channel days (ShChannelDaily.intervals: [start, end) minutes of the day).
+ */
+export function liveIntervalsFromChannelDays(
+  days: { channelKey: string; date: Date; intervals: unknown }[],
+): Map<string, DayIntervals> {
+  const byKey = new Map<string, DayIntervals>();
+  for (const day of days) {
+    if (!Array.isArray(day.intervals)) continue;
+    const live = day.intervals.filter(
+      (pair): pair is [number, number] =>
+        Array.isArray(pair) &&
+        typeof pair[0] === "number" &&
+        typeof pair[1] === "number",
+    );
+    if (live.length === 0) continue;
+    byKey.set(`${day.date.toISOString().slice(0, 10)} ${day.channelKey}`, live);
+  }
+  return byKey;
+}
+
 /** Live minute ranges per `${dayKey} ${channelKey}`, split at UTC midnight. */
 export function liveIntervalsByDayAndChannel(
   sessions: { channelKey: string; beginsAt: Date; endsAt: Date }[],
@@ -194,6 +216,13 @@ const SUPPORTED_STREAMHATCHET_PLATFORMS: Platform[] = [
   "twitch",
   "youtube",
 ];
+
+/** Platform codes in Stream Hatchet's profile files (Sh* tables). */
+const PROFILE_FILE_PLATFORM: Partial<Record<Platform, string>> = {
+  kick: "kick",
+  twitch: "twitch",
+  youtube: "yt",
+};
 
 function streamHatchetPlatforms(platform: Platform): StreamHatchetPlatform[] {
   switch (platform) {
@@ -400,6 +429,22 @@ export function popularGamesWindowStart(now: Date): Date {
   );
 }
 
+/**
+ * The UTC days from the day of `since` up to today: the days `date >= since`
+ * matches on a date column (Prisma compares the day, not the time).
+ */
+function daysSince(since: Date, now = new Date()): Date[] {
+  const days: Date[] = [];
+  for (
+    let day = Math.floor(since.getTime() / DAY_MS) * DAY_MS;
+    day <= now.getTime();
+    day += DAY_MS
+  ) {
+    days.push(new Date(day));
+  }
+  return days;
+}
+
 export async function getPopularGames(
   prisma: PrismaClient,
   options: PopularGamesOptions,
@@ -418,7 +463,15 @@ export async function getPopularGames(
 
   const rollupIdentities: Prisma.ChannelGameDailyRollupWhereInput[] = [];
   const sessionIdentities: Prisma.StreamSessionFactWhereInput[] = [];
+  const fileIdentities: { platform: string; platformUserId: string }[] = [];
   for (const account of accounts) {
+    const filePlatform = PROFILE_FILE_PLATFORM[account.platform];
+    if (filePlatform) {
+      fileIdentities.push({
+        platform: filePlatform,
+        platformUserId: account.platformUserId,
+      });
+    }
     for (const platform of streamHatchetPlatforms(account.platform)) {
       rollupIdentities.push({
         platform,
@@ -431,7 +484,34 @@ export async function getPopularGames(
     }
   }
 
-  const [rollups, sessions, snapshots] = await Promise.all([
+  // The days are listed, not given as a range: the tables are indexed by
+  // (platform, date, channel), and a range made Postgres walk every channel
+  // of the 30 days (56 s cold for one creator, 40 ms with the list).
+  const fileWhere = {
+    date: { in: daysSince(since) },
+    OR: [{ creatorProfileId: options.creatorProfileId }, ...fileIdentities],
+  };
+  const [fileRows, fileDays, rollups, sessions, snapshots] = await Promise.all([
+    prisma.shChannelGameDaily.findMany({
+      where: fileWhere,
+      select: {
+        platform: true,
+        platformUserId: true,
+        date: true,
+        gameName: true,
+        airtimeMinutes: true,
+        minutesWatched: true,
+      },
+    }),
+    prisma.shChannelDaily.findMany({
+      where: fileWhere,
+      select: {
+        platform: true,
+        platformUserId: true,
+        date: true,
+        intervals: true,
+      },
+    }),
     prisma.channelGameDailyRollup.findMany({
       where: {
         date: { gte: since },
@@ -486,28 +566,52 @@ export async function getPopularGames(
     }),
   ]);
 
-  // Prefer the strongest available source per platform. This prevents daily
-  // rollups, session facts, and snapshots from counting the same broadcast.
-  const rollupPlatforms = new Set<Platform>();
-  const contributions: PopularGameContribution[] = rollups.flatMap((rollup) => {
-    const platform = internalPlatform(rollup.platform);
-    if (platform) rollupPlatforms.add(platform);
-    if (!rollup.gameName.trim()) return [];
+  // Prefer the strongest available source per platform. This prevents the
+  // profile files, daily rollups, session facts, and snapshots from counting
+  // the same broadcast. Stream Hatchet's channel and game file comes first:
+  // it holds each game's own minutes, where the rollups split a stream's time
+  // between its games.
+  const filePlatforms = new Set<Platform>();
+  const contributions: PopularGameContribution[] = fileRows.flatMap((row) => {
+    const platform = internalPlatform(row.platform);
+    if (!platform) return [];
+    filePlatforms.add(platform);
+    if (!row.gameName.trim()) return [];
     return [
       {
-        gameName: rollup.gameName,
+        gameName: row.gameName,
         platform,
-        minutesWatched: rollup.minutesWatched,
-        airtimeMinutes: rollup.airtimeMinutes,
-        sessionCount: rollup.sessionCount,
+        minutesWatched: row.minutesWatched,
+        airtimeMinutes: row.airtimeMinutes,
+        // The file counts minutes per day, not streams.
+        sessionCount: 0,
         observationCount: 0,
         estimated: false,
-        dayKey: rollup.date.toISOString().slice(0, 10),
-        // "yt" and "ytg" rows of one YouTube channel are one channel.
-        channelKey: `${platform ?? rollup.platform}:${rollup.platformUserId}`,
+        dayKey: row.date.toISOString().slice(0, 10),
+        channelKey: `${platform}:${row.platformUserId}`,
       },
     ];
   });
+
+  const rollupPlatforms = new Set<Platform>(filePlatforms);
+  for (const rollup of rollups) {
+    const platform = internalPlatform(rollup.platform);
+    if (platform && filePlatforms.has(platform)) continue;
+    if (platform) rollupPlatforms.add(platform);
+    if (!rollup.gameName.trim()) continue;
+    contributions.push({
+      gameName: rollup.gameName,
+      platform,
+      minutesWatched: rollup.minutesWatched,
+      airtimeMinutes: rollup.airtimeMinutes,
+      sessionCount: rollup.sessionCount,
+      observationCount: 0,
+      estimated: false,
+      dayKey: rollup.date.toISOString().slice(0, 10),
+      // "yt" and "ytg" rows of one YouTube channel are one channel.
+      channelKey: `${platform ?? rollup.platform}:${rollup.platformUserId}`,
+    });
+  }
 
   const sessionPlatforms = new Set<Platform>();
   for (const session of sessions) {
@@ -555,16 +659,24 @@ export async function getPopularGames(
     if (catalogName) contribution.gameName = catalogName.trim();
   }
 
-  removeGameAirtimeOverlap(
-    contributions,
-    liveIntervalsByDayAndChannel(
-      sessions.map((session) => ({
-        channelKey: `${internalPlatform(session.platform) ?? session.platform}:${session.platformUserId}`,
-        beginsAt: session.streamBeginsAt,
-        endsAt: session.streamEndsAt,
-      })),
-    ),
+  // When each channel was live: from the file where it has the day (to the
+  // minute), from the sessions otherwise.
+  const live = liveIntervalsByDayAndChannel(
+    sessions.map((session) => ({
+      channelKey: `${internalPlatform(session.platform) ?? session.platform}:${session.platformUserId}`,
+      beginsAt: session.streamBeginsAt,
+      endsAt: session.streamEndsAt,
+    })),
   );
+  const fileLive = liveIntervalsFromChannelDays(
+    fileDays.map((day) => ({
+      channelKey: `${internalPlatform(day.platform) ?? day.platform}:${day.platformUserId}`,
+      date: day.date,
+      intervals: day.intervals,
+    })),
+  );
+  for (const [key, intervals] of fileLive) live.set(key, intervals);
+  removeGameAirtimeOverlap(contributions, live);
 
   const ranked = rankPopularGameContributions(contributions, options.limit);
   if (ranked.length === 0) return [];

@@ -176,6 +176,8 @@ describe("popular game ranking", () => {
     const gameFindMany = vi.fn().mockResolvedValue([]);
     const prisma = {
       platformAccount: { findMany: platformAccountFindMany },
+      shChannelGameDaily: { findMany: vi.fn().mockResolvedValue([]) },
+      shChannelDaily: { findMany: vi.fn().mockResolvedValue([]) },
       channelGameDailyRollup: { findMany: rollupFindMany },
       streamSessionFact: { findMany: sessionFindMany },
       metricSnapshot: { findMany: snapshotFindMany },
@@ -235,6 +237,8 @@ describe("popular game ranking", () => {
     ];
     const prisma = {
       platformAccount: { findMany: vi.fn().mockResolvedValue([]) },
+      shChannelGameDaily: { findMany: vi.fn().mockResolvedValue([]) },
+      shChannelDaily: { findMany: vi.fn().mockResolvedValue([]) },
       channelGameDailyRollup: {
         findMany: vi
           .fn()
@@ -404,5 +408,95 @@ describe("removeGameAirtimeOverlap", () => {
       ]),
     );
     expect(rows.map((r) => r.airtimeMinutes)).toEqual([120, 1440]);
+  });
+});
+
+describe("getPopularGames with Stream Hatchet's channel and game file", () => {
+  const date = new Date("2026-11-20T00:00:00.000Z");
+  const fileRow = (
+    platform: string,
+    gameName: string,
+    airtimeMinutes: number,
+    minutesWatched: bigint,
+  ) => ({
+    platform,
+    platformUserId: "main",
+    date,
+    gameName,
+    airtimeMinutes,
+    minutesWatched,
+  });
+
+  it("takes a platform from the file and leaves its rollups out", async () => {
+    const prisma = {
+      platformAccount: { findMany: vi.fn().mockResolvedValue([]) },
+      shChannelGameDaily: {
+        findMany: vi.fn().mockResolvedValue([
+          fileRow("twitch", "Rob Run", 120, 12_000n),
+          fileRow("kick", "Rob Run", 120, 6_000n),
+          // A YouTube stream with no game tagged.
+          fileRow("yt", "", 300, 9_000n),
+        ]),
+      },
+      shChannelDaily: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            platform: "twitch",
+            platformUserId: "main",
+            date,
+            intervals: [[600, 720]],
+          },
+          {
+            platform: "kick",
+            platformUserId: "main",
+            date,
+            intervals: [[600, 720]],
+          },
+        ]),
+      },
+      channelGameDailyRollup: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            platform: "twitch",
+            platformUserId: "main",
+            date,
+            gameName: "Rob Run",
+            sessionCount: 1,
+            airtimeMinutes: 500,
+            minutesWatched: 50_000n,
+          },
+          {
+            platform: "ytg",
+            platformUserId: "main",
+            date,
+            gameName: "Old Game",
+            sessionCount: 1,
+            airtimeMinutes: 500,
+            minutesWatched: 50_000n,
+          },
+        ]),
+      },
+      streamSessionFact: { findMany: vi.fn().mockResolvedValue([]) },
+      metricSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
+      game: { findMany: vi.fn().mockResolvedValue([]) },
+      platformGameMapping: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaClient;
+
+    const games = await getPopularGames(prisma, {
+      creatorProfileId: "creator-id",
+      limit: 6,
+      now: new Date("2026-11-27T12:00:00.000Z"),
+    });
+
+    // The simulcast counts once (120 minutes, not 240); watch time adds up.
+    expect(games).toEqual([
+      expect.objectContaining({
+        gameName: "Rob Run",
+        airtimeMinutes: 120,
+        avgViewers: 150,
+        platforms: ["kick", "twitch"],
+        measurement: "measured",
+      }),
+    ]);
   });
 });

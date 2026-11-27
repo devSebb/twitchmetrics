@@ -9,9 +9,9 @@ import {
 
 export const MOST_WATCHED_DAYS = 7;
 const MOST_WATCHED_LIMIT = 6;
-const SH_PLATFORMS = ["twitch", "kick", "yt", "ytg"];
+const SH_PLATFORMS = ["twitch", "kick", "yt"];
 /**
- * Rows read per platform, day and name. The index on ChannelGameDailyRollup
+ * Rows read per platform, day and name. The index on ShChannelGameDaily
  * is sorted by minutes watched within each (platform, date, gameName), so the
  * top rows of each day cost a short index read; summing every row instead
  * took 5.5 s for Just Chatting. A channel in the week's top six is far inside
@@ -50,9 +50,9 @@ type RankedRow = {
  * days, across Twitch, Kick and YouTube (QA 2026-11: Stream Hatchet ranks
  * Most Watched Channels by Hours Watched, not by viewers right now).
  *
- * A stream that played several games is split by Stream Hatchet's per-game
- * minutes (StreamSessionFact.gameMinutesByDay); streams without them fall
- * back to an equal split (see packages/core/src/rollups/game-minutes.ts).
+ * Read from Stream Hatchet's channel and game file (ShChannelGameDaily,
+ * workers/streamhatchet-profile-game.ts): each channel's own minutes and
+ * hours watched on the game per day, as BI has them.
  */
 export async function getGameMostWatched(
   prisma: PrismaClient,
@@ -67,9 +67,10 @@ export async function getGameMostWatched(
 
   const names = await streamHatchetNamesForGame(prisma, game.id, window.start);
   const reads = SH_PLATFORMS.flatMap((platform) =>
-    (platform === "yt" || platform === "ytg" ? names.youtube : names.all).map(
-      (name) => ({ platform, name }),
-    ),
+    (platform === "yt" ? names.youtube : names.all).map((name) => ({
+      platform,
+      name,
+    })),
   );
   if (reads.length === 0) return { channels: [], ...days };
 
@@ -150,7 +151,7 @@ function rankQuery(
       sum(t."airtimeMinutes")::bigint AS "airtimeMinutes",
       (array_agg(t."creatorProfileId" ORDER BY t.date DESC)
         FILTER (WHERE t."creatorProfileId" IS NOT NULL))[1] AS "creatorProfileId",
-      (array_agg(coalesce(t."platformDisplayName", t."platformUsername")
+      (array_agg(coalesce(t."displayName", t."platformUserId")
         ORDER BY t.date DESC))[1] AS name
     FROM unnest(
       ${reads.map((read) => read.platform)}::text[],
@@ -162,10 +163,9 @@ function rankQuery(
       interval '1 day'
     ) AS d(day)
     CROSS JOIN LATERAL (
-      SELECT platform, date, "platformUserId", "platformUsername",
-        "platformDisplayName", "creatorProfileId", "minutesWatched",
-        "airtimeMinutes"
-      FROM "ChannelGameDailyRollup"
+      SELECT platform, date, "platformUserId", "displayName",
+        "creatorProfileId", "minutesWatched", "airtimeMinutes"
+      FROM "ShChannelGameDaily"
       WHERE platform = r.platform
         AND date = d.day::date
         AND "gameName" = r.name
@@ -180,8 +180,9 @@ function rankQuery(
 type MergedRow = Omit<RankedRow, "platform"> & { platform: Platform };
 
 /**
- * SH files YouTube under two codes (yt, ytg); one channel can have rows in
- * both. They are one channel on one platform, so their hours add up.
+ * Rows under Stream Hatchet's platform codes become ours, a channel that
+ * comes under two codes adds up (the session files had YouTube as yt and
+ * ytg), and the result is ranked again.
  */
 export function mergeYouTubeFeeds(rows: RankedRow[]): MergedRow[] {
   const byChannel = new Map<string, MergedRow>();
